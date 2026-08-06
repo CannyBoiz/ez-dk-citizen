@@ -1,0 +1,19 @@
+*.env
+
+# jetbrains
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+
+
+# node
+node_modules/
+
+# dotnet
+**/obj/
+
+# build
+dist/
