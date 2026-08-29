@@ -9,6 +9,9 @@
     "start": "pnpm --filter @ez-dk-citizen/data start",
     "db:generate": "pnpm --filter @ez-dk-citizen/data db:generate",
     "db:migrate": "pnpm --filter @ez-dk-citizen/data db:migrate",
-    "test": "pnpm --filter @ez-dk-citizen/data test"
+    "db:up": "docker compose up --detach --wait postgres",
+    "db:down": "docker compose down",
+    "test": "pnpm --filter @ez-dk-citizen/data test",
+    "test:integration": "node scripts/test-postgres-integration.mjs"
   }
 }
