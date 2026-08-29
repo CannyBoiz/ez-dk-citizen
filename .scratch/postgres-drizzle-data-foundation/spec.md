@@ -52,14 +52,14 @@ or production deployment configuration.
 13. As a developer, I want the option to run the Data Service with hot reload on the host, so that ordinary development remains fast.
 14. As a maintainer, I want generated SQL migrations committed and reviewable, so that schema history does not depend on schema push.
 15. As a maintainer, I want an empty database to become usable from the committed migration alone, so that new environments are deterministic.
-16. As a content administrator, I want Lessons stored independently from translations and audio, so that one Lesson can support several Languages and renditions.
+16. As a content administrator, I want Lessons stored independently from Lesson Texts and audio, so that one Lesson can support several Languages and renditions.
 17. As a content administrator, I want each Lesson identified by chapter and version, so that citizenship-study content can evolve without overwriting history.
 18. As a content administrator, I want draft and archived Lesson versions to coexist, so that work in progress and historical content remain available.
 19. As a learner, I want no more than one published Lesson version per chapter, so that the application cannot present competing current content.
 20. As a maintainer, I want invalid chapter and version numbers rejected by PostgreSQL, so that corrupt Lesson identities cannot enter through any caller.
 21. As a content administrator, I want Danish, English, and Thai available immediately, so that localized PoC content can be created after the first migration.
 22. As a maintainer, I want Language codes capable of representing BCP 47 tags, so that later regional variants do not require a schema redesign.
-23. As a content administrator, I want one localized Lesson Text per Lesson and Language, so that duplicate translations cannot conflict.
+23. As a content administrator, I want one localized Lesson Text per Lesson and Language, so that duplicate Lesson Texts cannot conflict.
 24. As a learner, I want every persisted Lesson Text to contain a meaningful title and body, so that incomplete records cannot reach a client.
 25. As a content administrator, I want a canonical Source stored once, so that multiple Lessons can cite the same official document or webpage.
 26. As a content administrator, I want Source publication dates to be optional, so that undated government webpages can still be represented accurately.
@@ -74,7 +74,7 @@ or production deployment configuration.
 35. As a maintainer, I want invalid media sizes, durations, and blank content types rejected, so that unusable metadata cannot be persisted.
 36. As a content administrator, I want several audio versions for the same Lesson and Language, so that corrected recordings preserve history.
 37. As a learner, I want at most one current Lesson Audio per Lesson and Language, so that playback selection is unambiguous.
-38. As a learner, I want Lesson Audio to require a matching localized Lesson Text, so that audio is never offered for a missing translation.
+38. As a learner, I want Lesson Audio to require a matching localized Lesson Text, so that audio is never offered without its Lesson Text.
 39. As a storage integrator, I want a Media Asset associated with at most one Lesson Audio, so that binary identity and rendition metadata cannot diverge.
 40. As a storage integrator, I want pending or failed Media Assets allowed to remain unattached, so that incomplete uploads do not create Lesson Audio.
 41. As a maintainer, I want deleting a Lesson to remove its owned texts, citations, and audio associations, so that orphaned Lesson data cannot remain.
