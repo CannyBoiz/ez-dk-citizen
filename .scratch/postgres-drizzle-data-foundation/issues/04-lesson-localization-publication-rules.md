@@ -1,6 +1,6 @@
 # 04 — Prove Lesson localization and publication rules
 
-**What to build:** The migrated database reliably stores versioned Lessons and complete localized Lesson Texts while PostgreSQL rejects invalid versions, competing published content, missing parents, and incomplete translations.
+**What to build:** The migrated database reliably stores versioned Lessons and complete localized Lesson Texts while PostgreSQL rejects invalid versions, competing published content, missing parents, and incomplete Lesson Texts.
 
 **Blocked by:** 03 — Migrate the complete PoC schema and seed Languages.
 
