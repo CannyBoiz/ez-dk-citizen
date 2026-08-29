@@ -11,6 +11,7 @@ out/
 
 # node
 node_modules/
+.pnpm-store/
 
 # dotnet
 **/obj/

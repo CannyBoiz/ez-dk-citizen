@@ -1,10 +1,17 @@
 {
-  "name": "data",
+  "name": "@ez-dk-citizen/data",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/src/index.js"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
+    "test": "node --import tsx --test"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
