@@ -1,0 +1,11 @@
+.agents
+.codex
+.git
+.pnpm-store
+.scratch
+**/.env
+**/dist
+**/node_modules
+cannyboizs-files
+docs
+extra-files

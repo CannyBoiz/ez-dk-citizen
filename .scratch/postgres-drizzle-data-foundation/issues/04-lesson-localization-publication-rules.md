@@ -1,0 +1,18 @@
+# 04 — Prove Lesson localization and publication rules
+
+**What to build:** The migrated database reliably stores versioned Lessons and complete localized Lesson Texts while PostgreSQL rejects invalid versions, competing published content, missing parents, and incomplete translations.
+
+**Blocked by:** 03 — Migrate the complete PoC schema and seed Languages.
+
+**Status:** ready-for-agent
+
+- [ ] Integration tests create valid draft, published, and archived Lessons through the exported Drizzle layer.
+- [ ] PostgreSQL rejects non-positive chapters and versions and duplicate chapter/version pairs.
+- [ ] Multiple draft and archived versions for one chapter are accepted.
+- [ ] PostgreSQL rejects a second published Lesson for the same chapter while allowing published Lessons for different chapters.
+- [ ] Lesson creation and update timestamps receive database-clock defaults, and updates can explicitly advance the update timestamp without a trigger.
+- [ ] Seeded Language rows are queryable, BCP 47-compatible codes up to the approved length can be stored, and duplicate codes or names are rejected.
+- [ ] One Lesson Text per Lesson and Language is accepted, while duplicate composite identities and missing Lesson or Language references are rejected.
+- [ ] Null, empty, and whitespace-only Lesson Text titles or content are rejected by PostgreSQL.
+- [ ] Drizzle relational queries traverse Lesson to Lesson Text, Lesson Text to Lesson and Language, and Language to its Lesson Texts.
+- [ ] Referenced Languages cannot be deleted.

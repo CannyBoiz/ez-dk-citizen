@@ -1,12 +1,14 @@
 {
-	"dependencies": {
-		"dotenv": "^17.4.2",
-		"drizzle-orm": "1.0.0-rc.4",
-		"pg": "^8.23.0"
-	},
-	"devDependencies": {
-		"@types/pg": "^8.23.1",
-		"drizzle-kit": "1.0.0-rc.4",
-		"tsx": "^4.23.12"
-	}
+  "name": "ez-dk-citizen",
+  "private": true,
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "dev": "pnpm --filter @ez-dk-citizen/data dev",
+    "typecheck": "pnpm --filter @ez-dk-citizen/data typecheck",
+    "build": "pnpm --filter @ez-dk-citizen/data build",
+    "start": "pnpm --filter @ez-dk-citizen/data start",
+    "db:generate": "pnpm --filter @ez-dk-citizen/data db:generate",
+    "db:migrate": "pnpm --filter @ez-dk-citizen/data db:migrate",
+    "test": "pnpm --filter @ez-dk-citizen/data test"
+  }
 }
