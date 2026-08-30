@@ -182,15 +182,15 @@ export const schemaRelations = defineRelations(schema, (relations) => ({
   // 1 : M - use `.many`
   // 1 : 1 - use `.one` AND set the `optional` to false
   lesson: {
-    texts: relations.many.lessonText({
+    lessonTexts: relations.many.lessonText({
       from: relations.lesson.id,
       to: relations.lessonText.lessonId,
     }),
-    sources: relations.many.lessonSource({
+    lessonSources: relations.many.lessonSource({
       from: relations.lesson.id,
       to: relations.lessonSource.lessonId,
     }),
-    audio: relations.many.lessonAudio({
+    lessonAudios: relations.many.lessonAudio({
       from: relations.lesson.id,
       to: relations.lessonAudio.lessonId,
     }),
@@ -200,7 +200,7 @@ export const schemaRelations = defineRelations(schema, (relations) => ({
       from: relations.language.code,
       to: relations.lessonText.languageCode,
     }),
-    lessonAudio: relations.many.lessonAudio({
+    lessonAudios: relations.many.lessonAudio({
       from: relations.language.code,
       to: relations.lessonAudio.languageCode,
     }),
@@ -216,13 +216,13 @@ export const schemaRelations = defineRelations(schema, (relations) => ({
       to: relations.language.code,
       optional: false,
     }),
-    audio: relations.many.lessonAudio({
+    lessonAudios: relations.many.lessonAudio({
       from: [relations.lessonText.lessonId, relations.lessonText.languageCode],
       to: [relations.lessonAudio.lessonId, relations.lessonAudio.languageCode],
     }),
   },
   source: {
-    lessons: relations.many.lessonSource({
+    lessonSources: relations.many.lessonSource({
       from: relations.source.id,
       to: relations.lessonSource.sourceId,
     }),
