@@ -2,7 +2,8 @@
   "name": "@ez-dk-citizen/data",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "drizzle"
   ],
   "scripts": {
     "dev": "tsx watch src/index.ts",

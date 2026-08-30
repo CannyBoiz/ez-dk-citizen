@@ -37,17 +37,34 @@ try {
     ...composeArguments,
     'up',
     '--detach',
+    '--build',
     '--wait',
     '--wait-timeout',
-    '60',
-    'postgres',
+    '120',
+    'hono-data',
   ]);
   await runDocker([
     ...composeArguments,
     '--profile',
     'integration',
     'run',
-    '--build',
+    '--no-deps',
+    '--rm',
+    'postgres-check',
+  ]);
+  await runDocker([
+    ...composeArguments,
+    'run',
+    '--no-deps',
+    '--rm',
+    'migrate',
+  ]);
+  await runDocker([
+    ...composeArguments,
+    '--profile',
+    'integration',
+    'run',
+    '--no-deps',
     '--rm',
     'postgres-check',
   ]);
@@ -70,7 +87,7 @@ if (integrationFailure) {
   throw integrationFailure;
 }
 
-console.log('PostgreSQL integration check passed.');
+console.log('PostgreSQL foundation smoke test passed.');
 
 function runDocker(arguments_) {
   return new Promise((resolve, reject) => {

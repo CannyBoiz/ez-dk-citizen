@@ -1,3 +1,8 @@
+x-data-service: &data-service
+  image: ez-dk-citizen-data:local
+  environment:
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+
 services:
   postgres:
     image: postgres:18
@@ -19,21 +24,47 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  postgres-check:
-    profiles:
-      - integration
-    image: ez-dk-citizen-data:integration
+  migrate:
+    <<: *data-service
     build:
       context: .
       dockerfile: apps/data/Dockerfile
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
       postgres:
         condition: service_healthy
     command:
       - node
-      - dist/src/db/verify-postgres-connection.js
+      - dist/src/db/migrate.js
+
+  hono-data:
+    <<: *data-service
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/health').then((response) => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
+    restart: unless-stopped
+
+  postgres-check:
+    <<: *data-service
+    profiles:
+      - integration
+    depends_on:
+      hono-data:
+        condition: service_healthy
+    command:
+      - node
+      - dist/src/db/verify-postgres-foundation.js
 
 volumes:
   postgres_data:
