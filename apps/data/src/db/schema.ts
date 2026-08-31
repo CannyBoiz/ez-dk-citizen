@@ -182,28 +182,13 @@ export const schemaRelations = defineRelations(schema, (relations) => ({
   // 1 : M - use `.many`
   // 1 : 1 - use `.one` AND set the `optional` to false
   lesson: {
-    lessonTexts: relations.many.lessonText({
-      from: relations.lesson.id,
-      to: relations.lessonText.lessonId,
-    }),
-    lessonSources: relations.many.lessonSource({
-      from: relations.lesson.id,
-      to: relations.lessonSource.lessonId,
-    }),
-    lessonAudios: relations.many.lessonAudio({
-      from: relations.lesson.id,
-      to: relations.lessonAudio.lessonId,
-    }),
+    lessonTexts: relations.many.lessonText(),
+    lessonSources: relations.many.lessonSource(),
+    lessonAudios: relations.many.lessonAudio(),
   },
   language: {
-    lessonTexts: relations.many.lessonText({
-      from: relations.language.code,
-      to: relations.lessonText.languageCode,
-    }),
-    lessonAudios: relations.many.lessonAudio({
-      from: relations.language.code,
-      to: relations.lessonAudio.languageCode,
-    }),
+    lessonTexts: relations.many.lessonText(),
+    lessonAudios: relations.many.lessonAudio(),
   },
   lessonText: {
     lesson: relations.one.lesson({
@@ -216,16 +201,10 @@ export const schemaRelations = defineRelations(schema, (relations) => ({
       to: relations.language.code,
       optional: false,
     }),
-    lessonAudios: relations.many.lessonAudio({
-      from: [relations.lessonText.lessonId, relations.lessonText.languageCode],
-      to: [relations.lessonAudio.lessonId, relations.lessonAudio.languageCode],
-    }),
+    lessonAudios: relations.many.lessonAudio(),
   },
   source: {
-    lessonSources: relations.many.lessonSource({
-      from: relations.source.id,
-      to: relations.lessonSource.sourceId,
-    }),
+    lessonSources: relations.many.lessonSource(),
   },
   lessonSource: {
     lesson: relations.one.lesson({
@@ -240,11 +219,7 @@ export const schemaRelations = defineRelations(schema, (relations) => ({
     }),
   },
   mediaAsset: {
-    lessonAudio: relations.one.lessonAudio({
-      from: relations.mediaAsset.id,
-      to: relations.lessonAudio.mediaAssetId,
-      optional: true,
-    }),
+    lessonAudio: relations.one.lessonAudio(),
   },
   lessonAudio: {
     lesson: relations.one.lesson({

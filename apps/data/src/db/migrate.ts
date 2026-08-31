@@ -7,10 +7,14 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { createDataDatabase, requireDatabaseUrl } from './database.js';
 
 const { database, pool } = createDataDatabase(requireDatabaseUrl());
+const migrationsFolder = path.resolve(
+  process.cwd(),
+  process.env.MIGRATIONS_FOLDER ?? 'drizzle',
+);
 
 try {
   const result = await migrate(database, {
-    migrationsFolder: path.resolve(process.cwd(), 'drizzle'),
+    migrationsFolder,
   });
 
   if (result) {

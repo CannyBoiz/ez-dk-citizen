@@ -19,3 +19,7 @@ The development and production start commands serve the Hono application at
 The committed migration under `drizzle/` creates the complete PoC schema and
 initial Languages. Local Compose applies it with the one-shot `migrate` service
 before starting the compiled `hono-data` service.
+
+`pnpm test` expects `DATABASE_URL` to identify a migrated disposable database.
+Use root `pnpm test:integration` for the canonical workflow that provisions,
+migrates, tests, and removes an isolated PostgreSQL database automatically.

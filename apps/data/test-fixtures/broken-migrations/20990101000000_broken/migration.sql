@@ -1,0 +1,1 @@
+select this_is_an_intentionally_invalid_migration;

@@ -66,5 +66,41 @@ services:
       - node
       - dist/src/db/verify-postgres-foundation.js
 
+  postgres-test:
+    <<: *data-service
+    profiles:
+      - integration
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command:
+      - npm
+      - run
+      - test:compiled
+
+  migration-failure:
+    <<: *data-service
+    profiles:
+      - integration-failure
+    environment:
+      MIGRATIONS_FOLDER: /app/test-fixtures/broken-migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - node
+      - dist/src/db/migrate.js
+
+  data-after-failed-migration:
+    <<: *data-service
+    profiles:
+      - integration-failure
+    depends_on:
+      migration-failure:
+        condition: service_completed_successfully
+    command:
+      - node
+      - dist/src/index.js
+
 volumes:
   postgres_data:
