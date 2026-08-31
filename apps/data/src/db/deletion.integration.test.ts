@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
-import { after, beforeEach, test } from 'node:test';
+import { test } from 'node:test';
 
 import { eq } from 'drizzle-orm';
 
 import {
   expectPostgresError,
-  integrationDatabase,
   mediaAssetFixture,
-  resetIntegrationDatabase,
+  postgresErrorCode,
+  useIntegrationDatabase,
 } from './integration-test-database.js';
 import {
   language,
@@ -19,13 +19,7 @@ import {
   source,
 } from './schema.js';
 
-const { database, pool } = integrationDatabase;
-
-beforeEach(resetIntegrationDatabase);
-after(async () => {
-  await resetIntegrationDatabase();
-  await pool.end();
-});
+const database = useIntegrationDatabase();
 
 test('A representative Lesson graph loads bidirectionally through Drizzle', async () => {
   const [primaryLesson, reuseLesson] = await database
@@ -218,11 +212,11 @@ test('Restricted parents remain protected and deleting audio preserves its Media
 
   await expectPostgresError(
     database.delete(language).where(eq(language.code, 'en')),
-    '23001',
+    postgresErrorCode.restrictViolation,
   );
   await expectPostgresError(
     database.delete(mediaAsset).where(eq(mediaAsset.id, protectedAsset.id)),
-    '23001',
+    postgresErrorCode.restrictViolation,
   );
 
   await database.delete(lessonAudio).where(eq(lessonAudio.id, audio.id));

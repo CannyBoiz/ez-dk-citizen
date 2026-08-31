@@ -1,22 +1,16 @@
 import assert from 'node:assert/strict';
-import { after, beforeEach, test } from 'node:test';
+import { test } from 'node:test';
 
 import { eq, inArray } from 'drizzle-orm';
 
 import {
   expectPostgresError,
-  integrationDatabase,
-  resetIntegrationDatabase,
+  postgresErrorCode,
+  useIntegrationDatabase,
 } from './integration-test-database.js';
 import { lesson, lessonSource, source } from './schema.js';
 
-const { database, pool } = integrationDatabase;
-
-beforeEach(resetIntegrationDatabase);
-after(async () => {
-  await resetIntegrationDatabase();
-  await pool.end();
-});
+const database = useIntegrationDatabase();
 
 test('Sources are canonical and reusable across Lessons in both directions', async () => {
   const [firstLesson, secondLesson] = await database
@@ -50,14 +44,14 @@ test('Sources are canonical and reusable across Lessons in both directions', asy
     database
       .insert(source)
       .values({ url: sharedSource.url, publishedAt: null }),
-    '23505',
+    postgresErrorCode.uniqueViolation,
   );
   await expectPostgresError(
     database.insert(lessonSource).values({
       lessonId: firstLesson.id,
       sourceId: sharedSource.id,
     }),
-    '23505',
+    postgresErrorCode.uniqueViolation,
   );
 
   const lessonWithSources = await database.query.lesson.findFirst({
@@ -164,7 +158,7 @@ test('Lesson Source locators accept useful partial shapes and reject invalid pag
       sourceId: sources[5].id,
       pageFrom: 0,
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(lessonSource).values({
@@ -172,7 +166,7 @@ test('Lesson Source locators accept useful partial shapes and reject invalid pag
       sourceId: sources[6].id,
       pageTo: -1,
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(lessonSource).values({
@@ -181,6 +175,6 @@ test('Lesson Source locators accept useful partial shapes and reject invalid pag
       pageFrom: 9,
       pageTo: 8,
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
 });

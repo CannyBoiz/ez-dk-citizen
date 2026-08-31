@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
-import { after, beforeEach, test } from 'node:test';
+import { test } from 'node:test';
 
 import { sql } from 'drizzle-orm';
 
 import {
   expectPostgresError,
-  integrationDatabase,
   mediaAssetFixture,
-  resetIntegrationDatabase,
+  postgresErrorCode,
+  useIntegrationDatabase,
 } from './integration-test-database.js';
 import {
   lesson,
@@ -16,13 +16,7 @@ import {
   mediaAsset,
 } from './schema.js';
 
-const { database, pool } = integrationDatabase;
-
-beforeEach(resetIntegrationDatabase);
-after(async () => {
-  await resetIntegrationDatabase();
-  await pool.end();
-});
+const database = useIntegrationDatabase();
 
 test('Lesson Audio requires matching localized text but upload records may remain unattached', async () => {
   const [audioLesson] = await database
@@ -46,7 +40,7 @@ test('Lesson Audio requires matching localized text but upload records may remai
       audioVersion: 1,
       isCurrent: true,
     }),
-    '23503',
+    postgresErrorCode.foreignKeyViolation,
   );
 
   await database.insert(lessonText).values({
@@ -154,7 +148,7 @@ test('Lesson Audio retains version history and has one current rendition per Les
       mediaAssetId: assets[2].id,
       audioVersion: 2,
     }),
-    '23505',
+    postgresErrorCode.uniqueViolation,
   );
   await expectPostgresError(
     database.insert(lessonAudio).values({
@@ -163,7 +157,7 @@ test('Lesson Audio retains version history and has one current rendition per Les
       mediaAssetId: assets[3].id,
       audioVersion: 0,
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(lessonAudio).values({
@@ -173,7 +167,7 @@ test('Lesson Audio retains version history and has one current rendition per Les
       audioVersion: 3,
       isCurrent: true,
     }),
-    '23505',
+    postgresErrorCode.uniqueViolation,
   );
 
   await database.insert(lessonAudio).values([
@@ -200,7 +194,7 @@ test('Lesson Audio retains version history and has one current rendition per Les
       mediaAssetId: assets[0].id,
       audioVersion: 4,
     }),
-    '23505',
+    postgresErrorCode.uniqueViolation,
   );
   await expectPostgresError(
     database.execute(sql`
@@ -211,7 +205,7 @@ test('Lesson Audio retains version history and has one current rendition per Les
         audio_version
       ) values (${firstLesson.id}, 'da', null, 5)
     `),
-    '23502',
+    postgresErrorCode.notNullViolation,
   );
 });
 
