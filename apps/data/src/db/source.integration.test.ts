@@ -1,34 +1,34 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import assert from "node:assert/strict";
+import { test } from "node:test";
 
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from "drizzle-orm";
 
 import {
   expectPostgresError,
   postgresErrorCode,
   useIntegrationDatabase,
-} from './integration-test-database.js';
-import { lesson, lessonSource, source } from './schema.js';
+} from "./integration-test-database.js";
+import { lesson, lessonSource, source } from "./schema.js";
 
 const database = useIntegrationDatabase();
 
-test('Sources are canonical and reusable across Lessons in both directions', async () => {
+test("Sources are canonical and reusable across Lessons in both directions", async () => {
   const [firstLesson, secondLesson] = await database
     .insert(lesson)
     .values([
-      { chapter: 10, version: 1, status: 'DRAFT' },
-      { chapter: 11, version: 1, status: 'DRAFT' },
+      { chapter: 10, version: 1, status: "DRAFT" },
+      { chapter: 11, version: 1, status: "DRAFT" },
     ])
     .returning();
-  const knownPublication = new Date('2025-01-15T12:00:00.000Z');
+  const knownPublication = new Date("2025-01-15T12:00:00.000Z");
   const [sharedSource, additionalSource] = await database
     .insert(source)
     .values([
       {
-        url: 'https://example.test/canonical-source',
+        url: "https://example.test/canonical-source",
         publishedAt: knownPublication,
       },
-      { url: 'https://example.test/undated-source', publishedAt: null },
+      { url: "https://example.test/undated-source", publishedAt: null },
     ])
     .returning();
 
@@ -97,10 +97,10 @@ test('Sources are canonical and reusable across Lessons in both directions', asy
   );
 });
 
-test('Lesson Source locators accept useful partial shapes and reject invalid pages', async () => {
+test("Lesson Source locators accept useful partial shapes and reject invalid pages", async () => {
   const [citingLesson] = await database
     .insert(lesson)
-    .values({ chapter: 12, version: 1, status: 'DRAFT' })
+    .values({ chapter: 12, version: 1, status: "DRAFT" })
     .returning();
   const sources = await database
     .insert(source)
@@ -117,21 +117,21 @@ test('Lesson Source locators accept useful partial shapes and reject invalid pag
     {
       lessonId: citingLesson.id,
       sourceId: sources[2].id,
-      sectionReference: 'Chapter 2, section 3',
+      sectionReference: "Chapter 2, section 3",
     },
     {
       lessonId: citingLesson.id,
       sourceId: sources[3].id,
       pageFrom: 8,
       pageTo: 10,
-      sectionReference: 'Appendix A',
+      sectionReference: "Appendix A",
     },
     { lessonId: citingLesson.id, sourceId: sources[4].id },
   ]);
 
   const acceptedLocators = await database.query.lessonSource.findMany({
     where: { lessonId: citingLesson.id },
-    orderBy: { sourceId: 'asc' },
+    orderBy: { sourceId: "asc" },
   });
   assert.deepEqual(
     acceptedLocators.map(({ pageFrom, pageTo, sectionReference }) => ({
@@ -145,9 +145,9 @@ test('Lesson Source locators accept useful partial shapes and reject invalid pag
       {
         pageFrom: null,
         pageTo: null,
-        sectionReference: 'Chapter 2, section 3',
+        sectionReference: "Chapter 2, section 3",
       },
-      { pageFrom: 8, pageTo: 10, sectionReference: 'Appendix A' },
+      { pageFrom: 8, pageTo: 10, sectionReference: "Appendix A" },
       { pageFrom: null, pageTo: null, sectionReference: null },
     ],
   );

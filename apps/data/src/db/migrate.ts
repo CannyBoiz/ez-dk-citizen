@@ -1,15 +1,12 @@
-import 'dotenv/config';
-
-import path from 'node:path';
-
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
-
-import { createDataDatabase, requireDatabaseUrl } from './database.js';
+import "dotenv/config";
+import path from "node:path";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { createDataDatabase, requireDatabaseUrl } from "./database.js";
 
 const { database, pool } = createDataDatabase(requireDatabaseUrl());
 const migrationsFolder = path.resolve(
   process.cwd(),
-  process.env.MIGRATIONS_FOLDER ?? 'drizzle',
+  process.env.MIGRATIONS_FOLDER ?? "drizzle",
 );
 
 try {
@@ -21,7 +18,7 @@ try {
     throw new Error(`Migration initialization failed: ${result.exitCode}`);
   }
 
-  console.log('Drizzle migrations applied.');
+  console.log("Drizzle migrations applied.");
 } finally {
   await pool.end();
 }
