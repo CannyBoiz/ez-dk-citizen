@@ -1,19 +1,19 @@
-import assert from 'node:assert/strict';
-import { after, beforeEach } from 'node:test';
+import assert from "node:assert/strict";
+import { after, beforeEach } from "node:test";
 
-import { sql } from 'drizzle-orm';
+import { sql } from "drizzle-orm";
 
-import { createDataDatabase, requireDatabaseUrl } from './database.js';
+import { createDataDatabase, requireDatabaseUrl } from "./database.js";
 
 const { database, pool } = createDataDatabase(requireDatabaseUrl());
 
 export const postgresErrorCode = {
-  checkViolation: '23514',
-  foreignKeyViolation: '23503',
-  invalidTextRepresentation: '22P02',
-  notNullViolation: '23502',
-  restrictViolation: '23001',
-  uniqueViolation: '23505',
+  checkViolation: "23514",
+  foreignKeyViolation: "23503",
+  invalidTextRepresentation: "22P02",
+  notNullViolation: "23502",
+  restrictViolation: "23001",
+  uniqueViolation: "23505",
 } as const;
 
 type PostgresErrorCode =
@@ -31,22 +31,22 @@ export function useIntegrationDatabase() {
 
 export function mediaAssetFixture(
   objectKey: string,
-  status: 'PENDING' | 'READY' | 'FAILED' | 'DELETED',
+  status: "PENDING" | "READY" | "FAILED" | "DELETED",
 ) {
   const completedUpload =
-    status === 'READY'
+    status === "READY"
       ? {
-          createdAt: new Date('2026-01-01T00:00:00.000Z'),
-          uploadedAt: new Date('2026-01-01T00:01:00.000Z'),
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          uploadedAt: new Date("2026-01-01T00:01:00.000Z"),
         }
       : {};
 
   return {
-    storageProvider: 's3',
-    storageContainer: 'citizenship-audio',
+    storageProvider: "s3",
+    storageContainer: "citizenship-audio",
     objectKey,
-    originalFilename: objectKey.split('/').at(-1) ?? objectKey,
-    contentType: 'audio/mpeg',
+    originalFilename: objectKey.split("/").at(-1) ?? objectKey,
+    contentType: "audio/mpeg",
     sizeBytes: 1_024n,
     status,
     ...completedUpload,
@@ -82,12 +82,12 @@ export async function expectPostgresError(
 function findPostgresErrorCode(error: unknown): string | undefined {
   let candidate = error;
 
-  while (candidate && typeof candidate === 'object') {
-    if ('code' in candidate && typeof candidate.code === 'string') {
+  while (candidate && typeof candidate === "object") {
+    if ("code" in candidate && typeof candidate.code === "string") {
       return candidate.code;
     }
 
-    candidate = 'cause' in candidate ? candidate.cause : undefined;
+    candidate = "cause" in candidate ? candidate.cause : undefined;
   }
 
   return undefined;

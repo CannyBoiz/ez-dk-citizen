@@ -1,41 +1,41 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import assert from "node:assert/strict";
+import { test } from "node:test";
 
-import { sql } from 'drizzle-orm';
+import { sql } from "drizzle-orm";
 
 import {
   expectPostgresError,
   mediaAssetFixture,
   postgresErrorCode,
   useIntegrationDatabase,
-} from './integration-test-database.js';
-import {
-  lesson,
-  lessonAudio,
-  lessonText,
-  mediaAsset,
-} from './schema.js';
+} from "./integration-test-database.js";
+import { lesson, lessonAudio, lessonText, mediaAsset } from "./schema.js";
 
 const database = useIntegrationDatabase();
 
-test('Lesson Audio requires matching localized text but upload records may remain unattached', async () => {
+test("Lesson Audio requires matching localized text but upload records may remain unattached", async () => {
   const [audioLesson] = await database
     .insert(lesson)
-    .values({ chapter: 20, version: 1, status: 'DRAFT' })
+    .values({
+      chapter: 20,
+      version: 1,
+      status: "DRAFT",
+    })
     .returning();
+
   const [readyAsset, pendingAsset, failedAsset] = await database
     .insert(mediaAsset)
     .values([
-      mediaAssetFixture('audio/ready.mp3', 'READY'),
-      mediaAssetFixture('audio/pending.mp3', 'PENDING'),
-      mediaAssetFixture('audio/failed.mp3', 'FAILED'),
+      mediaAssetFixture("audio/ready.mp3", "READY"),
+      mediaAssetFixture("audio/pending.mp3", "PENDING"),
+      mediaAssetFixture("audio/failed.mp3", "FAILED"),
     ])
     .returning();
 
   await expectPostgresError(
     database.insert(lessonAudio).values({
       lessonId: audioLesson.id,
-      languageCode: 'th',
+      languageCode: "th",
       mediaAssetId: readyAsset.id,
       audioVersion: 1,
       isCurrent: true,
@@ -45,20 +45,22 @@ test('Lesson Audio requires matching localized text but upload records may remai
 
   await database.insert(lessonText).values({
     lessonId: audioLesson.id,
-    languageCode: 'th',
-    title: 'ข้อความภาษาไทย',
-    content: 'เนื้อหาบทเรียนภาษาไทย',
+    languageCode: "th",
+    title: "ข้อความภาษาไทย",
+    content: "เนื้อหาบทเรียนภาษาไทย",
   });
+
   const [createdAudio] = await database
     .insert(lessonAudio)
     .values({
       lessonId: audioLesson.id,
-      languageCode: 'th',
+      languageCode: "th",
       mediaAssetId: readyAsset.id,
       audioVersion: 1,
       isCurrent: true,
     })
     .returning();
+
   assert.equal(createdAudio.mediaAssetId, readyAsset.id);
 
   const unattachedAssets = await Promise.all(
@@ -75,39 +77,41 @@ test('Lesson Audio requires matching localized text but upload records may remai
   );
 });
 
-test('Lesson Audio retains version history and has one current rendition per Lesson and Language', async () => {
+test("Lesson Audio retains version history and has one current rendition per Lesson and Language", async () => {
   const [firstLesson, secondLesson] = await database
     .insert(lesson)
     .values([
-      { chapter: 21, version: 1, status: 'DRAFT' },
-      { chapter: 22, version: 1, status: 'DRAFT' },
+      { chapter: 21, version: 1, status: "DRAFT" },
+      { chapter: 22, version: 1, status: "DRAFT" },
     ])
     .returning();
+
   await database.insert(lessonText).values([
     {
       lessonId: firstLesson.id,
-      languageCode: 'da',
-      title: 'Dansk',
-      content: 'Dansk indhold',
+      languageCode: "da",
+      title: "Dansk",
+      content: "Dansk indhold",
     },
     {
       lessonId: firstLesson.id,
-      languageCode: 'en',
-      title: 'English',
-      content: 'English content',
+      languageCode: "en",
+      title: "English",
+      content: "English content",
     },
     {
       lessonId: secondLesson.id,
-      languageCode: 'da',
-      title: 'Anden lektion',
-      content: 'Andet dansk indhold',
+      languageCode: "da",
+      title: "Anden lektion",
+      content: "Andet dansk indhold",
     },
   ]);
+
   const assets = await database
     .insert(mediaAsset)
     .values(
       Array.from({ length: 9 }, (_, index) =>
-        mediaAssetFixture(`audio/history-${index + 1}.mp3`, 'READY'),
+        mediaAssetFixture(`audio/history-${index + 1}.mp3`, "READY"),
       ),
     )
     .returning();
@@ -115,14 +119,14 @@ test('Lesson Audio retains version history and has one current rendition per Les
   await database.insert(lessonAudio).values([
     {
       lessonId: firstLesson.id,
-      languageCode: 'da',
+      languageCode: "da",
       mediaAssetId: assets[0].id,
       audioVersion: 1,
       isCurrent: false,
     },
     {
       lessonId: firstLesson.id,
-      languageCode: 'da',
+      languageCode: "da",
       mediaAssetId: assets[1].id,
       audioVersion: 2,
       isCurrent: true,
@@ -130,8 +134,8 @@ test('Lesson Audio retains version history and has one current rendition per Les
   ]);
 
   const history = await database.query.lessonAudio.findMany({
-    where: { lessonId: firstLesson.id, languageCode: 'da' },
-    orderBy: { audioVersion: 'asc' },
+    where: { lessonId: firstLesson.id, languageCode: "da" },
+    orderBy: { audioVersion: "asc" },
   });
   assert.deepEqual(
     history.map(({ audioVersion, isCurrent }) => ({ audioVersion, isCurrent })),
@@ -144,7 +148,7 @@ test('Lesson Audio retains version history and has one current rendition per Les
   await expectPostgresError(
     database.insert(lessonAudio).values({
       lessonId: firstLesson.id,
-      languageCode: 'da',
+      languageCode: "da",
       mediaAssetId: assets[2].id,
       audioVersion: 2,
     }),
@@ -153,7 +157,7 @@ test('Lesson Audio retains version history and has one current rendition per Les
   await expectPostgresError(
     database.insert(lessonAudio).values({
       lessonId: firstLesson.id,
-      languageCode: 'da',
+      languageCode: "da",
       mediaAssetId: assets[3].id,
       audioVersion: 0,
     }),
@@ -162,7 +166,7 @@ test('Lesson Audio retains version history and has one current rendition per Les
   await expectPostgresError(
     database.insert(lessonAudio).values({
       lessonId: firstLesson.id,
-      languageCode: 'da',
+      languageCode: "da",
       mediaAssetId: assets[4].id,
       audioVersion: 3,
       isCurrent: true,
@@ -173,14 +177,14 @@ test('Lesson Audio retains version history and has one current rendition per Les
   await database.insert(lessonAudio).values([
     {
       lessonId: firstLesson.id,
-      languageCode: 'en',
+      languageCode: "en",
       mediaAssetId: assets[5].id,
       audioVersion: 1,
       isCurrent: true,
     },
     {
       lessonId: secondLesson.id,
-      languageCode: 'da',
+      languageCode: "da",
       mediaAssetId: assets[6].id,
       audioVersion: 1,
       isCurrent: true,
@@ -190,7 +194,7 @@ test('Lesson Audio retains version history and has one current rendition per Les
   await expectPostgresError(
     database.insert(lessonAudio).values({
       lessonId: firstLesson.id,
-      languageCode: 'da',
+      languageCode: "da",
       mediaAssetId: assets[0].id,
       audioVersion: 4,
     }),
@@ -209,26 +213,30 @@ test('Lesson Audio retains version history and has one current rendition per Les
   );
 });
 
-test('Lesson Audio relationships resolve every navigation path unambiguously', async () => {
+test("Lesson Audio relationships resolve every navigation path unambiguously", async () => {
   const [relatedLesson] = await database
     .insert(lesson)
-    .values({ chapter: 23, version: 1, status: 'PUBLISHED' })
+    .values({
+      chapter: 23,
+      version: 1,
+      status: "PUBLISHED",
+    })
     .returning();
   await database.insert(lessonText).values({
     lessonId: relatedLesson.id,
-    languageCode: 'th',
-    title: 'บทเรียน',
-    content: 'เนื้อหา',
+    languageCode: "th",
+    title: "บทเรียน",
+    content: "เนื้อหา",
   });
   const [relatedAsset] = await database
     .insert(mediaAsset)
-    .values(mediaAssetFixture('audio/relations.mp3', 'READY'))
+    .values(mediaAssetFixture("audio/relations.mp3", "READY"))
     .returning();
   const [relatedAudio] = await database
     .insert(lessonAudio)
     .values({
       lessonId: relatedLesson.id,
-      languageCode: 'th',
+      languageCode: "th",
       mediaAssetId: relatedAsset.id,
       audioVersion: 1,
       isCurrent: true,
@@ -240,11 +248,11 @@ test('Lesson Audio relationships resolve every navigation path unambiguously', a
     with: { lessonAudios: true },
   });
   const languageResult = await database.query.language.findFirst({
-    where: { code: 'th' },
+    where: { code: "th" },
     with: { lessonAudios: true },
   });
   const textResult = await database.query.lessonText.findFirst({
-    where: { lessonId: relatedLesson.id, languageCode: 'th' },
+    where: { lessonId: relatedLesson.id, languageCode: "th" },
     with: { lessonAudios: true },
   });
   const assetResult = await database.query.mediaAsset.findFirst({
@@ -266,7 +274,7 @@ test('Lesson Audio relationships resolve every navigation path unambiguously', a
   assert.equal(textResult?.lessonAudios[0]?.id, relatedAudio.id);
   assert.equal(assetResult?.lessonAudio?.id, relatedAudio.id);
   assert.equal(audioResult?.lesson.id, relatedLesson.id);
-  assert.equal(audioResult?.language.code, 'th');
-  assert.equal(audioResult?.lessonText.title, 'บทเรียน');
+  assert.equal(audioResult?.language.code, "th");
+  assert.equal(audioResult?.lessonText.title, "บทเรียน");
   assert.equal(audioResult?.mediaAsset.id, relatedAsset.id);
 });

@@ -13,5 +13,8 @@
     "db:down": "docker compose down",
     "test": "pnpm --filter @ez-dk-citizen/data test",
     "test:integration": "node scripts/test-postgres-integration.mjs"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6"
   }
 }

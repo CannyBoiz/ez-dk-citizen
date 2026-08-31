@@ -1,13 +1,12 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
-
-import { schemaRelations } from './schema.js';
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import { schemaRelations } from "./schema.js";
 
 export function requireDatabaseUrl(environment = process.env): string {
   const databaseUrl = environment.DATABASE_URL;
 
   if (!databaseUrl) {
-    throw new Error('DATABASE_URL is required.');
+    throw new Error("DATABASE_URL is required.");
   }
 
   return databaseUrl;
