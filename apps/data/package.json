@@ -3,7 +3,8 @@
   "type": "module",
   "files": [
     "dist",
-    "drizzle"
+    "drizzle",
+    "test-fixtures"
   ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -12,7 +13,8 @@
     "start": "node dist/src/index.js",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
-    "test": "node --import tsx --test"
+    "test": "node --import tsx --test --test-concurrency=1 src/db/lesson.integration.test.ts src/db/source.integration.test.ts src/db/media-asset.integration.test.ts src/db/lesson-audio.integration.test.ts src/db/deletion.integration.test.ts",
+    "test:compiled": "node --test --test-concurrency=1 dist/src/db/lesson.integration.test.js dist/src/db/source.integration.test.js dist/src/db/media-asset.integration.test.js dist/src/db/lesson-audio.integration.test.js dist/src/db/deletion.integration.test.js"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",

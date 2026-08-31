@@ -42,14 +42,15 @@ code use pnpm's `--filter @ez-dk-citizen/data` selector, which matches the
 | `pnpm db:migrate` | Apply committed Drizzle migrations using `DATABASE_URL`. |
 | `pnpm db:up` | Start local PostgreSQL and wait until it is healthy. |
 | `pnpm db:down` | Stop local Compose containers without deleting development data. |
-| `pnpm test` | Run the Data Service test suite. |
-| `pnpm test:integration` | Migrate and smoke-test an isolated PostgreSQL/Data Service stack. |
+| `pnpm test` | Run the Data Service PostgreSQL tests against `DATABASE_URL`. |
+| `pnpm test:integration` | Build, migrate, and fully test an isolated PostgreSQL/Data Service stack. |
 
 The integration command creates a unique Compose project, selects an available
 localhost PostgreSQL port, waits for PostgreSQL health, applies the committed
-migration, and waits for the compiled Data Service. It then verifies the
-canonical Language rows through the exported Drizzle layer, reapplies migration
-to prove the startup path is idempotent, and verifies the seed again. Its
+migration, and waits for the compiled Data Service. It verifies the canonical
+Language seed, runs the complete constraint and relational-query suite through
+the exported Drizzle layer, reapplies migration to prove idempotency, and proves
+that a failed migration prevents its dependent Data Service from starting. Its
 containers, network, and project-scoped volume are removed afterward, including
 after test failure. The normal development volume belongs to a different
 Compose project and is not removed.

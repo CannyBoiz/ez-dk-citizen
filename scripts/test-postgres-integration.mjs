@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -54,6 +55,15 @@ try {
   ]);
   await runDocker([
     ...composeArguments,
+    '--profile',
+    'integration',
+    'run',
+    '--no-deps',
+    '--rm',
+    'postgres-test',
+  ]);
+  await runDocker([
+    ...composeArguments,
     'run',
     '--no-deps',
     '--rm',
@@ -68,6 +78,7 @@ try {
     '--rm',
     'postgres-check',
   ]);
+  await verifyFailedMigrationBlocksDataService();
 } catch (error) {
   integrationFailure = error;
 } finally {
@@ -87,7 +98,46 @@ if (integrationFailure) {
   throw integrationFailure;
 }
 
-console.log('PostgreSQL foundation smoke test passed.');
+console.log('PostgreSQL foundation integration suite passed.');
+
+async function verifyFailedMigrationBlocksDataService() {
+  const exitCode = await runDockerForExitCode([
+    ...composeArguments,
+    '--profile',
+    'integration-failure',
+    'up',
+    '--detach',
+    '--wait',
+    '--wait-timeout',
+    '30',
+    'data-after-failed-migration',
+  ]);
+  assert.notEqual(exitCode, 0, 'The intentionally broken migration must fail.');
+
+  const failedMigration = await captureDocker([
+    ...composeArguments,
+    'ps',
+    '--all',
+    '--format',
+    '{{.Service}}|{{.State}}|{{.ExitCode}}',
+    'migration-failure',
+  ]);
+  assert.match(failedMigration, /^migration-failure\|exited\|[1-9]\d*$/m);
+
+  const runningBlockedService = await captureDocker([
+    ...composeArguments,
+    'ps',
+    '--status',
+    'running',
+    '--services',
+    'data-after-failed-migration',
+  ]);
+  assert.equal(
+    runningBlockedService.trim(),
+    '',
+    'The Data Service must remain stopped after migration failure.',
+  );
+}
 
 function runDocker(arguments_) {
   return new Promise((resolve, reject) => {
@@ -101,6 +151,45 @@ function runDocker(arguments_) {
     child.on('exit', (code, signal) => {
       if (code === 0) {
         resolve();
+        return;
+      }
+
+      const outcome = signal ? `signal ${signal}` : `exit code ${code}`;
+      reject(new Error(`docker ${arguments_.join(' ')} failed with ${outcome}`));
+    });
+  });
+}
+
+function runDockerForExitCode(arguments_) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('docker', arguments_, {
+      cwd: repositoryRoot,
+      env: composeEnvironment,
+      stdio: 'inherit',
+    });
+
+    child.on('error', reject);
+    child.on('exit', (code) => resolve(code ?? 1));
+  });
+}
+
+function captureDocker(arguments_) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('docker', arguments_, {
+      cwd: repositoryRoot,
+      env: composeEnvironment,
+      stdio: ['ignore', 'pipe', 'inherit'],
+    });
+    let output = '';
+
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      output += chunk;
+    });
+    child.on('error', reject);
+    child.on('exit', (code, signal) => {
+      if (code === 0) {
+        resolve(output);
         return;
       }
 
