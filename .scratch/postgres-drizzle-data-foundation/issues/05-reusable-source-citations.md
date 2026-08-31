@@ -6,11 +6,11 @@
 
 **Status:** ready-for-agent
 
-- [ ] Integration tests store a canonical Source once and associate it with multiple Lessons.
-- [ ] One Lesson can be associated with multiple Sources without duplicating either parent.
-- [ ] Duplicate Source URLs and duplicate Lesson/Source association identities are rejected.
-- [ ] Sources with known and unknown publication dates are both accepted.
-- [ ] Lesson Sources accept page-only, Section Reference-only, combined, and entirely absent citation locators.
-- [ ] Non-positive page values and an ending page before its starting page are rejected, while a single valid page bound is accepted.
-- [ ] Drizzle relational queries traverse Lesson to Sources through Lesson Source and Source to Lessons through the same association.
-- [ ] Deleting a Source removes its Lesson Source associations without deleting any Lesson.
+- [x] Integration tests store a canonical Source once and associate it with multiple Lessons.
+- [x] One Lesson can be associated with multiple Sources without duplicating either parent.
+- [x] Duplicate Source URLs and duplicate Lesson/Source association identities are rejected.
+- [x] Sources with known and unknown publication dates are both accepted.
+- [x] Lesson Sources accept page-only, Section Reference-only, combined, and entirely absent citation locators.
+- [x] Non-positive page values and an ending page before its starting page are rejected, while a single valid page bound is accepted.
+- [x] Drizzle relational queries traverse Lesson to Sources through Lesson Source and Source to Lessons through the same association.
+- [x] Deleting a Source removes its Lesson Source associations without deleting any Lesson.

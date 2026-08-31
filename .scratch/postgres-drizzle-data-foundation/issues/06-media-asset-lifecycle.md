@@ -6,12 +6,12 @@
 
 **Status:** ready-for-agent
 
-- [ ] Integration tests persist a pending Media Asset without any Lesson Audio association.
-- [ ] New Media Assets default to PENDING, receive a database-clock creation timestamp, and may have no upload timestamp or duration.
-- [ ] READY, FAILED, and DELETED Media Asset Status values are accepted, while values outside the approved enum are rejected.
-- [ ] Storage provider, storage container, and object key form a unique stable-object identity.
-- [ ] Duplicate stable-object identities are rejected while the same object key in a different provider or container is accepted.
-- [ ] Zero or negative sizes, zero or negative non-null durations, and null, empty, or whitespace-only content types are rejected.
-- [ ] A positive size, optional positive duration, and non-MP3 content type can be stored without hard-coding a MIME-type allowlist.
-- [ ] Creation and upload timestamps can represent pending and successfully validated objects without a database update trigger.
-- [ ] Drizzle exposes the optional Media Asset to Lesson Audio relationship without requiring an associated rendition.
+- [x] Integration tests persist a pending Media Asset without any Lesson Audio association.
+- [x] New Media Assets default to PENDING, receive a database-clock creation timestamp, and may have no upload timestamp or duration.
+- [x] READY, FAILED, and DELETED Media Asset Status values are accepted, while values outside the approved enum are rejected.
+- [x] Storage provider, storage container, and object key form a unique stable-object identity.
+- [x] Duplicate stable-object identities are rejected while the same object key in a different provider or container is accepted.
+- [x] Zero or negative sizes, zero or negative non-null durations, and null, empty, or whitespace-only content types are rejected.
+- [x] A positive size, optional positive duration, and non-MP3 content type can be stored without hard-coding a MIME-type allowlist.
+- [x] Creation and upload timestamps can represent pending and successfully validated objects without a database update trigger.
+- [x] Drizzle exposes the optional Media Asset to Lesson Audio relationship without requiring an associated rendition.
