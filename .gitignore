@@ -22,5 +22,7 @@ node_modules/
 dist/
 
 
+# personal dir and files
 cannyboizs-files/
 mattpocock-skills/
+learning-notes/
