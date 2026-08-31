@@ -6,13 +6,13 @@
 
 **Status:** ready-for-agent
 
-- [ ] The root integration command starts isolated PostgreSQL, applies the committed migration through the one-shot service, runs the complete suite, and removes only test-specific state.
-- [ ] A representative graph loads bidirectionally through Drizzle: a Lesson with localized Lesson Texts, reusable Sources, historical and current Lesson Audio, associated Media Assets, and an unattached pending Media Asset.
-- [ ] Deleting a Lesson cascades to its Lesson Text, Lesson Source, and Lesson Audio rows without deleting shared Sources or referenced Media Assets.
-- [ ] Deleting a Source cascades only to its Lesson Source rows and leaves Lessons intact.
-- [ ] Deleting a referenced Language is rejected.
-- [ ] Deleting a Media Asset referenced by Lesson Audio is rejected, while deleting Lesson Audio leaves its Media Asset intact.
-- [ ] Starting the stack against an already migrated database is idempotent and does not duplicate Language rows.
-- [ ] A migration failure is observable as a failed one-shot service and prevents the compiled Data Service from starting.
-- [ ] Compose validation, Data Service type-checking and build, migration tests, constraint tests, and relational-query tests all pass through documented root commands.
-- [ ] Local PostgreSQL remains available for host-run hot reload, while production override behavior remains outside this ticket.
+- [x] The root integration command starts isolated PostgreSQL, applies the committed migration through the one-shot service, runs the complete suite, and removes only test-specific state.
+- [x] A representative graph loads bidirectionally through Drizzle: a Lesson with localized Lesson Texts, reusable Sources, historical and current Lesson Audio, associated Media Assets, and an unattached pending Media Asset.
+- [x] Deleting a Lesson cascades to its Lesson Text, Lesson Source, and Lesson Audio rows without deleting shared Sources or referenced Media Assets.
+- [x] Deleting a Source cascades only to its Lesson Source rows and leaves Lessons intact.
+- [x] Deleting a referenced Language is rejected.
+- [x] Deleting a Media Asset referenced by Lesson Audio is rejected, while deleting Lesson Audio leaves its Media Asset intact.
+- [x] Starting the stack against an already migrated database is idempotent and does not duplicate Language rows.
+- [x] A migration failure is observable as a failed one-shot service and prevents the compiled Data Service from starting.
+- [x] Compose validation, Data Service type-checking and build, migration tests, constraint tests, and relational-query tests all pass through documented root commands.
+- [x] Local PostgreSQL remains available for host-run hot reload, while production override behavior remains outside this ticket.
