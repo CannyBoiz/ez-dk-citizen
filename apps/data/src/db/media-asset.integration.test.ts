@@ -1,23 +1,17 @@
 import assert from 'node:assert/strict';
-import { after, beforeEach, test } from 'node:test';
+import { test } from 'node:test';
 
 import { eq, sql } from 'drizzle-orm';
 
 import {
   expectPostgresError,
-  integrationDatabase,
   mediaAssetFixture,
-  resetIntegrationDatabase,
+  postgresErrorCode,
+  useIntegrationDatabase,
 } from './integration-test-database.js';
 import { mediaAsset } from './schema.js';
 
-const { database, pool } = integrationDatabase;
-
-beforeEach(resetIntegrationDatabase);
-after(async () => {
-  await resetIntegrationDatabase();
-  await pool.end();
-});
+const database = useIntegrationDatabase();
 
 test('Media Assets represent pending and completed upload metadata', async () => {
   const [pendingAsset] = await database
@@ -79,7 +73,7 @@ test('Media Assets represent pending and completed upload metadata', async () =>
         status
       ) values ('s3', 'citizenship-audio', 'invalid-status', 'invalid', 'audio/mpeg', 1, 'UPLOADING')
     `),
-    '22P02',
+    postgresErrorCode.invalidTextRepresentation,
   );
 });
 
@@ -92,7 +86,7 @@ test('Media Asset identity is provider-neutral and unique per stored object', as
       ...stableObject,
       originalFilename: 'same-object-renamed.mp3',
     }),
-    '23505',
+    postgresErrorCode.uniqueViolation,
   );
   await database.insert(mediaAsset).values([
     { ...stableObject, storageProvider: 'azure' },
@@ -113,42 +107,42 @@ test('Media Asset metadata rejects unusable values without restricting MIME type
       ...mediaAssetFixture('invalid/zero-size', 'PENDING'),
       sizeBytes: 0n,
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(mediaAsset).values({
       ...mediaAssetFixture('invalid/negative-size', 'PENDING'),
       sizeBytes: -1n,
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(mediaAsset).values({
       ...mediaAssetFixture('invalid/zero-duration', 'PENDING'),
       durationMs: 0n,
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(mediaAsset).values({
       ...mediaAssetFixture('invalid/negative-duration', 'PENDING'),
       durationMs: -1n,
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(mediaAsset).values({
       ...mediaAssetFixture('invalid/blank-content-type', 'PENDING'),
       contentType: '   ',
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(mediaAsset).values({
       ...mediaAssetFixture('invalid/empty-content-type', 'PENDING'),
       contentType: '',
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.execute(sql`
@@ -161,6 +155,6 @@ test('Media Asset metadata rejects unusable values without restricting MIME type
         size_bytes
       ) values ('s3', 'citizenship-audio', 'invalid/null-content-type', 'invalid', null, 1)
     `),
-    '23502',
+    postgresErrorCode.notNullViolation,
   );
 });

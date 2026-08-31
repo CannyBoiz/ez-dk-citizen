@@ -139,61 +139,48 @@ async function verifyFailedMigrationBlocksDataService() {
   );
 }
 
-function runDocker(arguments_) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('docker', arguments_, {
-      cwd: repositoryRoot,
-      env: composeEnvironment,
-      stdio: 'inherit',
-    });
-
-    child.on('error', reject);
-    child.on('exit', (code, signal) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      const outcome = signal ? `signal ${signal}` : `exit code ${code}`;
-      reject(new Error(`docker ${arguments_.join(' ')} failed with ${outcome}`));
-    });
-  });
+async function runDocker(arguments_) {
+  await spawnDocker(arguments_);
 }
 
-function runDockerForExitCode(arguments_) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('docker', arguments_, {
-      cwd: repositoryRoot,
-      env: composeEnvironment,
-      stdio: 'inherit',
-    });
-
-    child.on('error', reject);
-    child.on('exit', (code) => resolve(code ?? 1));
-  });
+async function runDockerForExitCode(arguments_) {
+  const { exitCode } = await spawnDocker(arguments_, { allowFailure: true });
+  return exitCode;
 }
 
-function captureDocker(arguments_) {
+async function captureDocker(arguments_) {
+  const { output } = await spawnDocker(arguments_, { captureOutput: true });
+  return output;
+}
+
+function spawnDocker(
+  arguments_,
+  { allowFailure = false, captureOutput = false } = {},
+) {
   return new Promise((resolve, reject) => {
     const child = spawn('docker', arguments_, {
       cwd: repositoryRoot,
       env: composeEnvironment,
-      stdio: ['ignore', 'pipe', 'inherit'],
+      stdio: captureOutput ? ['ignore', 'pipe', 'inherit'] : 'inherit',
     });
     let output = '';
 
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      output += chunk;
-    });
+    if (captureOutput && child.stdout) {
+      child.stdout.setEncoding('utf8');
+      child.stdout.on('data', (chunk) => {
+        output += chunk;
+      });
+    }
     child.on('error', reject);
     child.on('exit', (code, signal) => {
-      if (code === 0) {
-        resolve(output);
+      const exitCode = code ?? 1;
+
+      if (exitCode === 0 || allowFailure) {
+        resolve({ exitCode, output });
         return;
       }
 
-      const outcome = signal ? `signal ${signal}` : `exit code ${code}`;
+      const outcome = signal ? `signal ${signal}` : `exit code ${exitCode}`;
       reject(new Error(`docker ${arguments_.join(' ')} failed with ${outcome}`));
     });
   });

@@ -1,22 +1,16 @@
 import assert from 'node:assert/strict';
-import { after, beforeEach, test } from 'node:test';
+import { test } from 'node:test';
 
 import { eq, sql } from 'drizzle-orm';
 
 import {
   expectPostgresError,
-  integrationDatabase,
-  resetIntegrationDatabase,
+  postgresErrorCode,
+  useIntegrationDatabase,
 } from './integration-test-database.js';
 import { language, lesson, lessonText } from './schema.js';
 
-const { database, pool } = integrationDatabase;
-
-beforeEach(resetIntegrationDatabase);
-after(async () => {
-  await resetIntegrationDatabase();
-  await pool.end();
-});
+const database = useIntegrationDatabase();
 
 test('Lessons preserve valid versions, statuses, and database timestamps', async () => {
   const [draft] = await database
@@ -57,11 +51,11 @@ test('Lessons preserve valid versions, statuses, and database timestamps', async
 test('PostgreSQL rejects invalid or conflicting Lesson versions', async () => {
   await expectPostgresError(
     database.insert(lesson).values({ chapter: 0, version: 1, status: 'DRAFT' }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(lesson).values({ chapter: 1, version: 0, status: 'DRAFT' }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
 
   await database
@@ -69,7 +63,7 @@ test('PostgreSQL rejects invalid or conflicting Lesson versions', async () => {
     .values({ chapter: 2, version: 1, status: 'DRAFT' });
   await expectPostgresError(
     database.insert(lesson).values({ chapter: 2, version: 1, status: 'ARCHIVED' }),
-    '23505',
+    postgresErrorCode.uniqueViolation,
   );
 
   await database
@@ -77,7 +71,7 @@ test('PostgreSQL rejects invalid or conflicting Lesson versions', async () => {
     .values({ chapter: 3, version: 1, status: 'PUBLISHED' });
   await expectPostgresError(
     database.insert(lesson).values({ chapter: 3, version: 2, status: 'PUBLISHED' }),
-    '23505',
+    postgresErrorCode.uniqueViolation,
   );
   await database
     .insert(lesson)
@@ -119,11 +113,11 @@ test('Languages and localized Lesson Texts retain complete unique identities', a
     database
       .insert(language)
       .values({ code: exactLengthLanguageCode, name: 'Duplicate code' }),
-    '23505',
+    postgresErrorCode.uniqueViolation,
   );
   await expectPostgresError(
     database.insert(language).values({ code: 'de', name: 'Danish' }),
-    '23505',
+    postgresErrorCode.uniqueViolation,
   );
   await expectPostgresError(
     database.insert(lessonText).values({
@@ -132,7 +126,7 @@ test('Languages and localized Lesson Texts retain complete unique identities', a
       title: 'Duplicate',
       content: 'Duplicate',
     }),
-    '23505',
+    postgresErrorCode.uniqueViolation,
   );
   await expectPostgresError(
     database.insert(lessonText).values({
@@ -141,7 +135,7 @@ test('Languages and localized Lesson Texts retain complete unique identities', a
       title: 'Missing Lesson',
       content: 'Rejected',
     }),
-    '23503',
+    postgresErrorCode.foreignKeyViolation,
   );
   await expectPostgresError(
     database.insert(lessonText).values({
@@ -150,7 +144,7 @@ test('Languages and localized Lesson Texts retain complete unique identities', a
       title: 'Missing Language',
       content: 'Rejected',
     }),
-    '23503',
+    postgresErrorCode.foreignKeyViolation,
   );
   await expectPostgresError(
     database.insert(lessonText).values({
@@ -159,7 +153,7 @@ test('Languages and localized Lesson Texts retain complete unique identities', a
       title: '   ',
       content: 'Rejected',
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(lessonText).values({
@@ -168,7 +162,7 @@ test('Languages and localized Lesson Texts retain complete unique identities', a
       title: '',
       content: 'Rejected',
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(lessonText).values({
@@ -177,7 +171,7 @@ test('Languages and localized Lesson Texts retain complete unique identities', a
       title: 'Rejected',
       content: '',
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.insert(lessonText).values({
@@ -186,21 +180,21 @@ test('Languages and localized Lesson Texts retain complete unique identities', a
       title: 'Rejected',
       content: '   ',
     }),
-    '23514',
+    postgresErrorCode.checkViolation,
   );
   await expectPostgresError(
     database.execute(sql`
       insert into lesson_text (lesson_id, language_code, title, content)
       values (${localizedLesson.id}, 'th', null, 'Rejected')
     `),
-    '23502',
+    postgresErrorCode.notNullViolation,
   );
   await expectPostgresError(
     database.execute(sql`
       insert into lesson_text (lesson_id, language_code, title, content)
       values (${localizedLesson.id}, 'th', 'Rejected', null)
     `),
-    '23502',
+    postgresErrorCode.notNullViolation,
   );
 
   const lessonWithTexts = await database.query.lesson.findFirst({
@@ -221,6 +215,6 @@ test('Languages and localized Lesson Texts retain complete unique identities', a
 
   await expectPostgresError(
     database.delete(language).where(eq(language.code, exactLengthLanguageCode)),
-    '23001',
+    postgresErrorCode.restrictViolation,
   );
 });
