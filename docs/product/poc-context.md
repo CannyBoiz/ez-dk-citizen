@@ -131,6 +131,10 @@ A canonical external study source, for example an official PDF or government web
 
 A Source may support multiple Lessons.
 
+For the PoC, a Source is identified by its canonical URL. The URL is a trimmed,
+absolute HTTP(S) URL and must be unique by exact stored value. Recognizing two
+textually different URLs as the same Source remains an admin responsibility.
+
 Do not duplicate the same canonical Source row for each Lesson.
 
 ## Lesson Source
@@ -279,9 +283,25 @@ Multiple draft and archived versions may exist for a chapter, but at most one
 version may be `PUBLISHED`. PostgreSQL enforces this with a partial unique index
 on `chapter` where `status = 'PUBLISHED'`.
 
+New Lessons always begin as `DRAFT`. Allowed lifecycle transitions are:
+
+```text
+DRAFT -> PUBLISHED
+DRAFT -> ARCHIVED
+PUBLISHED -> ARCHIVED
+```
+
+`ARCHIVED` is terminal. Lesson structure, Lesson Texts, and Lesson Source
+associations may be changed only while the Lesson is `DRAFT`. After it leaves
+`DRAFT`, corrections require a new Lesson version rather than editing the
+published or archived version in place.
+
 Both `created_at` and `updated_at` default to the database clock on insertion.
-The Data Service explicitly sets `updated_at` on changes; no database trigger
-maintains it.
+`updated_at` represents the last change to the complete Lesson aggregate. The
+Data Service explicitly advances it when Lesson structure or status, a Lesson
+Text, or a Lesson Source association changes; no database trigger maintains it.
+Final draft edits and the transition to `PUBLISHED` may be submitted as one
+command, and the Data Service applies them atomically.
 
 ## `language`
 
@@ -352,6 +372,15 @@ date. Store `published_at` when it is known and use `NULL` otherwise.
 Do **not** put `lesson_id` in this table.
 
 The relationship is owned by `lesson_source`.
+
+Constraints:
+
+```text
+UNIQUE(url)
+```
+
+The Data Service validates that `url` is an absolute HTTP(S) URL after trimming
+surrounding whitespace.
 
 Possible future fields, only when required:
 
