@@ -3,15 +3,17 @@
   "private": true,
   "packageManager": "pnpm@11.24.0",
   "scripts": {
-    "dev": "pnpm --filter @ez-dk-citizen/data dev",
-    "typecheck": "pnpm --filter @ez-dk-citizen/data typecheck",
-    "build": "pnpm --filter @ez-dk-citizen/data build",
-    "start": "pnpm --filter @ez-dk-citizen/data start",
+    "dev": "pnpm --filter @ez-dk-citizen/api-contracts build && pnpm --parallel --filter @ez-dk-citizen/data --filter @ez-dk-citizen/bff dev",
+    "dev:data": "pnpm --filter @ez-dk-citizen/api-contracts build && pnpm --filter @ez-dk-citizen/data dev",
+    "dev:bff": "pnpm --filter @ez-dk-citizen/api-contracts build && pnpm --filter @ez-dk-citizen/bff dev",
+    "typecheck": "pnpm --recursive --if-present typecheck",
+    "build": "pnpm --recursive --if-present build",
+    "start": "pnpm --parallel --filter @ez-dk-citizen/data --filter @ez-dk-citizen/bff start",
     "db:generate": "pnpm --filter @ez-dk-citizen/data db:generate",
     "db:migrate": "pnpm --filter @ez-dk-citizen/data db:migrate",
     "db:up": "docker compose up --detach --wait postgres",
     "db:down": "docker compose down",
-    "test": "pnpm --filter @ez-dk-citizen/data test",
+    "test": "pnpm --recursive --if-present test",
     "test:integration": "node scripts/test-postgres-integration.mjs"
   },
   "devDependencies": {

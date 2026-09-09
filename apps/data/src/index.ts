@@ -2,26 +2,19 @@ import "dotenv/config";
 
 import { serve } from "@hono/node-server";
 import { sql } from "drizzle-orm";
-import { Hono } from "hono";
 
+import { createDataApp } from "./app.js";
 import { createDataDatabase, requireDatabaseUrl } from "./db/database.js";
 
-const app = new Hono();
 const { database, pool } = createDataDatabase(requireDatabaseUrl());
-
-app.get("/", (c) => {
-  return c.text("Hello Hono!");
-});
-
-app.get("/health", async (c) => {
+const app = createDataApp(async () => {
   await database.execute(sql`select 1`);
-  return c.json({ status: "ok" });
 });
 
 const server = serve(
   {
     fetch: app.fetch,
-    port: 3000,
+    port: Number(process.env.PORT ?? 3000),
   },
   (info) => {
     console.log(`Server is running on http://localhost:${info.port}`);
