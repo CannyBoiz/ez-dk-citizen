@@ -6,9 +6,12 @@ RUN npm install --global pnpm@11.24.0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/data/package.json apps/data/package.json
+COPY packages/api-contracts/package.json packages/api-contracts/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY apps/data apps/data
+COPY packages/api-contracts packages/api-contracts
+RUN pnpm --filter @ez-dk-citizen/api-contracts build
 RUN pnpm --filter @ez-dk-citizen/data build
 RUN pnpm --filter @ez-dk-citizen/data deploy --prod /data-service
 

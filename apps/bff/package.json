@@ -1,0 +1,26 @@
+{
+  "name": "@ez-dk-citizen/bff",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsx watch src/index.ts 3001",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js 3001",
+    "test": "node --import tsx --test src/app.test.ts"
+  },
+  "dependencies": {
+    "@ez-dk-citizen/api-contracts": "workspace:*",
+    "@hono/node-server": "^2.1.1",
+    "hono": "4.13.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.3.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}
