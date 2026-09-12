@@ -77,6 +77,9 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
       calls.push(`create:${input.chapter}:${input.version}:${requestId}`);
       return detail;
     },
+    async upsertLessonText() {
+      return detail;
+    },
     async listLessons(requestId) {
       calls.push(`list:${requestId}`);
       return { items: [summary] };
@@ -170,6 +173,9 @@ test("BFF preserves safe Data Service resource failures", async () => {
       async createLesson() {
         throw new DataServiceError(details);
       },
+      async upsertLessonText() {
+        throw new DataServiceError(details);
+      },
       async listLessons() {
         throw new DataServiceError(details);
       },
@@ -190,6 +196,71 @@ test("BFF preserves safe Data Service resource failures", async () => {
   assert.equal((await response.json()).code, "lesson_not_found");
 });
 
+test("BFF upserts a localized Lesson Text through its client seam", async () => {
+  const detail = lessonDetailSchema.parse({
+    id: 7,
+    chapter: 2,
+    version: 1,
+    status: "DRAFT",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:01:00.000Z",
+    availableLanguageCodes: ["th"],
+    lessonTexts: [{ languageCode: "th", title: "บท", content: "เนื้อหา" }],
+    lessonSources: [],
+  });
+  const calls: string[] = [];
+  const client = {
+    async createLesson() {
+      return detail;
+    },
+    async listLessons() {
+      return { items: [] };
+    },
+    async getLesson() {
+      return detail;
+    },
+    async upsertLessonText(
+      lessonId: number,
+      languageCode: string,
+      input: { title: string; content: string },
+      requestId: string,
+    ) {
+      calls.push(
+        `${lessonId}:${languageCode}:${input.title}:${input.content}:${requestId}`,
+      );
+      return detail;
+    },
+  };
+  const app = createBffApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    dataServiceClient: client,
+  });
+
+  const response = await app.request("/api/admin/lessons/7/texts/th", {
+    method: "PUT",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "Content-Type": "application/json",
+      "X-Request-ID": "request-2",
+    },
+    body: JSON.stringify({ title: "บท", content: "เนื้อหา" }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), detail);
+  assert.deepEqual(calls, ["7:th:บท:เนื้อหา:request-2"]);
+
+  const invalidId = await app.request("/api/admin/lessons/0/texts/th", {
+    method: "PUT",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ title: "บท", content: "เนื้อหา" }),
+  });
+  assert.equal(invalidId.status, 422);
+});
+
 test("BFF hides unrecognized downstream failures", async () => {
   const details = problemDetailsSchema.parse({
     type: "https://ez-dk-citizen.invalid/problems/database_failure",
@@ -204,6 +275,9 @@ test("BFF hides unrecognized downstream failures", async () => {
     adminApiToken: "admin-token",
     dataServiceClient: {
       async createLesson() {
+        throw new DataServiceError(details);
+      },
+      async upsertLessonText() {
         throw new DataServiceError(details);
       },
       async listLessons() {

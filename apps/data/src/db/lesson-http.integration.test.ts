@@ -46,6 +46,66 @@ test("internal Lesson HTTP operations persist and return aggregate transport sha
   assert.deepEqual(detail.lessonTexts, []);
   assert.deepEqual(detail.lessonSources, []);
 
+  const text = await app.request(`/internal/lessons/${detail.id}/texts/th`, {
+    method: "PUT",
+    headers: {
+      Authorization: "Bearer data-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ title: "บท", content: "เนื้อหา" }),
+  });
+  assert.equal(text.status, 200);
+  const localized = await text.json();
+  assert.deepEqual(localized.availableLanguageCodes, ["th"]);
+  assert.deepEqual(localized.lessonTexts, [
+    { languageCode: "th", title: "บท", content: "เนื้อหา" },
+  ]);
+  assert.notEqual(localized.updatedAt, detail.updatedAt);
+
+  const replacement = await app.request(
+    `/internal/lessons/${detail.id}/texts/th`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: "Bearer data-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title: "แทนที่", content: "เนื้อหาใหม่" }),
+    },
+  );
+  assert.equal(replacement.status, 200);
+  assert.deepEqual((await replacement.json()).lessonTexts, [
+    { languageCode: "th", title: "แทนที่", content: "เนื้อหาใหม่" },
+  ]);
+
+  const unsupported = await app.request(
+    `/internal/lessons/${detail.id}/texts/xx`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: "Bearer data-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title: "Title", content: "Content" }),
+    },
+  );
+  assert.equal(unsupported.status, 422);
+  assert.equal((await unsupported.json()).code, "unsupported_language");
+
+  const missingTextLesson = await app.request(
+    "/internal/lessons/999999/texts/th",
+    {
+      method: "PUT",
+      headers: {
+        Authorization: "Bearer data-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title: "Title", content: "Content" }),
+    },
+  );
+  assert.equal(missingTextLesson.status, 404);
+  assert.equal((await missingTextLesson.json()).code, "lesson_not_found");
+
   const duplicate = await app.request("/internal/lessons", {
     method: "POST",
     headers: {

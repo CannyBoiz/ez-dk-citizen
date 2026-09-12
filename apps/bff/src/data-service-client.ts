@@ -3,15 +3,23 @@ import {
   lessonDetailSchema,
   lessonListResponseSchema,
   problemDetailsSchema,
+  upsertLessonTextRequestSchema,
   type CreateLessonRequest,
   type LessonDetail,
   type LessonListResponse,
   type ProblemDetails,
+  type UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
 
 export interface DataServiceClient {
   createLesson(
     input: CreateLessonRequest,
+    requestId: string,
+  ): Promise<LessonDetail>;
+  upsertLessonText(
+    lessonId: number,
+    languageCode: string,
+    input: UpsertLessonTextRequest,
     requestId: string,
   ): Promise<LessonDetail>;
   listLessons(requestId: string): Promise<LessonListResponse>;
@@ -46,6 +54,16 @@ export function createDataServiceClient(
         lessonDetailSchema.parse,
         timeoutMs,
       ),
+    upsertLessonText: (lessonId, languageCode, input, requestId) =>
+      request(
+        new URL(`/internal/lessons/${lessonId}/texts/${languageCode}`, base),
+        "PUT",
+        token,
+        requestId,
+        upsertLessonTextRequestSchema.parse(input),
+        lessonDetailSchema.parse,
+        timeoutMs,
+      ),
     listLessons: (requestId) =>
       request(
         new URL("/internal/lessons", base),
@@ -71,7 +89,7 @@ export function createDataServiceClient(
 
 async function request<T>(
   url: URL,
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "PUT",
   token: string,
   requestId: string,
   body: unknown,

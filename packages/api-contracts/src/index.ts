@@ -18,6 +18,11 @@ export const createLessonRequestSchema = z.strictObject({
   version: positiveInteger,
 });
 
+export const upsertLessonTextRequestSchema = z.strictObject({
+  title: z.string().trim().min(1),
+  content: z.string().trim().min(1),
+});
+
 export const lessonSummarySchema = z.strictObject({
   id: positiveInteger,
   chapter: positiveInteger,
@@ -74,6 +79,9 @@ export const problemDetailsSchema = z.strictObject({
 export type LivenessResponse = z.infer<typeof livenessResponseSchema>;
 export type ReadinessResponse = z.infer<typeof readinessResponseSchema>;
 export type CreateLessonRequest = z.infer<typeof createLessonRequestSchema>;
+export type UpsertLessonTextRequest = z.infer<
+  typeof upsertLessonTextRequestSchema
+>;
 export type LessonStatus = z.infer<typeof lessonStatusSchema>;
 export type LessonSummary = z.infer<typeof lessonSummarySchema>;
 export type LessonDetail = z.infer<typeof lessonDetailSchema>;
