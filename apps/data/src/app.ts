@@ -1,13 +1,17 @@
 import {
+  createSourceRequestSchema,
   createLessonRequestSchema,
   lessonDetailSchema,
   lessonListResponseSchema,
   livenessResponseSchema,
   readinessResponseSchema,
+  sourceListResponseSchema,
+  sourceResponseSchema,
   upsertLessonTextRequestSchema,
 } from "@ez-dk-citizen/api-contracts";
 import type {
   CreateLessonRequest,
+  CreateSourceRequest,
   UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
 import { asc, desc, eq } from "drizzle-orm";
@@ -111,6 +115,45 @@ export function createDataApp(
     }
   });
 
+  app.post("/internal/sources", async (c) => {
+    const parsed = await parseJsonBody<CreateSourceRequest>(
+      c,
+      createSourceRequestSchema,
+    );
+    if ("response" in parsed) return parsed.response;
+    if (!options.database) {
+      return problem(
+        c,
+        500,
+        "internal_error",
+        "The request could not be completed.",
+      );
+    }
+    try {
+      const [created] = await options.database
+        .insert(source)
+        .values({
+          url: parsed.value.url,
+          publishedAt: parsed.value.publishedAt
+            ? new Date(parsed.value.publishedAt)
+            : null,
+        })
+        .returning();
+      if (!created) throw new Error("Source insert returned no row.");
+      return c.json(sourceResponseSchema.parse(toSource(created)), 201);
+    } catch (error) {
+      if (isPostgresError(error, "23505")) {
+        return problem(
+          c,
+          409,
+          "source_url_conflict",
+          "A Source with this URL already exists.",
+        );
+      }
+      throw error;
+    }
+  });
+
   app.put("/internal/lessons/:lessonId/texts/:languageCode", async (c) => {
     const id = parsePositiveId(c.req.param("lessonId"));
     if (!id)
@@ -207,6 +250,24 @@ export function createDataApp(
     return c.json(lessonListResponseSchema.parse({ items }));
   });
 
+  app.get("/internal/sources", async (c) => {
+    if (!options.database) {
+      return problem(
+        c,
+        500,
+        "internal_error",
+        "The request could not be completed.",
+      );
+    }
+    const rows = await options.database
+      .select()
+      .from(source)
+      .orderBy(asc(source.id));
+    return c.json(
+      sourceListResponseSchema.parse({ items: rows.map(toSource) }),
+    );
+  });
+
   app.get("/internal/lessons/:lessonId", async (c) => {
     const id = parsePositiveId(c.req.param("lessonId"));
     if (!id)
@@ -288,4 +349,12 @@ function toSummary(
     ...summary
   } = detail;
   return summary;
+}
+
+function toSource(row: { id: number; url: string; publishedAt: Date | null }) {
+  return {
+    id: row.id,
+    url: row.url,
+    publishedAt: row.publishedAt?.toISOString() ?? null,
+  };
 }

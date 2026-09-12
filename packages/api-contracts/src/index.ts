@@ -3,6 +3,11 @@ import { z } from "zod";
 const positiveInteger = z.number().int().positive();
 const timestamp = z.iso.datetime({ offset: true });
 const nonBlankText = z.string().refine((value) => value.trim().length > 0);
+const sourceUrl = z
+  .string()
+  .trim()
+  .url()
+  .refine((value) => /^https?:\/\//i.test(value));
 
 export const livenessResponseSchema = z.strictObject({
   status: z.literal("ok"),
@@ -22,6 +27,21 @@ export const createLessonRequestSchema = z.strictObject({
 export const upsertLessonTextRequestSchema = z.strictObject({
   title: nonBlankText,
   content: nonBlankText,
+});
+
+export const createSourceRequestSchema = z.strictObject({
+  url: sourceUrl,
+  publishedAt: timestamp.nullable(),
+});
+
+export const sourceResponseSchema = z.strictObject({
+  id: positiveInteger,
+  url: sourceUrl,
+  publishedAt: timestamp.nullable(),
+});
+
+export const sourceListResponseSchema = z.strictObject({
+  items: z.array(sourceResponseSchema),
 });
 
 export const lessonSummarySchema = z.strictObject({
@@ -83,6 +103,9 @@ export type CreateLessonRequest = z.infer<typeof createLessonRequestSchema>;
 export type UpsertLessonTextRequest = z.infer<
   typeof upsertLessonTextRequestSchema
 >;
+export type CreateSourceRequest = z.infer<typeof createSourceRequestSchema>;
+export type SourceResponse = z.infer<typeof sourceResponseSchema>;
+export type SourceListResponse = z.infer<typeof sourceListResponseSchema>;
 export type LessonStatus = z.infer<typeof lessonStatusSchema>;
 export type LessonSummary = z.infer<typeof lessonSummarySchema>;
 export type LessonDetail = z.infer<typeof lessonDetailSchema>;

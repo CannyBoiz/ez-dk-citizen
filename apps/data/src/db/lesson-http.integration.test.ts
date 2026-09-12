@@ -135,3 +135,73 @@ test("internal Lesson HTTP operations persist and return aggregate transport sha
   assert.equal(missing.status, 404);
   assert.equal((await missing.json()).code, "lesson_not_found");
 });
+
+test("internal Source HTTP operations preserve canonical URL identity", async () => {
+  const unauthorized = await app.request("/internal/sources", {
+    method: "POST",
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const invalid = await app.request("/internal/sources", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer data-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ url: "/source", publishedAt: null }),
+  });
+  assert.equal(invalid.status, 422);
+
+  const created = await app.request("/internal/sources", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer data-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      url: " https://example.com/source ",
+      publishedAt: "2026-01-01T02:00:00+02:00",
+    }),
+  });
+  assert.equal(created.status, 201);
+  const first = await created.json();
+  assert.equal(first.url, "https://example.com/source");
+  assert.equal(first.publishedAt, "2026-01-01T00:00:00.000Z");
+
+  const duplicate = await app.request("/internal/sources", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer data-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      url: "https://example.com/source",
+      publishedAt: null,
+    }),
+  });
+  assert.equal(duplicate.status, 409);
+  assert.equal((await duplicate.json()).code, "source_url_conflict");
+
+  const distinct = await app.request("/internal/sources", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer data-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      url: "https://example.com/source/",
+      publishedAt: null,
+    }),
+  });
+  assert.equal(distinct.status, 201);
+  const second = await distinct.json();
+
+  const listed = await app.request("/internal/sources", {
+    headers: { Authorization: "Bearer data-token" },
+  });
+  assert.equal(listed.status, 200);
+  assert.deepEqual(
+    (await listed.json()).items.map((item: { id: number }) => item.id),
+    [first.id, second.id],
+  );
+});

@@ -1,9 +1,12 @@
 import {
+  createSourceRequestSchema,
   createLessonRequestSchema,
   lessonDetailSchema,
   lessonListResponseSchema,
   livenessResponseSchema,
   readinessResponseSchema,
+  sourceListResponseSchema,
+  sourceResponseSchema,
   upsertLessonTextRequestSchema,
 } from "@ez-dk-citizen/api-contracts";
 import { cors } from "hono/cors";
@@ -95,6 +98,29 @@ export function createBffApp(
     }
   });
 
+  app.post("/api/admin/sources", async (c) => {
+    const parsed = await parseJsonBody(c, createSourceRequestSchema);
+    if ("response" in parsed) return parsed.response;
+    if (!options.dataServiceClient) {
+      return problem(
+        c,
+        502,
+        "data_service_unavailable",
+        "The Data Service is unavailable.",
+      );
+    }
+    try {
+      const source = await options.dataServiceClient.createSource(
+        parsed.value,
+        c.get("requestId"),
+      );
+      c.header("Location", `/api/admin/sources/${source.id}`);
+      return c.json(sourceResponseSchema.parse(source), 201);
+    } catch (error) {
+      return mapDataServiceError(c, error);
+    }
+  });
+
   app.put("/api/admin/lessons/:lessonId/texts/:languageCode", async (c) => {
     const id = parsePositiveId(c.req.param("lessonId"));
     if (!id)
@@ -151,6 +177,26 @@ export function createBffApp(
     }
   });
 
+  app.get("/api/admin/sources", async (c) => {
+    if (!options.dataServiceClient) {
+      return problem(
+        c,
+        502,
+        "data_service_unavailable",
+        "The Data Service is unavailable.",
+      );
+    }
+    try {
+      return c.json(
+        sourceListResponseSchema.parse(
+          await options.dataServiceClient.listSources(c.get("requestId")),
+        ),
+      );
+    } catch (error) {
+      return mapDataServiceError(c, error);
+    }
+  });
+
   app.get("/api/admin/lessons/:lessonId", async (c) => {
     const id = parsePositiveId(c.req.param("lessonId"));
     if (!id)
@@ -196,9 +242,11 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
     error.status === 404 && error.details.code === "lesson_not_found"
       ? 404
       : error.status === 409 &&
-          ["lesson_not_editable", "lesson_version_conflict"].includes(
-            error.details.code,
-          )
+          [
+            "lesson_not_editable",
+            "lesson_version_conflict",
+            "source_url_conflict",
+          ].includes(error.details.code)
         ? 409
         : error.status === 422 &&
             [
