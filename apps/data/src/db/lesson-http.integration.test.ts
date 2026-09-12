@@ -223,13 +223,19 @@ test("internal Lesson Source operations replace locators and detach safely", asy
   const firstSourceResponse = await app.request("/internal/sources", {
     method: "POST",
     headers,
-    body: JSON.stringify({ url: "https://example.com/first", publishedAt: null }),
+    body: JSON.stringify({
+      url: "https://example.com/first",
+      publishedAt: null,
+    }),
   });
   const firstSource = await firstSourceResponse.json();
   const secondSourceResponse = await app.request("/internal/sources", {
     method: "POST",
     headers,
-    body: JSON.stringify({ url: "https://example.com/second", publishedAt: null }),
+    body: JSON.stringify({
+      url: "https://example.com/second",
+      publishedAt: null,
+    }),
   });
   const secondSource = await secondSourceResponse.json();
 
@@ -292,9 +298,7 @@ test("internal Lesson Source operations replace locators and detach safely", asy
   assert.equal(secondAttachment.status, 200);
   const withTwoSources = await secondAttachment.json();
   assert.deepEqual(
-    withTwoSources.lessonSources.map(
-      (item: { id: number }) => item.id,
-    ),
+    withTwoSources.lessonSources.map((item: { id: number }) => item.id),
     [firstSource.id, secondSource.id],
   );
 
@@ -342,8 +346,217 @@ test("internal Lesson Source operations replace locators and detach safely", asy
     { method: "DELETE", headers: { Authorization: "Bearer data-token" } },
   );
   assert.equal(repeatedDetach.status, 204);
-  const afterRepeatedDetach = await app.request(`/internal/lessons/${lesson.id}`, {
+  const afterRepeatedDetach = await app.request(
+    `/internal/lessons/${lesson.id}`,
+    {
+      headers: { Authorization: "Bearer data-token" },
+    },
+  );
+  assert.equal(
+    (await afterRepeatedDetach.json()).updatedAt,
+    detachedDetail.updatedAt,
+  );
+});
+
+test("internal Lesson patches enforce lifecycle and immutable history", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const createLesson = async (chapter: number, version: number) => {
+    const response = await app.request("/internal/lessons", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ chapter, version }),
+    });
+    assert.equal(response.status, 201);
+    return response.json();
+  };
+  const patchLesson = (id: number, body: unknown) =>
+    app.request(`/internal/lessons/${id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(body),
+    });
+
+  const draft = await createLesson(10, 1);
+  const structured = await patchLesson(draft.id, { chapter: 11, version: 2 });
+  assert.equal(structured.status, 200);
+  const structuredDetail = await structured.json();
+  assert.equal(structuredDetail.chapter, 11);
+  assert.equal(structuredDetail.version, 2);
+  assert.notEqual(structuredDetail.updatedAt, draft.updatedAt);
+
+  const repeatedDraft = await patchLesson(draft.id, { status: "DRAFT" });
+  assert.equal(repeatedDraft.status, 409);
+  assert.equal((await repeatedDraft.json()).code, "lesson_lifecycle_conflict");
+
+  const sourceResponse = await app.request("/internal/sources", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      url: "https://example.com/immutable",
+      publishedAt: null,
+    }),
+  });
+  const source = await sourceResponse.json();
+  const draftSource = await app.request(
+    `/internal/lessons/${draft.id}/sources/${source.id}`,
+    { method: "PUT", headers, body: "{}" },
+  );
+  assert.equal(draftSource.status, 200);
+  const published = await patchLesson(draft.id, {
+    chapter: 12,
+    version: 3,
+    status: "PUBLISHED",
+  });
+  assert.equal(published.status, 200);
+  const publishedDetail = await published.json();
+  assert.equal(publishedDetail.status, "PUBLISHED");
+  assert.equal(publishedDetail.chapter, 12);
+  assert.equal(publishedDetail.version, 3);
+
+  const textAfterPublication = await app.request(
+    `/internal/lessons/${draft.id}/texts/th`,
+    {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ title: "Titel", content: "Indhold" }),
+    },
+  );
+  assert.equal(textAfterPublication.status, 409);
+  assert.equal((await textAfterPublication.json()).code, "lesson_not_editable");
+  const sourceReplacementAfterPublication = await app.request(
+    `/internal/lessons/${draft.id}/sources/${source.id}`,
+    { method: "PUT", headers, body: JSON.stringify({ pageFrom: 2 }) },
+  );
+  assert.equal(sourceReplacementAfterPublication.status, 409);
+  assert.equal(
+    (await sourceReplacementAfterPublication.json()).code,
+    "lesson_not_editable",
+  );
+  const sourceDetachAfterPublication = await app.request(
+    `/internal/lessons/${draft.id}/sources/${source.id}`,
+    { method: "DELETE", headers: { Authorization: "Bearer data-token" } },
+  );
+  assert.equal(sourceDetachAfterPublication.status, 409);
+  assert.equal(
+    (await sourceDetachAfterPublication.json()).code,
+    "lesson_not_editable",
+  );
+
+  const structureAfterPublication = await patchLesson(draft.id, {
+    chapter: 13,
+  });
+  assert.equal(structureAfterPublication.status, 409);
+  assert.equal(
+    (await structureAfterPublication.json()).code,
+    "lesson_not_editable",
+  );
+  const repeatedPublish = await patchLesson(draft.id, { status: "PUBLISHED" });
+  assert.equal(repeatedPublish.status, 409);
+  assert.equal(
+    (await repeatedPublish.json()).code,
+    "lesson_lifecycle_conflict",
+  );
+  const publishedToDraft = await patchLesson(draft.id, { status: "DRAFT" });
+  assert.equal(publishedToDraft.status, 409);
+  assert.equal(
+    (await publishedToDraft.json()).code,
+    "lesson_lifecycle_conflict",
+  );
+
+  const archived = await patchLesson(draft.id, { status: "ARCHIVED" });
+  assert.equal(archived.status, 200);
+  assert.equal((await archived.json()).status, "ARCHIVED");
+  const repeatedArchive = await patchLesson(draft.id, { status: "ARCHIVED" });
+  assert.equal(repeatedArchive.status, 409);
+  assert.equal(
+    (await repeatedArchive.json()).code,
+    "lesson_lifecycle_conflict",
+  );
+  for (const status of ["DRAFT", "PUBLISHED"] as const) {
+    const rejected = await patchLesson(draft.id, { status });
+    assert.equal(rejected.status, 409);
+    assert.equal((await rejected.json()).code, "lesson_lifecycle_conflict");
+  }
+  const textAfterArchive = await app.request(
+    `/internal/lessons/${draft.id}/texts/th`,
+    {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ title: "Titel", content: "Indhold" }),
+    },
+  );
+  assert.equal(textAfterArchive.status, 409);
+  assert.equal((await textAfterArchive.json()).code, "lesson_not_editable");
+  const sourceAfterArchive = await app.request(
+    `/internal/lessons/${draft.id}/sources/${source.id}`,
+    { method: "PUT", headers, body: "{}" },
+  );
+  assert.equal(sourceAfterArchive.status, 409);
+  assert.equal((await sourceAfterArchive.json()).code, "lesson_not_editable");
+  const detachAfterArchive = await app.request(
+    `/internal/lessons/${draft.id}/sources/${source.id}`,
+    { method: "DELETE", headers: { Authorization: "Bearer data-token" } },
+  );
+  assert.equal(detachAfterArchive.status, 409);
+  assert.equal((await detachAfterArchive.json()).code, "lesson_not_editable");
+
+  const draftToArchive = await createLesson(20, 1);
+  const directArchive = await patchLesson(draftToArchive.id, {
+    status: "ARCHIVED",
+  });
+  assert.equal(directArchive.status, 200);
+  assert.equal((await directArchive.json()).status, "ARCHIVED");
+
+  const publishedVersion = await createLesson(30, 1);
+  assert.equal(
+    (await patchLesson(publishedVersion.id, { status: "PUBLISHED" })).status,
+    200,
+  );
+  const competing = await createLesson(30, 2);
+  const beforeCompetingPublish = await app.request(
+    `/internal/lessons/${competing.id}`,
+    {
+      headers: { Authorization: "Bearer data-token" },
+    },
+  );
+  const beforeCompetingDetail = await beforeCompetingPublish.json();
+  const competingPublish = await patchLesson(competing.id, {
+    status: "PUBLISHED",
+  });
+  assert.equal(competingPublish.status, 409);
+  assert.equal(
+    (await competingPublish.json()).code,
+    "published_lesson_conflict",
+  );
+  const afterCompetingPublish = await app.request(
+    `/internal/lessons/${competing.id}`,
+    {
+      headers: { Authorization: "Bearer data-token" },
+    },
+  );
+  assert.deepEqual(await afterCompetingPublish.json(), beforeCompetingDetail);
+
+  await createLesson(40, 1);
+  const rollback = await createLesson(41, 1);
+  const beforeRollback = await app.request(`/internal/lessons/${rollback.id}`, {
     headers: { Authorization: "Bearer data-token" },
   });
-  assert.equal((await afterRepeatedDetach.json()).updatedAt, detachedDetail.updatedAt);
+  const beforeRollbackDetail = await beforeRollback.json();
+  const failedCombinedPatch = await patchLesson(rollback.id, {
+    chapter: 40,
+    version: 1,
+    status: "PUBLISHED",
+  });
+  assert.equal(failedCombinedPatch.status, 409);
+  assert.equal(
+    (await failedCombinedPatch.json()).code,
+    "lesson_version_conflict",
+  );
+  const afterRollback = await app.request(`/internal/lessons/${rollback.id}`, {
+    headers: { Authorization: "Bearer data-token" },
+  });
+  assert.deepEqual(await afterRollback.json(), beforeRollbackDetail);
 });

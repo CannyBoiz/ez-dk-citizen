@@ -7,6 +7,7 @@ import {
   lessonDetailSchema,
   livenessResponseSchema,
   readinessResponseSchema,
+  patchLessonRequestSchema,
   upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
 } from "./index.js";
@@ -80,6 +81,19 @@ test("Lesson Text upserts require non-blank strict content", () => {
   );
 });
 
+test("Lesson patches are strict and non-empty", () => {
+  assert.deepEqual(
+    patchLessonRequestSchema.parse({ chapter: 2, status: "PUBLISHED" }),
+    { chapter: 2, status: "PUBLISHED" },
+  );
+  assert.throws(() => patchLessonRequestSchema.parse({}));
+  assert.throws(() => patchLessonRequestSchema.parse({ chapter: undefined }));
+  assert.throws(() => patchLessonRequestSchema.parse({ chapter: 0 }));
+  assert.throws(() =>
+    patchLessonRequestSchema.parse({ status: "DRAFT", extra: true }),
+  );
+});
+
 test("Source contracts accept only trimmed HTTP URLs and offset timestamps", () => {
   assert.deepEqual(
     createSourceRequestSchema.parse({
@@ -132,9 +146,7 @@ test("Lesson Source upserts allow absent locators but reject invalid pages", () 
     }),
     { pageFrom: 2, pageTo: 3, sectionReference: null },
   );
-  assert.throws(() =>
-    upsertLessonSourceRequestSchema.parse({ pageFrom: 0 }),
-  );
+  assert.throws(() => upsertLessonSourceRequestSchema.parse({ pageFrom: 0 }));
   assert.throws(() =>
     upsertLessonSourceRequestSchema.parse({ pageFrom: 4, pageTo: 3 }),
   );

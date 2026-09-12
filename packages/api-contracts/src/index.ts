@@ -24,6 +24,19 @@ export const createLessonRequestSchema = z.strictObject({
   version: positiveInteger,
 });
 
+export const patchLessonRequestSchema = z
+  .strictObject({
+    chapter: positiveInteger.optional(),
+    version: positiveInteger.optional(),
+    status: lessonStatusSchema.optional(),
+  })
+  .refine(
+    (value) =>
+      value.chapter !== undefined ||
+      value.version !== undefined ||
+      value.status !== undefined,
+  );
+
 export const upsertLessonTextRequestSchema = z.strictObject({
   title: nonBlankText,
   content: nonBlankText,
@@ -113,6 +126,7 @@ export const problemDetailsSchema = z.strictObject({
 export type LivenessResponse = z.infer<typeof livenessResponseSchema>;
 export type ReadinessResponse = z.infer<typeof readinessResponseSchema>;
 export type CreateLessonRequest = z.infer<typeof createLessonRequestSchema>;
+export type PatchLessonRequest = z.infer<typeof patchLessonRequestSchema>;
 export type UpsertLessonTextRequest = z.infer<
   typeof upsertLessonTextRequestSchema
 >;

@@ -4,6 +4,7 @@ import {
   lessonDetailSchema,
   lessonListResponseSchema,
   livenessResponseSchema,
+  patchLessonRequestSchema,
   readinessResponseSchema,
   sourceListResponseSchema,
   sourceResponseSchema,
@@ -13,10 +14,11 @@ import {
 import type {
   CreateLessonRequest,
   CreateSourceRequest,
+  PatchLessonRequest,
   UpsertLessonSourceRequest,
   UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { Hono } from "hono";
 
 import { createDataDatabase } from "./db/database.js";
@@ -150,6 +152,156 @@ export function createDataApp(
           409,
           "source_url_conflict",
           "A Source with this URL already exists.",
+        );
+      }
+      throw error;
+    }
+  });
+
+  app.patch("/internal/lessons/:lessonId", async (c) => {
+    const id = parsePositiveId(c.req.param("lessonId"));
+    if (!id)
+      return problem(
+        c,
+        422,
+        "invalid_lesson_id",
+        "Lesson ID must be a positive integer.",
+      );
+    const parsed = await parseJsonBody<PatchLessonRequest>(
+      c,
+      patchLessonRequestSchema,
+    );
+    if ("response" in parsed) return parsed.response;
+    if (!options.database) {
+      return problem(
+        c,
+        500,
+        "internal_error",
+        "The request could not be completed.",
+      );
+    }
+
+    try {
+      const outcome = await options.database.transaction(
+        async (transaction) => {
+          const [existing] = await transaction
+            .select({
+              chapter: lesson.chapter,
+              version: lesson.version,
+              status: lesson.status,
+              updatedAt: lesson.updatedAt,
+            })
+            .from(lesson)
+            .where(eq(lesson.id, id))
+            .for("update");
+          if (!existing) return "lesson_not_found" as const;
+
+          const changesStructure =
+            parsed.value.chapter !== undefined ||
+            parsed.value.version !== undefined;
+          if (changesStructure && existing.status !== "DRAFT") {
+            return "lesson_not_editable" as const;
+          }
+          if (
+            parsed.value.status !== undefined &&
+            !isAllowedLessonTransition(existing.status, parsed.value.status)
+          ) {
+            return "lesson_lifecycle_conflict" as const;
+          }
+
+          const chapter = parsed.value.chapter ?? existing.chapter;
+          const version = parsed.value.version ?? existing.version;
+          const status = parsed.value.status ?? existing.status;
+          const [identityConflict] = await transaction
+            .select({ id: lesson.id })
+            .from(lesson)
+            .where(
+              and(
+                eq(lesson.chapter, chapter),
+                eq(lesson.version, version),
+                ne(lesson.id, id),
+              ),
+            );
+          if (identityConflict) return "lesson_version_conflict" as const;
+
+          if (status === "PUBLISHED") {
+            const [published] = await transaction
+              .select({ id: lesson.id })
+              .from(lesson)
+              .where(
+                and(
+                  eq(lesson.chapter, chapter),
+                  eq(lesson.status, "PUBLISHED"),
+                  ne(lesson.id, id),
+                ),
+              );
+            if (published) return "published_lesson_conflict" as const;
+          }
+
+          await transaction
+            .update(lesson)
+            .set({
+              chapter,
+              version,
+              status,
+              updatedAt: new Date(
+                Math.max(Date.now(), existing.updatedAt.getTime() + 1),
+              ),
+            })
+            .where(eq(lesson.id, id));
+          return id;
+        },
+      );
+
+      if (outcome === "lesson_not_found") {
+        return problem(c, 404, outcome, "Lesson was not found.");
+      }
+      if (outcome === "lesson_not_editable") {
+        return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
+      }
+      if (outcome === "lesson_lifecycle_conflict") {
+        return problem(
+          c,
+          409,
+          outcome,
+          "Lesson status transition is not allowed.",
+        );
+      }
+      if (outcome === "lesson_version_conflict") {
+        return problem(
+          c,
+          409,
+          outcome,
+          "A Lesson with this chapter and version already exists.",
+        );
+      }
+      if (outcome === "published_lesson_conflict") {
+        return problem(
+          c,
+          409,
+          outcome,
+          "This chapter already has a Published Lesson.",
+        );
+      }
+
+      const detail = await loadLessonDetail(options.database, outcome);
+      if (!detail) throw new Error("Updated Lesson could not be read.");
+      return c.json(lessonDetailSchema.parse(detail));
+    } catch (error) {
+      if (isPostgresError(error, "23505", "lesson_one_published_per_chapter")) {
+        return problem(
+          c,
+          409,
+          "published_lesson_conflict",
+          "This chapter already has a Published Lesson.",
+        );
+      }
+      if (isPostgresError(error, "23505")) {
+        return problem(
+          c,
+          409,
+          "lesson_version_conflict",
+          "A Lesson with this chapter and version already exists.",
         );
       }
       throw error;
@@ -516,4 +668,14 @@ function toSource(row: { id: number; url: string; publishedAt: Date | null }) {
     url: row.url,
     publishedAt: row.publishedAt?.toISOString() ?? null,
   };
+}
+
+function isAllowedLessonTransition(
+  from: "DRAFT" | "PUBLISHED" | "ARCHIVED",
+  to: "DRAFT" | "PUBLISHED" | "ARCHIVED",
+) {
+  return (
+    (from === "DRAFT" && (to === "PUBLISHED" || to === "ARCHIVED")) ||
+    (from === "PUBLISHED" && to === "ARCHIVED")
+  );
 }
