@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 import { serve } from "@hono/node-server";
 import { sql } from "drizzle-orm";
 

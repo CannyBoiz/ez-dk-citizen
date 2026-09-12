@@ -1,0 +1,81 @@
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ez_dk_citizen_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-ez_dk_citizen_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-development-only-password}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+
+  migrate:
+    build:
+      target: development
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ez_dk_citizen_dev}:${POSTGRES_PASSWORD:-development-only-password}@postgres:5432/${POSTGRES_DB:-ez_dk_citizen_dev}
+    command:
+      - pnpm
+      - --filter
+      - "@ez-dk-citizen/data"
+      - exec
+      - tsx
+      - src/db/migrate.ts
+
+  hono-data:
+    build:
+      target: development
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ez_dk_citizen_dev}:${POSTGRES_PASSWORD:-development-only-password}@postgres:5432/${POSTGRES_DB:-ez_dk_citizen_dev}
+      DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:-development-only-data-service-token}
+      PORT: 3000
+    command: pnpm --filter @ez-dk-citizen/data dev
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/data/src
+          target: /workspace/apps/data/src
+        - action: sync
+          path: ./apps/data/drizzle
+          target: /workspace/apps/data/drizzle
+        - action: rebuild
+          path: ./apps/data/Dockerfile
+        - action: rebuild
+          path: ./apps/data/package.json
+        - action: rebuild
+          path: ./packages/api-contracts
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+        - action: rebuild
+          path: ./pnpm-workspace.yaml
+
+  bff:
+    build:
+      target: development
+    environment:
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-development-only-admin-token}
+      ADMIN_ORIGINS: ${ADMIN_ORIGINS:-http://127.0.0.1:5173}
+      DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:-development-only-data-service-token}
+      DATA_SERVICE_URL: http://hono-data:3000
+      DATA_SERVICE_TIMEOUT_MS: ${DATA_SERVICE_TIMEOUT_MS:-2000}
+      PORT: 3000
+    command: pnpm --filter @ez-dk-citizen/bff dev
+    ports:
+      - "127.0.0.1:${BFF_PORT:-3001}:3000"
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/bff/src
+          target: /workspace/apps/bff/src
+        - action: rebuild
+          path: ./apps/bff/Dockerfile
+        - action: rebuild
+          path: ./apps/bff/package.json
+        - action: rebuild
+          path: ./packages/api-contracts
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+        - action: rebuild
+          path: ./pnpm-workspace.yaml
