@@ -894,14 +894,32 @@ Local Compose includes `postgres`, a one-shot `migrate` service, and
 `hono-data`. PostgreSQL must be healthy before migration starts, and the Data
 Service starts only after migration completes successfully.
 
-The local `hono-data` service builds and runs compiled output for
-reproducibility. Developers who need hot reload run `pnpm dev` on the host
-against PostgreSQL published by local Compose.
+Local application runtime is container-first, as recorded in
+[`ADR-0001`](../adr/0001-container-first-local-application-runtime.md).
+`pnpm dev` runs Docker Compose Watch in the foreground. Compose starts
+PostgreSQL, applies committed migrations, starts the Data Service, and starts
+the BFF only after the Data Service is ready.
+
+The base Compose file retains compiled services for reproducible integration
+workflows. Its automatic local override selects development targets that run
+`tsx watch`. Compose Watch synchronizes only application source and migration
+files; dependency manifests, shared contracts, lockfiles, and Dockerfiles
+trigger image rebuilds. Host `node_modules` and `dist` directories are never
+synchronized into containers.
+
+Tests, typechecking, workspace builds, and Drizzle migration generation remain
+host-run. Initial startup applies committed migrations through the one-shot
+migration service; after generating a migration, `pnpm db:migrate` applies it
+inside the running development Data Service container. Integration tests use
+the base Compose file with an isolated project, database, and deterministic
+cleanup rather than reusing development state.
 
 Compose receives `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`, then
 constructs the internal `DATABASE_URL`. Drizzle consumes only `DATABASE_URL`.
-Placeholder values live in a tracked `.env.example`; real `.env` files remain
-ignored.
+Local Compose supplies clearly labeled development-only defaults, so
+`pnpm dev` works without an `.env` file. Placeholder values live in a tracked
+`.env.example`, ignored `.env` files may override local defaults, and
+application startup outside local Compose still requires explicit credentials.
 
 Constraint tests run against real PostgreSQL after applying migrations to a
 fresh database. They exercise invalid inserts and deletes rather than merely
@@ -914,13 +932,25 @@ PostgreSQL integration suite.
 Development flow:
 
 ```text
-Change Drizzle schema
+pnpm dev
+    ↓
+Compose Watch starts PostgreSQL → migrations → Data Service → BFF
+    ↓
+Edit application source
+    ↓
+Compose syncs source; tsx reloads the affected service
+```
+
+Schema change flow:
+
+```text
+Change Drizzle schema on the host
     ↓
 Generate migration
     ↓
 Review SQL
     ↓
-Migrate local DB
+Apply migration inside the running Data Service container
     ↓
 Run tests
     ↓
@@ -980,10 +1010,12 @@ PATCH  /internal/lesson-audio/:id
 
 # 16. Deployment
 
-The root `docker-compose.yml` is the local-development base and may publish
-PostgreSQL on `localhost:5432`. The deployment phase will add a
-`docker-compose.prod.yml` override that keeps PostgreSQL and the Data Service
-private.
+The root `docker-compose.yml` is the compiled base used by integration
+workflows. The automatic local override adds Compose Watch development
+behavior, publishes the BFF on `127.0.0.1:3001` and PostgreSQL on
+`127.0.0.1:5432`, and keeps the Data Service private. The deployment phase will
+add a `docker-compose.prod.yml` override that keeps PostgreSQL and the Data
+Service private.
 
 ```text
 Cloudflare Pages
@@ -1419,18 +1451,24 @@ Use periodically after meaningful implementation exists. Do not use it to justif
 
 ---
 
-# 26. ADR candidates
+# 26. Architecture decision records
 
-Create ADRs when these decisions become final:
+Accepted:
 
 ```text
-0001 - Use Hono + Drizzle instead of .NET + EF Core
-0002 - Keep BFF and Data Service as separate Hono services
-0003 - Model Lesson ↔ Source as M:N via lesson_source
-0004 - Choose AWS S3 or Azure Blob Storage for PoC
-0005 - Direct client-to-object-storage media transfer
-0006 - Lesson Audio FK strategy
-0007 - Media Asset ↔ Lesson Audio upload-state cardinality
+0001 - Use a container-first local application runtime
+```
+
+Create additional ADRs when these decisions become final:
+
+```text
+0002 - Use Hono + Drizzle instead of .NET + EF Core
+0003 - Keep BFF and Data Service as separate Hono services
+0004 - Model Lesson ↔ Source as M:N via lesson_source
+0005 - Choose AWS S3 or Azure Blob Storage for PoC
+0006 - Direct client-to-object-storage media transfer
+0007 - Lesson Audio FK strategy
+0008 - Media Asset ↔ Lesson Audio upload-state cardinality
 ```
 
 Do not create ADRs for trivial implementation details.
