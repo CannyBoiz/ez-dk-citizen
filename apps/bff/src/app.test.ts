@@ -104,6 +104,11 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
   const unauthorizedRead = await app.request("/api/admin/lessons/7");
   assert.equal(unauthorizedRead.status, 401);
 
+  const invalidCredential = await app.request("/api/admin/lessons/7", {
+    headers: { Authorization: "Bearer wrong-token" },
+  });
+  assert.equal(invalidCredential.status, 401);
+
   const created = await app.request("/api/admin/lessons", {
     method: "POST",
     headers: {
