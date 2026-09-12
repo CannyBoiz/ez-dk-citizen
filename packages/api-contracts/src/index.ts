@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const positiveInteger = z.number().int().positive();
-const timestamp = z.string().datetime({ offset: true });
+const timestamp = z.iso.datetime({ offset: true });
 
 export const livenessResponseSchema = z.strictObject({
   status: z.literal("ok"),
@@ -54,7 +54,7 @@ export const lessonListResponseSchema = z.strictObject({
 });
 
 export const problemDetailsSchema = z.strictObject({
-  type: z.string().url(),
+  type: z.url(),
   title: z.string(),
   status: positiveInteger,
   detail: z.string(),
