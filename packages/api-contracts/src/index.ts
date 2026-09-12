@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const positiveInteger = z.number().int().positive();
 const timestamp = z.iso.datetime({ offset: true });
+const nonBlankText = z.string().trim().min(1);
 
 export const livenessResponseSchema = z.strictObject({
   status: z.literal("ok"),
@@ -19,8 +20,8 @@ export const createLessonRequestSchema = z.strictObject({
 });
 
 export const upsertLessonTextRequestSchema = z.strictObject({
-  title: z.string().trim().min(1),
-  content: z.string().trim().min(1),
+  title: nonBlankText,
+  content: nonBlankText,
 });
 
 export const lessonSummarySchema = z.strictObject({
@@ -35,8 +36,8 @@ export const lessonSummarySchema = z.strictObject({
 
 export const lessonTextResponseSchema = z.strictObject({
   languageCode: z.string().min(1),
-  title: z.string(),
-  content: z.string(),
+  title: nonBlankText,
+  content: nonBlankText,
 });
 
 export const lessonSourceResponseSchema = z.strictObject({
