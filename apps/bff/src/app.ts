@@ -4,6 +4,7 @@ import {
   lessonListResponseSchema,
   livenessResponseSchema,
   readinessResponseSchema,
+  upsertLessonTextRequestSchema,
 } from "@ez-dk-citizen/api-contracts";
 import { cors } from "hono/cors";
 import { Hono } from "hono";
@@ -63,7 +64,7 @@ export function createBffApp(
     cors({
       origin: (origin) =>
         origin && options.adminOrigins?.includes(origin) ? origin : undefined,
-      allowMethods: ["GET", "POST", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
       allowHeaders: ["Authorization", "Content-Type", "X-Request-ID"],
       credentials: false,
     }),
@@ -89,6 +90,42 @@ export function createBffApp(
       );
       c.header("Location", `/api/admin/lessons/${detail.id}`);
       return c.json(lessonDetailSchema.parse(detail), 201);
+    } catch (error) {
+      return mapDataServiceError(c, error);
+    }
+  });
+
+  app.put("/api/admin/lessons/:lessonId/texts/:languageCode", async (c) => {
+    const id = parsePositiveId(c.req.param("lessonId"));
+    if (!id)
+      return problem(
+        c,
+        422,
+        "invalid_lesson_id",
+        "Lesson ID must be a positive integer.",
+      );
+    const parsed = await parseJsonBody(c, upsertLessonTextRequestSchema);
+    if ("response" in parsed) return parsed.response;
+    if (!options.dataServiceClient) {
+      return problem(
+        c,
+        502,
+        "data_service_unavailable",
+        "The Data Service is unavailable.",
+      );
+    }
+
+    try {
+      return c.json(
+        lessonDetailSchema.parse(
+          await options.dataServiceClient.upsertLessonText(
+            id,
+            c.req.param("languageCode"),
+            parsed.value,
+            c.get("requestId"),
+          ),
+        ),
+      );
     } catch (error) {
       return mapDataServiceError(c, error);
     }
@@ -158,12 +195,17 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
   const knownStatus =
     error.status === 404 && error.details.code === "lesson_not_found"
       ? 404
-      : error.status === 409 && error.details.code === "lesson_version_conflict"
+      : error.status === 409 &&
+          ["lesson_not_editable", "lesson_version_conflict"].includes(
+            error.details.code,
+          )
         ? 409
         : error.status === 422 &&
-            ["invalid_lesson_id", "validation_failed"].includes(
-              error.details.code,
-            )
+            [
+              "invalid_lesson_id",
+              "unsupported_language",
+              "validation_failed",
+            ].includes(error.details.code)
           ? 422
           : undefined;
   if (knownStatus) {

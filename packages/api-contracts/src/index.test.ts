@@ -6,6 +6,7 @@ import {
   lessonDetailSchema,
   livenessResponseSchema,
   readinessResponseSchema,
+  upsertLessonTextRequestSchema,
 } from "./index.js";
 
 test("health contracts reject response drift", () => {
@@ -49,6 +50,23 @@ test("Lesson transport contracts are strict and keep database fields private", (
       lessonTexts: [],
       lessonSources: [],
       databaseRow: true,
+    }),
+  );
+});
+
+test("Lesson Text upserts require non-blank strict content", () => {
+  assert.deepEqual(
+    upsertLessonTextRequestSchema.parse({ title: "Titel", content: "Indhold" }),
+    { title: "Titel", content: "Indhold" },
+  );
+  assert.throws(() =>
+    upsertLessonTextRequestSchema.parse({ title: " ", content: "Indhold" }),
+  );
+  assert.throws(() =>
+    upsertLessonTextRequestSchema.parse({
+      title: "Titel",
+      content: "",
+      extra: true,
     }),
   );
 });
