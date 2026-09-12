@@ -44,9 +44,11 @@ const composeArguments = [
   "--project-name",
   projectName,
 ];
-const config = JSON.parse(
-  await captureDocker([...composeArguments, "config", "--format", "json"]),
+const { output: configOutput } = await spawnDocker(
+  [...composeArguments, "config", "--format", "json"],
+  true,
 );
+const config = JSON.parse(configOutput);
 
 assertPublishedPort(config.services.bff, bffPort, 3000);
 assertPublishedPort(config.services.postgres, postgresPort, 5432);
@@ -82,7 +84,7 @@ assertWatch(
 let smokeFailure;
 
 try {
-  await runDocker([
+  await spawnDocker([
     ...composeArguments,
     "up",
     "--detach",
@@ -101,7 +103,7 @@ try {
   smokeFailure = error;
 } finally {
   try {
-    await runDocker([
+    await spawnDocker([
       ...composeArguments,
       "down",
       "--volumes",
@@ -148,14 +150,6 @@ function relativePath(watchedPath) {
   return path
     .relative(repositoryRoot, path.resolve(repositoryRoot, watchedPath))
     .replaceAll("\\", "/");
-}
-
-function runDocker(arguments_) {
-  return spawnDocker(arguments_).then(() => undefined);
-}
-
-function captureDocker(arguments_) {
-  return spawnDocker(arguments_, true).then(({ output }) => output);
 }
 
 function spawnDocker(arguments_, captureOutput = false) {
