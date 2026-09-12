@@ -101,6 +101,9 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
   assert.equal(unauthorized.headers.get("www-authenticate"), "Bearer");
   problemDetailsSchema.parse(await unauthorized.json());
 
+  const unauthorizedRead = await app.request("/api/admin/lessons/7");
+  assert.equal(unauthorizedRead.status, 401);
+
   const created = await app.request("/api/admin/lessons", {
     method: "POST",
     headers: {
@@ -160,13 +163,13 @@ test("BFF preserves safe Data Service resource failures", async () => {
     adminApiToken: "admin-token",
     dataServiceClient: {
       async createLesson() {
-        throw new DataServiceError(404, details);
+        throw new DataServiceError(details);
       },
       async listLessons() {
-        throw new DataServiceError(404, details);
+        throw new DataServiceError(details);
       },
       async getLesson() {
-        throw new DataServiceError(404, details);
+        throw new DataServiceError(details);
       },
     },
   });
@@ -180,4 +183,36 @@ test("BFF preserves safe Data Service resource failures", async () => {
     "application/problem+json",
   );
   assert.equal((await response.json()).code, "lesson_not_found");
+});
+
+test("BFF hides unrecognized downstream failures", async () => {
+  const details = problemDetailsSchema.parse({
+    type: "https://ez-dk-citizen.invalid/problems/database_failure",
+    title: "Not Found",
+    status: 404,
+    detail: "select * from secret_table failed",
+    instance: "/internal/lessons/99",
+    code: "database_failure",
+    requestId: "downstream",
+  });
+  const app = createBffApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    dataServiceClient: {
+      async createLesson() {
+        throw new DataServiceError(details);
+      },
+      async listLessons() {
+        throw new DataServiceError(details);
+      },
+      async getLesson() {
+        throw new DataServiceError(details);
+      },
+    },
+  });
+
+  const response = await app.request("/api/admin/lessons/99", {
+    headers: { Authorization: "Bearer admin-token" },
+  });
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).code, "data_service_unavailable");
 });

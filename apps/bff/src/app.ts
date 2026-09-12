@@ -155,10 +155,21 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
     );
   }
 
-  if (error.status === 404 || error.status === 409 || error.status === 422) {
+  const knownStatus =
+    error.status === 404 && error.details.code === "lesson_not_found"
+      ? 404
+      : error.status === 409 && error.details.code === "lesson_version_conflict"
+        ? 409
+        : error.status === 422 &&
+            ["invalid_lesson_id", "validation_failed"].includes(
+              error.details.code,
+            )
+          ? 422
+          : undefined;
+  if (knownStatus) {
     return problem(
       c,
-      error.status,
+      knownStatus,
       error.details.code,
       error.details.detail,
       error.details.errors,
