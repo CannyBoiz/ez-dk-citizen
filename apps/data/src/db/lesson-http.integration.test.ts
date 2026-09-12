@@ -18,6 +18,9 @@ test("internal Lesson HTTP operations persist and return aggregate transport sha
   });
   assert.equal(unauthorized.status, 401);
 
+  const unauthorizedRead = await app.request("/internal/lessons/1");
+  assert.equal(unauthorizedRead.status, 401);
+
   const created = await app.request("/internal/lessons", {
     method: "POST",
     headers: {
