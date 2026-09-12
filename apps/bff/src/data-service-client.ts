@@ -78,11 +78,12 @@ async function request<T>(
   parse: (value: unknown) => T,
   timeoutMs: number,
 ): Promise<T> {
+  const signal = AbortSignal.timeout(timeoutMs);
   let response: Response;
   try {
     response = await fetch(url, {
       method,
-      signal: AbortSignal.timeout(timeoutMs),
+      signal,
       headers: {
         Authorization: `Bearer ${token}`,
         "X-Request-ID": requestId,
@@ -91,19 +92,26 @@ async function request<T>(
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
   } catch (error) {
-    if (
-      error instanceof DOMException &&
-      (error.name === "TimeoutError" || error.name === "AbortError")
-    ) {
+    if (signal.aborted || isAbortError(error)) {
       throw new DataServiceError(unavailableProblem("data_service_timeout", 504));
     }
     throw new DataServiceError(unavailableProblem("data_service_unavailable"));
   }
 
-  const payload: unknown = await response.json().catch(() => undefined);
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    if (signal.aborted || isAbortError(error)) {
+      throw new DataServiceError(unavailableProblem("data_service_timeout", 504));
+    }
+    throw new DataServiceError(unavailableProblem("invalid_data_service_response"));
+  }
   if (!response.ok) {
     const details = problemDetailsSchema.safeParse(payload);
-    if (details.success) throw new DataServiceError(details.data);
+    if (details.success && details.data.status === response.status) {
+      throw new DataServiceError(details.data);
+    }
     throw new DataServiceError(unavailableProblem("invalid_data_service_response"));
   }
 
@@ -112,6 +120,11 @@ async function request<T>(
   } catch {
     throw new DataServiceError(unavailableProblem("invalid_data_service_response"));
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException &&
+    (error.name === "TimeoutError" || error.name === "AbortError");
 }
 
 function unavailableProblem(code: string, status = 502): ProblemDetails {
