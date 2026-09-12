@@ -139,7 +139,8 @@ export function createDataApp(
       const [existing] = await transaction
         .select({ status: lesson.status, updatedAt: lesson.updatedAt })
         .from(lesson)
-        .where(eq(lesson.id, id));
+        .where(eq(lesson.id, id))
+        .for("update");
       if (!existing) return "lesson_not_found" as const;
       if (existing.status !== "DRAFT") return "lesson_not_editable" as const;
 

@@ -59,6 +59,13 @@ test("Lesson Text upserts require non-blank strict content", () => {
     upsertLessonTextRequestSchema.parse({ title: "Titel", content: "Indhold" }),
     { title: "Titel", content: "Indhold" },
   );
+  assert.deepEqual(
+    upsertLessonTextRequestSchema.parse({
+      title: " Titel ",
+      content: " Indhold ",
+    }),
+    { title: " Titel ", content: " Indhold " },
+  );
   assert.throws(() =>
     upsertLessonTextRequestSchema.parse({ title: " ", content: "Indhold" }),
   );

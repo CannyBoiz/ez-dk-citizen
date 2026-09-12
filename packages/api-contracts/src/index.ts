@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const positiveInteger = z.number().int().positive();
 const timestamp = z.iso.datetime({ offset: true });
-const nonBlankText = z.string().trim().min(1);
+const nonBlankText = z.string().refine((value) => value.trim().length > 0);
 
 export const livenessResponseSchema = z.strictObject({
   status: z.literal("ok"),
