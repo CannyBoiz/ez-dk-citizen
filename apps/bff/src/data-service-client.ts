@@ -3,6 +3,7 @@ import {
   createLessonRequestSchema,
   lessonDetailSchema,
   lessonListResponseSchema,
+  patchLessonRequestSchema,
   problemDetailsSchema,
   sourceListResponseSchema,
   sourceResponseSchema,
@@ -12,6 +13,7 @@ import {
   type CreateSourceRequest,
   type LessonDetail,
   type LessonListResponse,
+  type PatchLessonRequest,
   type ProblemDetails,
   type SourceListResponse,
   type SourceResponse,
@@ -32,6 +34,11 @@ export interface DataServiceClient {
   ): Promise<LessonDetail>;
   listLessons(requestId: string): Promise<LessonListResponse>;
   getLesson(id: number, requestId: string): Promise<LessonDetail>;
+  patchLesson(
+    id: number,
+    input: PatchLessonRequest,
+    requestId: string,
+  ): Promise<LessonDetail>;
   createSource(
     input: CreateSourceRequest,
     requestId: string,
@@ -108,6 +115,16 @@ export function createDataServiceClient(
         lessonDetailSchema.parse,
         timeoutMs,
       ),
+    patchLesson: (id, input, requestId) =>
+      request(
+        new URL(`/internal/lessons/${id}`, base),
+        "PATCH",
+        token,
+        requestId,
+        patchLessonRequestSchema.parse(input),
+        lessonDetailSchema.parse,
+        timeoutMs,
+      ),
     createSource: (input, requestId) =>
       request(
         new URL("/internal/sources", base),
@@ -153,7 +170,7 @@ export function createDataServiceClient(
 
 async function request<T>(
   url: URL,
-  method: "DELETE" | "GET" | "POST" | "PUT",
+  method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT",
   token: string,
   requestId: string,
   body: unknown,
@@ -187,7 +204,9 @@ async function request<T>(
     payload = await response.json();
   } catch (error) {
     if (signal.aborted || isAbortError(error)) {
-      throw new DataServiceError(unavailableProblem("data_service_timeout", 504));
+      throw new DataServiceError(
+        unavailableProblem("data_service_timeout", 504),
+      );
     }
     throw new DataServiceError(unavailableProblem("invalid_data_service_response"));
   }

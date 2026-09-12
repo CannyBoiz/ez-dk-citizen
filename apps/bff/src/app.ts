@@ -4,6 +4,7 @@ import {
   lessonDetailSchema,
   lessonListResponseSchema,
   livenessResponseSchema,
+  patchLessonRequestSchema,
   readinessResponseSchema,
   sourceListResponseSchema,
   sourceResponseSchema,
@@ -68,7 +69,7 @@ export function createBffApp(
     cors({
       origin: (origin) =>
         origin && options.adminOrigins?.includes(origin) ? origin : undefined,
-      allowMethods: ["DELETE", "GET", "POST", "PUT", "OPTIONS"],
+      allowMethods: ["DELETE", "GET", "PATCH", "POST", "PUT", "OPTIONS"],
       allowHeaders: ["Authorization", "Content-Type", "X-Request-ID"],
       credentials: false,
     }),
@@ -117,6 +118,40 @@ export function createBffApp(
       );
       c.header("Location", `/api/admin/sources/${source.id}`);
       return c.json(sourceResponseSchema.parse(source), 201);
+    } catch (error) {
+      return mapDataServiceError(c, error);
+    }
+  });
+
+  app.patch("/api/admin/lessons/:lessonId", async (c) => {
+    const id = parsePositiveId(c.req.param("lessonId"));
+    if (!id)
+      return problem(
+        c,
+        422,
+        "invalid_lesson_id",
+        "Lesson ID must be a positive integer.",
+      );
+    const parsed = await parseJsonBody(c, patchLessonRequestSchema);
+    if ("response" in parsed) return parsed.response;
+    if (!options.dataServiceClient) {
+      return problem(
+        c,
+        502,
+        "data_service_unavailable",
+        "The Data Service is unavailable.",
+      );
+    }
+    try {
+      return c.json(
+        lessonDetailSchema.parse(
+          await options.dataServiceClient.patchLesson(
+            id,
+            parsed.value,
+            c.get("requestId"),
+          ),
+        ),
+      );
     } catch (error) {
       return mapDataServiceError(c, error);
     }
@@ -326,7 +361,9 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
       : error.status === 409 &&
           [
             "lesson_not_editable",
+            "lesson_lifecycle_conflict",
             "lesson_version_conflict",
+            "published_lesson_conflict",
             "source_url_conflict",
           ].includes(error.details.code)
         ? 409

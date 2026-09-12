@@ -89,6 +89,9 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
       calls.push(`get:${id}:${requestId}`);
       return detail;
     },
+    async patchLesson() {
+      return detail;
+    },
     async createSource() {
       return sourceResponseSchema.parse({
         id: 1,
@@ -197,6 +200,9 @@ test("BFF preserves safe Data Service resource failures", async () => {
       async getLesson() {
         throw new DataServiceError(details);
       },
+      async patchLesson() {
+        throw new DataServiceError(details);
+      },
       async createSource() {
         throw new DataServiceError(details);
       },
@@ -244,6 +250,9 @@ test("BFF upserts a localized Lesson Text through its client seam", async () => 
       return { items: [] };
     },
     async getLesson() {
+      return detail;
+    },
+    async patchLesson() {
       return detail;
     },
     async upsertLessonText(
@@ -327,6 +336,9 @@ test("BFF hides unrecognized downstream failures", async () => {
       async getLesson() {
         throw new DataServiceError(details);
       },
+      async patchLesson() {
+        throw new DataServiceError(details);
+      },
       async createSource() {
         throw new DataServiceError(details);
       },
@@ -378,6 +390,9 @@ test("BFF creates and lists canonical Sources through its client seam", async ()
       return { items: [] };
     },
     async getLesson() {
+      throw new Error("not used");
+    },
+    async patchLesson() {
       throw new Error("not used");
     },
     async createSource(input, requestId) {
@@ -538,6 +553,9 @@ test("BFF replaces and detaches Draft Lesson Sources through its client seam", a
     async getLesson() {
       return detail;
     },
+    async patchLesson() {
+      return detail;
+    },
     async createSource() {
       throw new Error("not used");
     },
@@ -618,8 +636,101 @@ test("BFF replaces and detaches Draft Lesson Sources through its client seam", a
     },
   });
   assert.equal(detached.status, 204);
-  assert.deepEqual(calls, [
-    "7:3:2:request-4",
-    "delete:7:3:request-5",
-  ]);
+  assert.deepEqual(calls, ["7:3:2:request-4", "delete:7:3:request-5"]);
+});
+
+test("BFF patches Lessons through its client seam", async () => {
+  const detail = lessonDetailSchema.parse({
+    id: 7,
+    chapter: 3,
+    version: 2,
+    status: "PUBLISHED",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:01:00.000Z",
+    availableLanguageCodes: [],
+    lessonTexts: [],
+    lessonSources: [],
+  });
+  const conflict = new DataServiceError(
+    problemDetailsSchema.parse({
+      type: "https://ez-dk-citizen.invalid/problems/published_lesson_conflict",
+      title: "Conflict",
+      status: 409,
+      detail: "This chapter already has a Published Lesson.",
+      instance: "/internal/lessons/7",
+      code: "published_lesson_conflict",
+      requestId: "downstream",
+    }),
+  );
+  const calls: string[] = [];
+  const client: DataServiceClient = {
+    async createLesson() {
+      throw new Error("not used");
+    },
+    async upsertLessonText() {
+      throw new Error("not used");
+    },
+    async listLessons() {
+      return { items: [] };
+    },
+    async getLesson() {
+      return detail;
+    },
+    async patchLesson(id, input, requestId) {
+      if (input.chapter === 99) throw conflict;
+      calls.push(`${id}:${input.chapter}:${input.status}:${requestId}`);
+      return detail;
+    },
+    async createSource() {
+      throw new Error("not used");
+    },
+    async listSources() {
+      return { items: [] };
+    },
+    async upsertLessonSource() {
+      return detail;
+    },
+    async deleteLessonSource() {},
+  };
+  const app = createBffApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    dataServiceClient: client,
+  });
+
+  const invalid = await app.request("/api/admin/lessons/7", {
+    method: "PATCH",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "Content-Type": "application/json",
+    },
+    body: "{}",
+  });
+  assert.equal(invalid.status, 422);
+
+  const patched = await app.request("/api/admin/lessons/7", {
+    method: "PATCH",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "Content-Type": "application/json",
+      "X-Request-ID": "request-6",
+    },
+    body: JSON.stringify({ chapter: 3, version: 2, status: "PUBLISHED" }),
+  });
+  assert.equal(patched.status, 200);
+  assert.deepEqual(await patched.json(), detail);
+  assert.deepEqual(calls, ["7:3:PUBLISHED:request-6"]);
+
+  const publishedConflict = await app.request("/api/admin/lessons/7", {
+    method: "PATCH",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ chapter: 99 }),
+  });
+  assert.equal(publishedConflict.status, 409);
+  assert.equal(
+    (await publishedConflict.json()).code,
+    "published_lesson_conflict",
+  );
 });
