@@ -895,7 +895,7 @@ Local Compose includes `postgres`, a one-shot `migrate` service, and
 Service starts only after migration completes successfully.
 
 Local application runtime is container-first, as recorded in
-[`ADR-0001`](../adr/0001-container-first-local-application-runtime.md).
+[`ADR-0003`](../adr/0003-container-first-local-application-runtime.md).
 `pnpm dev` runs Docker Compose Watch in the foreground. Compose starts
 PostgreSQL, applies committed migrations, starts the Data Service, and starts
 the BFF only after the Data Service is ready.
@@ -1456,19 +1456,19 @@ Use periodically after meaningful implementation exists. Do not use it to justif
 Accepted:
 
 ```text
-0001 - Use a container-first local application runtime
+0001 - Require localized Lesson Text before Lesson Audio
+0002 - Allow pending Media Assets without Lesson Audio
+0003 - Use a container-first local application runtime
 ```
 
 Create additional ADRs when these decisions become final:
 
 ```text
-0002 - Use Hono + Drizzle instead of .NET + EF Core
-0003 - Keep BFF and Data Service as separate Hono services
-0004 - Model Lesson ↔ Source as M:N via lesson_source
-0005 - Choose AWS S3 or Azure Blob Storage for PoC
-0006 - Direct client-to-object-storage media transfer
-0007 - Lesson Audio FK strategy
-0008 - Media Asset ↔ Lesson Audio upload-state cardinality
+0004 - Use Hono + Drizzle instead of .NET + EF Core
+0005 - Keep BFF and Data Service as separate Hono services
+0006 - Model Lesson ↔ Source as M:N via lesson_source
+0007 - Choose AWS S3 or Azure Blob Storage for PoC
+0008 - Direct client-to-object-storage media transfer
 ```
 
 Do not create ADRs for trivial implementation details.
