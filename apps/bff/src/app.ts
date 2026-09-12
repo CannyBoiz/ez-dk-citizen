@@ -3,6 +3,8 @@ import {
   createLessonRequestSchema,
   lessonDetailSchema,
   lessonListResponseSchema,
+  mobileLessonDetailSchema,
+  mobileLessonListResponseSchema,
   livenessResponseSchema,
   patchLessonRequestSchema,
   readinessResponseSchema,
@@ -341,6 +343,34 @@ export function createBffApp(
     }
   });
 
+  app.get("/api/mobile/lessons", async (c) => {
+    const languageCode = c.req.query("language") ?? "th";
+    if (!languageCode) return problem(c, 422, "unsupported_language", "Language is not supported.");
+    if (!options.dataServiceClient) return problem(c, 502, "data_service_unavailable", "The Data Service is unavailable.");
+    try {
+      return c.json(mobileLessonListResponseSchema.parse(
+        await options.dataServiceClient.listPublishedLessons(languageCode, c.get("requestId")),
+      ));
+    } catch (error) {
+      return mapDataServiceError(c, error);
+    }
+  });
+
+  app.get("/api/mobile/lessons/:lessonId", async (c) => {
+    const id = parsePositiveId(c.req.param("lessonId"));
+    if (!id) return problem(c, 422, "invalid_lesson_id", "Lesson ID must be a positive integer.");
+    const languageCode = c.req.query("language") ?? "th";
+    if (!languageCode) return problem(c, 422, "unsupported_language", "Language is not supported.");
+    if (!options.dataServiceClient) return problem(c, 502, "data_service_unavailable", "The Data Service is unavailable.");
+    try {
+      return c.json(mobileLessonDetailSchema.parse(
+        await options.dataServiceClient.getPublishedLesson(id, languageCode, c.get("requestId")),
+      ));
+    } catch (error) {
+      return mapDataServiceError(c, error);
+    }
+  });
+
   return app;
 }
 
@@ -356,7 +386,7 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
 
   const knownStatus =
     error.status === 404 &&
-    ["lesson_not_found", "source_not_found"].includes(error.details.code)
+    ["lesson_not_found", "lesson_text_not_found", "source_not_found"].includes(error.details.code)
       ? 404
       : error.status === 409 &&
           [

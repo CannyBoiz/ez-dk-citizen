@@ -3,6 +3,8 @@ import {
   createLessonRequestSchema,
   lessonDetailSchema,
   lessonListResponseSchema,
+  mobileLessonDetailSchema,
+  mobileLessonListResponseSchema,
   livenessResponseSchema,
   patchLessonRequestSchema,
   readinessResponseSchema,
@@ -547,6 +549,37 @@ export function createDataApp(
       );
     }
 
+    const languageCode = c.req.query("language");
+    const status = c.req.query("status");
+    if (status && !["DRAFT", "PUBLISHED", "ARCHIVED"].includes(status))
+      return problem(c, 422, "validation_failed", "Status is invalid.");
+    const filteredStatus = status as
+      | "DRAFT"
+      | "PUBLISHED"
+      | "ARCHIVED"
+      | undefined;
+    if (languageCode) {
+      const [supported] = await options.database
+        .select({ code: language.code })
+        .from(language)
+        .where(eq(language.code, languageCode));
+      if (!supported)
+        return problem(c, 422, "unsupported_language", "Language is not supported.");
+      const rows = await options.database
+        .select({ id: lesson.id })
+        .from(lesson)
+        .where(eq(lesson.status, filteredStatus ?? "PUBLISHED"))
+        .orderBy(asc(lesson.chapter));
+      const items = (await Promise.all(rows.map(({ id }) => loadLessonDetail(options.database!, id))))
+        .filter((detail): detail is NonNullable<typeof detail> => Boolean(detail))
+        .flatMap((detail) => {
+          const text = detail.lessonTexts.find((item) => item.languageCode === languageCode);
+          return text
+            ? [{ id: detail.id, chapter: detail.chapter, version: detail.version, languageCode, title: text.title }]
+            : [];
+        });
+      return c.json(mobileLessonListResponseSchema.parse({ items }));
+    }
     const rows = await options.database
       .select()
       .from(lesson)
@@ -597,9 +630,41 @@ export function createDataApp(
       );
     }
 
+    const languageCode = c.req.query("language");
+    const status = c.req.query("status");
+    if (status && !["DRAFT", "PUBLISHED", "ARCHIVED"].includes(status))
+      return problem(c, 422, "validation_failed", "Status is invalid.");
+    const filteredStatus = status as
+      | "DRAFT"
+      | "PUBLISHED"
+      | "ARCHIVED"
+      | undefined;
+    if (languageCode) {
+      const [supported] = await options.database
+        .select({ code: language.code })
+        .from(language)
+        .where(eq(language.code, languageCode));
+      if (!supported)
+        return problem(c, 422, "unsupported_language", "Language is not supported.");
+    }
     const detail = await loadLessonDetail(options.database, id);
     if (!detail)
       return problem(c, 404, "lesson_not_found", "Lesson was not found.");
+    if (languageCode) {
+      if (detail.status !== (filteredStatus ?? "PUBLISHED"))
+        return problem(c, 404, "lesson_not_found", "Lesson was not found.");
+      const text = detail.lessonTexts.find((item) => item.languageCode === languageCode);
+      if (!text)
+        return problem(c, 404, "lesson_text_not_found", "Lesson Text was not found.");
+      return c.json(
+        mobileLessonDetailSchema.parse({
+          id: detail.id, chapter: detail.chapter, version: detail.version,
+          languageCode, title: text.title, content: text.content,
+          availableLanguageCodes: detail.availableLanguageCodes,
+          lessonSources: detail.lessonSources,
+        }),
+      );
+    }
     return c.json(lessonDetailSchema.parse(detail));
   });
 
