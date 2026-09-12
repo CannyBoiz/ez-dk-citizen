@@ -18,6 +18,7 @@ const composeEnvironment = {
   POSTGRES_USER: databaseUser,
   POSTGRES_PASSWORD: databasePassword,
   DATA_SERVICE_TOKEN: 'integration-only-data-service-token',
+  ADMIN_API_TOKEN: 'integration-only-admin-token',
 };
 const composeArguments = [
   'compose',
@@ -40,7 +41,7 @@ try {
     '--wait',
     '--wait-timeout',
     '120',
-    'hono-data',
+    'bff',
   ]);
   await runDocker([
     ...composeArguments,
@@ -50,6 +51,15 @@ try {
     '--no-deps',
     '--rm',
     'postgres-check',
+  ]);
+  await runDocker([
+    ...composeArguments,
+    'exec',
+    '-T',
+    'bff',
+    'node',
+    '-e',
+    tracer(),
   ]);
   await runDocker([
     ...composeArguments,
@@ -97,6 +107,30 @@ if (integrationFailure) {
 }
 
 console.log('PostgreSQL foundation integration suite passed.');
+
+function tracer() {
+  return String.raw`
+const requestId = 'stage-2-tracer';
+const headers = { Authorization: 'Bearer integration-only-admin-token', 'Content-Type': 'application/json', 'X-Request-ID': requestId };
+const call = async (path, method, body) => {
+  const response = await fetch('http://127.0.0.1:3000' + path, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+  return { response, body: response.status === 204 ? undefined : await response.json() };
+};
+const lesson = await call('/api/admin/lessons', 'POST', { chapter: 1, version: 1 });
+if (lesson.response.status !== 201 || lesson.response.headers.get('x-request-id') !== requestId) throw new Error('Lesson creation failed.');
+if ((await fetch('http://127.0.0.1:3000/api/mobile/lessons')).status !== 200) throw new Error('Mobile list failed.');
+if ((await (await fetch('http://127.0.0.1:3000/api/mobile/lessons')).json()).items.length) throw new Error('Draft leaked to mobile.');
+await call('/api/admin/lessons/' + lesson.body.id + '/texts/th', 'PUT', { title: 'ไทย', content: 'เนื้อหา' });
+const source = await call('/api/admin/sources', 'POST', { url: 'https://example.test/source', publishedAt: null });
+await call('/api/admin/lessons/' + lesson.body.id + '/sources/' + source.body.id, 'PUT', { pageFrom: 2, pageTo: 3 });
+await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'PUBLISHED' });
+const mobile = await fetch('http://127.0.0.1:3000/api/mobile/lessons');
+const list = await mobile.json();
+if (list.items[0]?.title !== 'ไทย' || 'status' in list.items[0]) throw new Error('Mobile list projection failed.');
+const detail = await (await fetch('http://127.0.0.1:3000/api/mobile/lessons/' + lesson.body.id)).json();
+if (detail.content !== 'เนื้อหา' || detail.lessonSources[0]?.pageFrom !== 2 || 'audio' in detail) throw new Error('Mobile detail projection failed.');
+`;
+}
 
 async function verifyFailedMigrationBlocksDataService() {
   const exitCode = await runDockerForExitCode([

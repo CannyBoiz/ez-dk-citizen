@@ -10,8 +10,8 @@ entire implementation without risking development data.
 
 **Status:** ready-for-agent
 
-- [ ] One automated end-to-end test starts an isolated compiled PostgreSQL, migration, Data Service, and BFF stack and traverses their real HTTP boundaries.
-- [ ] The tracer authenticates an admin, creates a Draft Lesson, adds Thai Lesson Text, creates and attaches a Source with locators, publishes the Lesson, and reads it through mobile list and detail.
+- [x] One automated end-to-end test starts an isolated compiled PostgreSQL, migration, Data Service, and BFF stack and traverses their real HTTP boundaries.
+- [x] The tracer authenticates an admin, creates a Draft Lesson, adds Thai Lesson Text, creates and attaches a Source with locators, publishes the Lesson, and reads it through mobile list and detail.
 - [ ] The tracer verifies Draft content is initially hidden, Published content becomes visible, Thai localization is selected, available Languages and Source locators are returned, and no speculative audio fields appear.
 - [ ] The tracer proves the BFF and Data Service use distinct credentials and propagates one request ID across the public response, internal request, and safe completion logs.
 - [ ] A clean-stack readiness test proves BFF liveness independently and BFF readiness only after the private Data Service and PostgreSQL are ready.
