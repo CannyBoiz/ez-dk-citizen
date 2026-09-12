@@ -17,6 +17,7 @@ const composeEnvironment = {
   POSTGRES_DB: databaseName,
   POSTGRES_USER: databaseUser,
   POSTGRES_PASSWORD: databasePassword,
+  DATA_SERVICE_TOKEN: 'integration-only-data-service-token',
 };
 const composeArguments = [
   'compose',

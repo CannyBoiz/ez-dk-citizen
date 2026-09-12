@@ -2,6 +2,7 @@ x-data-service: &data-service
   image: ez-dk-citizen-data:local
   environment:
     DATABASE_URL: postgresql://${POSTGRES_USER:-}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-}
+    DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:-}
     PORT: 3000
 
 services:
@@ -62,6 +63,8 @@ services:
     environment:
       DATA_SERVICE_URL: http://hono-data:3000
       DATA_SERVICE_TIMEOUT_MS: ${DATA_SERVICE_TIMEOUT_MS:-2000}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}
+      DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:-}
       PORT: 3000
     depends_on:
       hono-data:
