@@ -7,6 +7,7 @@ import {
   lessonDetailSchema,
   livenessResponseSchema,
   readinessResponseSchema,
+  upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
 } from "./index.js";
 
@@ -118,5 +119,26 @@ test("Source contracts accept only trimmed HTTP URLs and offset timestamps", () 
       publishedAt: null,
       extra: true,
     }),
+  );
+});
+
+test("Lesson Source upserts allow absent locators but reject invalid pages", () => {
+  assert.deepEqual(upsertLessonSourceRequestSchema.parse({}), {});
+  assert.deepEqual(
+    upsertLessonSourceRequestSchema.parse({
+      pageFrom: 2,
+      pageTo: 3,
+      sectionReference: null,
+    }),
+    { pageFrom: 2, pageTo: 3, sectionReference: null },
+  );
+  assert.throws(() =>
+    upsertLessonSourceRequestSchema.parse({ pageFrom: 0 }),
+  );
+  assert.throws(() =>
+    upsertLessonSourceRequestSchema.parse({ pageFrom: 4, pageTo: 3 }),
+  );
+  assert.throws(() =>
+    upsertLessonSourceRequestSchema.parse({ pageFrom: null, extra: true }),
   );
 });

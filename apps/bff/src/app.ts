@@ -7,6 +7,7 @@ import {
   readinessResponseSchema,
   sourceListResponseSchema,
   sourceResponseSchema,
+  upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
 } from "@ez-dk-citizen/api-contracts";
 import { cors } from "hono/cors";
@@ -67,7 +68,7 @@ export function createBffApp(
     cors({
       origin: (origin) =>
         origin && options.adminOrigins?.includes(origin) ? origin : undefined,
-      allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
+      allowMethods: ["DELETE", "GET", "POST", "PUT", "OPTIONS"],
       allowHeaders: ["Authorization", "Content-Type", "X-Request-ID"],
       credentials: false,
     }),
@@ -157,6 +158,86 @@ export function createBffApp(
     }
   });
 
+  app.put("/api/admin/lessons/:lessonId/sources/:sourceId", async (c) => {
+    const lessonId = parsePositiveId(c.req.param("lessonId"));
+    if (!lessonId)
+      return problem(
+        c,
+        422,
+        "invalid_lesson_id",
+        "Lesson ID must be a positive integer.",
+      );
+    const sourceId = parsePositiveId(c.req.param("sourceId"));
+    if (!sourceId)
+      return problem(
+        c,
+        422,
+        "invalid_source_id",
+        "Source ID must be a positive integer.",
+      );
+    const parsed = await parseJsonBody(c, upsertLessonSourceRequestSchema);
+    if ("response" in parsed) return parsed.response;
+    if (!options.dataServiceClient) {
+      return problem(
+        c,
+        502,
+        "data_service_unavailable",
+        "The Data Service is unavailable.",
+      );
+    }
+    try {
+      return c.json(
+        lessonDetailSchema.parse(
+          await options.dataServiceClient.upsertLessonSource(
+            lessonId,
+            sourceId,
+            parsed.value,
+            c.get("requestId"),
+          ),
+        ),
+      );
+    } catch (error) {
+      return mapDataServiceError(c, error);
+    }
+  });
+
+  app.delete("/api/admin/lessons/:lessonId/sources/:sourceId", async (c) => {
+    const lessonId = parsePositiveId(c.req.param("lessonId"));
+    if (!lessonId)
+      return problem(
+        c,
+        422,
+        "invalid_lesson_id",
+        "Lesson ID must be a positive integer.",
+      );
+    const sourceId = parsePositiveId(c.req.param("sourceId"));
+    if (!sourceId)
+      return problem(
+        c,
+        422,
+        "invalid_source_id",
+        "Source ID must be a positive integer.",
+      );
+    if (!options.dataServiceClient) {
+      return problem(
+        c,
+        502,
+        "data_service_unavailable",
+        "The Data Service is unavailable.",
+      );
+    }
+    try {
+      await options.dataServiceClient.deleteLessonSource(
+        lessonId,
+        sourceId,
+        c.get("requestId"),
+      );
+      return c.body(null, 204);
+    } catch (error) {
+      return mapDataServiceError(c, error);
+    }
+  });
+
   app.get("/api/admin/lessons", async (c) => {
     if (!options.dataServiceClient) {
       return problem(
@@ -239,7 +320,8 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
   }
 
   const knownStatus =
-    error.status === 404 && error.details.code === "lesson_not_found"
+    error.status === 404 &&
+    ["lesson_not_found", "source_not_found"].includes(error.details.code)
       ? 404
       : error.status === 409 &&
           [
@@ -251,6 +333,7 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
         : error.status === 422 &&
             [
               "invalid_lesson_id",
+              "invalid_source_id",
               "unsupported_language",
               "validation_failed",
             ].includes(error.details.code)

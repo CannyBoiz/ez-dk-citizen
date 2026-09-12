@@ -7,14 +7,16 @@ import {
   readinessResponseSchema,
   sourceListResponseSchema,
   sourceResponseSchema,
+  upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
 } from "@ez-dk-citizen/api-contracts";
 import type {
   CreateLessonRequest,
   CreateSourceRequest,
+  UpsertLessonSourceRequest,
   UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import { createDataDatabase } from "./db/database.js";
@@ -224,6 +226,163 @@ export function createDataApp(
     const detail = await loadLessonDetail(options.database, outcome);
     if (!detail) throw new Error("Updated Lesson could not be read.");
     return c.json(lessonDetailSchema.parse(detail));
+  });
+
+  app.put("/internal/lessons/:lessonId/sources/:sourceId", async (c) => {
+    const lessonId = parsePositiveId(c.req.param("lessonId"));
+    if (!lessonId)
+      return problem(
+        c,
+        422,
+        "invalid_lesson_id",
+        "Lesson ID must be a positive integer.",
+      );
+    const sourceId = parsePositiveId(c.req.param("sourceId"));
+    if (!sourceId)
+      return problem(
+        c,
+        422,
+        "invalid_source_id",
+        "Source ID must be a positive integer.",
+      );
+    const parsed = await parseJsonBody<UpsertLessonSourceRequest>(
+      c,
+      upsertLessonSourceRequestSchema,
+    );
+    if ("response" in parsed) return parsed.response;
+    if (!options.database) {
+      return problem(
+        c,
+        500,
+        "internal_error",
+        "The request could not be completed.",
+      );
+    }
+
+    const outcome = await options.database.transaction(async (transaction) => {
+      const [existing] = await transaction
+        .select({ status: lesson.status, updatedAt: lesson.updatedAt })
+        .from(lesson)
+        .where(eq(lesson.id, lessonId))
+        .for("update");
+      if (!existing) return "lesson_not_found" as const;
+      if (existing.status !== "DRAFT") return "lesson_not_editable" as const;
+
+      const [existingSource] = await transaction
+        .select({ id: source.id })
+        .from(source)
+        .where(eq(source.id, sourceId));
+      if (!existingSource) return "source_not_found" as const;
+
+      const locators = {
+        pageFrom: parsed.value.pageFrom ?? null,
+        pageTo: parsed.value.pageTo ?? null,
+        sectionReference: parsed.value.sectionReference ?? null,
+      };
+      await transaction
+        .insert(lessonSource)
+        .values({ lessonId, sourceId, ...locators })
+        .onConflictDoUpdate({
+          target: [lessonSource.lessonId, lessonSource.sourceId],
+          set: locators,
+        });
+      await transaction
+        .update(lesson)
+        .set({
+          updatedAt: new Date(
+            Math.max(Date.now(), existing.updatedAt.getTime() + 1),
+          ),
+        })
+        .where(eq(lesson.id, lessonId));
+      return lessonId;
+    });
+
+    if (outcome === "lesson_not_found") {
+      return problem(c, 404, outcome, "Lesson was not found.");
+    }
+    if (outcome === "source_not_found") {
+      return problem(c, 404, outcome, "Source was not found.");
+    }
+    if (outcome === "lesson_not_editable") {
+      return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
+    }
+
+    const detail = await loadLessonDetail(options.database, outcome);
+    if (!detail) throw new Error("Updated Lesson could not be read.");
+    return c.json(lessonDetailSchema.parse(detail));
+  });
+
+  app.delete("/internal/lessons/:lessonId/sources/:sourceId", async (c) => {
+    const lessonId = parsePositiveId(c.req.param("lessonId"));
+    if (!lessonId)
+      return problem(
+        c,
+        422,
+        "invalid_lesson_id",
+        "Lesson ID must be a positive integer.",
+      );
+    const sourceId = parsePositiveId(c.req.param("sourceId"));
+    if (!sourceId)
+      return problem(
+        c,
+        422,
+        "invalid_source_id",
+        "Source ID must be a positive integer.",
+      );
+    if (!options.database) {
+      return problem(
+        c,
+        500,
+        "internal_error",
+        "The request could not be completed.",
+      );
+    }
+
+    const outcome = await options.database.transaction(async (transaction) => {
+      const [existing] = await transaction
+        .select({ status: lesson.status, updatedAt: lesson.updatedAt })
+        .from(lesson)
+        .where(eq(lesson.id, lessonId))
+        .for("update");
+      if (!existing) return "lesson_not_found" as const;
+      if (existing.status !== "DRAFT") return "lesson_not_editable" as const;
+
+      const [existingSource] = await transaction
+        .select({ id: source.id })
+        .from(source)
+        .where(eq(source.id, sourceId));
+      if (!existingSource) return "source_not_found" as const;
+
+      const deleted = await transaction
+        .delete(lessonSource)
+        .where(
+          and(
+            eq(lessonSource.lessonId, lessonId),
+            eq(lessonSource.sourceId, sourceId),
+          ),
+        )
+        .returning({ lessonId: lessonSource.lessonId });
+      if (!deleted.length) return;
+      await transaction
+        .update(lesson)
+        .set({
+          updatedAt: new Date(
+            Math.max(Date.now(), existing.updatedAt.getTime() + 1),
+          ),
+        })
+        .where(eq(lesson.id, lessonId));
+    });
+
+    if (outcome === "lesson_not_found") {
+      return problem(c, 404, outcome, "Lesson was not found.");
+    }
+    if (outcome === "source_not_found") {
+      return problem(c, 404, outcome, "Source was not found.");
+    }
+    if (outcome === "lesson_not_editable") {
+      return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
+    }
+    return c.body(null, 204);
   });
 
   app.get("/internal/lessons", async (c) => {

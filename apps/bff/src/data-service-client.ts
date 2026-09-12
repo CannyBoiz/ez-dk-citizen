@@ -6,6 +6,7 @@ import {
   problemDetailsSchema,
   sourceListResponseSchema,
   sourceResponseSchema,
+  upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
   type CreateLessonRequest,
   type CreateSourceRequest,
@@ -14,6 +15,7 @@ import {
   type ProblemDetails,
   type SourceListResponse,
   type SourceResponse,
+  type UpsertLessonSourceRequest,
   type UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
 
@@ -35,6 +37,17 @@ export interface DataServiceClient {
     requestId: string,
   ): Promise<SourceResponse>;
   listSources(requestId: string): Promise<SourceListResponse>;
+  upsertLessonSource(
+    lessonId: number,
+    sourceId: number,
+    input: UpsertLessonSourceRequest,
+    requestId: string,
+  ): Promise<LessonDetail>;
+  deleteLessonSource(
+    lessonId: number,
+    sourceId: number,
+    requestId: string,
+  ): Promise<void>;
 }
 
 export class DataServiceError extends Error {
@@ -115,12 +128,32 @@ export function createDataServiceClient(
         sourceListResponseSchema.parse,
         timeoutMs,
       ),
+    upsertLessonSource: (lessonId, sourceId, input, requestId) =>
+      request(
+        new URL(`/internal/lessons/${lessonId}/sources/${sourceId}`, base),
+        "PUT",
+        token,
+        requestId,
+        upsertLessonSourceRequestSchema.parse(input),
+        lessonDetailSchema.parse,
+        timeoutMs,
+      ),
+    deleteLessonSource: (lessonId, sourceId, requestId) =>
+      request(
+        new URL(`/internal/lessons/${lessonId}/sources/${sourceId}`, base),
+        "DELETE",
+        token,
+        requestId,
+        undefined,
+        () => undefined,
+        timeoutMs,
+      ),
   };
 }
 
 async function request<T>(
   url: URL,
-  method: "GET" | "POST" | "PUT",
+  method: "DELETE" | "GET" | "POST" | "PUT",
   token: string,
   requestId: string,
   body: unknown,
@@ -146,6 +179,8 @@ async function request<T>(
     }
     throw new DataServiceError(unavailableProblem("data_service_unavailable"));
   }
+
+  if (response.status === 204) return undefined as T;
 
   let payload: unknown;
   try {

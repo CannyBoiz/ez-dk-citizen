@@ -29,6 +29,19 @@ export const upsertLessonTextRequestSchema = z.strictObject({
   content: nonBlankText,
 });
 
+export const upsertLessonSourceRequestSchema = z
+  .strictObject({
+    pageFrom: positiveInteger.nullable().optional(),
+    pageTo: positiveInteger.nullable().optional(),
+    sectionReference: z.string().nullable().optional(),
+  })
+  .refine(
+    (value) =>
+      value.pageFrom == null ||
+      value.pageTo == null ||
+      value.pageFrom <= value.pageTo,
+  );
+
 export const createSourceRequestSchema = z.strictObject({
   url: sourceUrl,
   publishedAt: timestamp.nullable(),
@@ -102,6 +115,9 @@ export type ReadinessResponse = z.infer<typeof readinessResponseSchema>;
 export type CreateLessonRequest = z.infer<typeof createLessonRequestSchema>;
 export type UpsertLessonTextRequest = z.infer<
   typeof upsertLessonTextRequestSchema
+>;
+export type UpsertLessonSourceRequest = z.infer<
+  typeof upsertLessonSourceRequestSchema
 >;
 export type CreateSourceRequest = z.infer<typeof createSourceRequestSchema>;
 export type SourceResponse = z.infer<typeof sourceResponseSchema>;
