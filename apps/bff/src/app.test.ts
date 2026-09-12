@@ -106,6 +106,8 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
       return detail;
     },
     async deleteLessonSource() {},
+    async listPublishedLessons() { return { items: [] }; },
+    async getPublishedLesson() { throw new Error("not used"); },
   };
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
@@ -215,6 +217,8 @@ test("BFF preserves safe Data Service resource failures", async () => {
       async deleteLessonSource() {
         throw new DataServiceError(details);
       },
+      async listPublishedLessons() { throw new DataServiceError(details); },
+      async getPublishedLesson() { throw new DataServiceError(details); },
     },
   });
 
@@ -280,6 +284,8 @@ test("BFF upserts a localized Lesson Text through its client seam", async () => 
       return detail;
     },
     async deleteLessonSource() {},
+    async listPublishedLessons() { return { items: [] }; },
+    async getPublishedLesson() { throw new Error("not used"); },
   };
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
@@ -351,6 +357,8 @@ test("BFF hides unrecognized downstream failures", async () => {
       async deleteLessonSource() {
         throw new DataServiceError(details);
       },
+      async listPublishedLessons() { throw new DataServiceError(details); },
+      async getPublishedLesson() { throw new DataServiceError(details); },
     },
   });
 
@@ -410,6 +418,8 @@ test("BFF creates and lists canonical Sources through its client seam", async ()
     async deleteLessonSource() {
       throw new Error("not used");
     },
+    async listPublishedLessons() { return { items: [] }; },
+    async getPublishedLesson() { throw new Error("not used"); },
   };
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
@@ -570,6 +580,8 @@ test("BFF replaces and detaches Draft Lesson Sources through its client seam", a
     async deleteLessonSource(lessonId, sourceId, requestId) {
       calls.push(`delete:${lessonId}:${sourceId}:${requestId}`);
     },
+    async listPublishedLessons() { return { items: [] }; },
+    async getPublishedLesson() { throw new Error("not used"); },
   };
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
@@ -691,6 +703,8 @@ test("BFF patches Lessons through its client seam", async () => {
       return detail;
     },
     async deleteLessonSource() {},
+    async listPublishedLessons() { return { items: [] }; },
+    async getPublishedLesson() { throw new Error("not used"); },
   };
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",

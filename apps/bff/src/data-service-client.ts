@@ -3,6 +3,8 @@ import {
   createLessonRequestSchema,
   lessonDetailSchema,
   lessonListResponseSchema,
+  mobileLessonDetailSchema,
+  mobileLessonListResponseSchema,
   patchLessonRequestSchema,
   problemDetailsSchema,
   sourceListResponseSchema,
@@ -13,6 +15,8 @@ import {
   type CreateSourceRequest,
   type LessonDetail,
   type LessonListResponse,
+  type MobileLessonDetail,
+  type MobileLessonListResponse,
   type PatchLessonRequest,
   type ProblemDetails,
   type SourceListResponse,
@@ -55,6 +59,8 @@ export interface DataServiceClient {
     sourceId: number,
     requestId: string,
   ): Promise<void>;
+  listPublishedLessons(languageCode: string, requestId: string): Promise<MobileLessonListResponse>;
+  getPublishedLesson(id: number, languageCode: string, requestId: string): Promise<MobileLessonDetail>;
 }
 
 export class DataServiceError extends Error {
@@ -164,6 +170,16 @@ export function createDataServiceClient(
         undefined,
         () => undefined,
         timeoutMs,
+      ),
+    listPublishedLessons: (languageCode, requestId) =>
+      request(
+        new URL(`/internal/lessons?status=PUBLISHED&language=${encodeURIComponent(languageCode)}`, base),
+        "GET", token, requestId, undefined, mobileLessonListResponseSchema.parse, timeoutMs,
+      ),
+    getPublishedLesson: (id, languageCode, requestId) =>
+      request(
+        new URL(`/internal/lessons/${id}?status=PUBLISHED&language=${encodeURIComponent(languageCode)}`, base),
+        "GET", token, requestId, undefined, mobileLessonDetailSchema.parse, timeoutMs,
       ),
   };
 }

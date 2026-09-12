@@ -105,6 +105,25 @@ export const lessonListResponseSchema = z.strictObject({
   items: z.array(lessonSummarySchema),
 });
 
+export const mobileLessonSummarySchema = z.strictObject({
+  id: positiveInteger,
+  chapter: positiveInteger,
+  version: positiveInteger,
+  languageCode: z.string().min(1),
+  title: nonBlankText,
+});
+
+export const mobileLessonDetailSchema = z.strictObject({
+  ...mobileLessonSummarySchema.shape,
+  content: nonBlankText,
+  availableLanguageCodes: z.array(z.string().min(1)),
+  lessonSources: z.array(lessonSourceResponseSchema),
+});
+
+export const mobileLessonListResponseSchema = z.strictObject({
+  items: z.array(mobileLessonSummarySchema),
+});
+
 export const problemDetailsSchema = z.strictObject({
   type: z.url(),
   title: z.string(),
@@ -140,4 +159,8 @@ export type LessonStatus = z.infer<typeof lessonStatusSchema>;
 export type LessonSummary = z.infer<typeof lessonSummarySchema>;
 export type LessonDetail = z.infer<typeof lessonDetailSchema>;
 export type LessonListResponse = z.infer<typeof lessonListResponseSchema>;
+export type MobileLessonDetail = z.infer<typeof mobileLessonDetailSchema>;
+export type MobileLessonListResponse = z.infer<
+  typeof mobileLessonListResponseSchema
+>;
 export type ProblemDetails = z.infer<typeof problemDetailsSchema>;
