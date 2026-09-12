@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 import assert from "node:assert/strict";
 
 import { asc } from "drizzle-orm";

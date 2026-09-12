@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -13,13 +12,11 @@ const projectName = `ez-dk-citizen-integration-${process.pid}-${Date.now().toStr
 const databaseName = 'ez_dk_citizen_integration';
 const databaseUser = 'ez_dk_citizen_integration';
 const databasePassword = 'integration-only-password';
-const postgresPort = await findAvailablePort();
 const composeEnvironment = {
   ...process.env,
   POSTGRES_DB: databaseName,
   POSTGRES_USER: databaseUser,
   POSTGRES_PASSWORD: databasePassword,
-  POSTGRES_PORT: String(postgresPort),
 };
 const composeArguments = [
   'compose',
@@ -182,32 +179,6 @@ function spawnDocker(
 
       const outcome = signal ? `signal ${signal}` : `exit code ${exitCode}`;
       reject(new Error(`docker ${arguments_.join(' ')} failed with ${outcome}`));
-    });
-  });
-}
-
-function findAvailablePort() {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-
-    server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-
-      if (!address || typeof address === 'string') {
-        server.close();
-        reject(new Error('Could not reserve a PostgreSQL integration port.'));
-        return;
-      }
-
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve(address.port);
-      });
     });
   });
 }
