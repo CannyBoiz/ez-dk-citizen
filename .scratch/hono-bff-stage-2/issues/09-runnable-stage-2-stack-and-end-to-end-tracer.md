@@ -1,25 +1,24 @@
-# 09 — Runnable Stage 2 stack and end-to-end tracer
+# 09 — End-to-end Stage 2 tracer and workflow hardening
 
-**What to build:** Make the complete Stage 2 stack reproducibly runnable through
-root commands and local Docker Compose, then prove the real user-visible path
-from authenticated content creation to public localized mobile reading across
-the BFF, internal Data Service HTTP boundary, and migrated PostgreSQL.
+**What to build:** Prove the completed Stage 2 behavior through the real
+containerized BFF, private Data Service, and migrated PostgreSQL path. A
+developer can run one isolated tracer from authenticated content creation to
+public localized mobile reading and use documented commands to verify the
+entire implementation without risking development data.
 
 **Blocked by:** 07 — Localized mobile Lesson reads; 08 — Predictable gateway failures and request tracing.
 
 **Status:** ready-for-agent
 
-- [ ] Provide a reproducible BFF container image following the repository's Node.js, pinned-pnpm, compiled-output, and non-root-runtime conventions.
-- [ ] Local Compose starts PostgreSQL, applies committed migrations, starts the ready Data Service privately, and then starts the BFF only after Data Service readiness succeeds.
-- [ ] Compose publishes only the BFF to `127.0.0.1:${BFF_PORT:-3001}` among the application services; the Data Service remains reachable by its private service name and container port.
-- [ ] Both containers use configurable `PORT=3000`, and the BFF receives its Data Service URL, timeout, admin token, internal token, and admin-origin configuration through environment variables.
-- [ ] Local Compose supplies clearly labeled non-secret development token defaults while application startup still rejects absent required token configuration outside that local convenience path.
-- [ ] The tracked environment template documents all Stage 2 variables with placeholders; real environment files and production credentials remain ignored.
-- [ ] Root commands expose separate Data Service and BFF development entry points, a concurrent development entry point, workspace-wide type-check/build/test, and explicit PostgreSQL integration and end-to-end workflows.
-- [ ] Ordinary workspace tests remain Docker-free, and the existing isolated PostgreSQL foundation workflow does not begin depending on BFF credentials or unrelated services.
-- [ ] One automated end-to-end test starts from migrated PostgreSQL and traverses real HTTP boundaries to authenticate an admin, create a Draft Lesson, add Thai Lesson Text, create and attach a Source, publish, and fetch the Lesson through mobile list and detail.
-- [ ] The tracer verifies Published-only visibility, Thai localization, available Languages, Source locators, request correlation, and the absence of audio placeholder fields.
-- [ ] A clean-stack readiness test proves BFF liveness independently and BFF readiness only after Data Service and PostgreSQL are ready.
-- [ ] Workspace type-check, build, ordinary tests, the existing PostgreSQL integration suite, Data Service HTTP tests, BFF tests, and the end-to-end tracer all pass through documented commands.
-- [ ] Developer documentation explains host and Compose startup, authentication headers, ports, health/readiness, test commands, and the local-only nature of development tokens.
+- [ ] One automated end-to-end test starts an isolated compiled PostgreSQL, migration, Data Service, and BFF stack and traverses their real HTTP boundaries.
+- [ ] The tracer authenticates an admin, creates a Draft Lesson, adds Thai Lesson Text, creates and attaches a Source with locators, publishes the Lesson, and reads it through mobile list and detail.
+- [ ] The tracer verifies Draft content is initially hidden, Published content becomes visible, Thai localization is selected, available Languages and Source locators are returned, and no speculative audio fields appear.
+- [ ] The tracer proves the BFF and Data Service use distinct credentials and propagates one request ID across the public response, internal request, and safe completion logs.
+- [ ] A clean-stack readiness test proves BFF liveness independently and BFF readiness only after the private Data Service and PostgreSQL are ready.
+- [ ] The compiled stack preserves health-based PostgreSQL-to-migration-to-Data-Service-to-BFF startup ordering and exposes only the BFF among application services.
+- [ ] The end-to-end and readiness workflows use their own Compose project, ports, and temporary database volume, and clean up deterministically without touching persistent development state.
+- [ ] The container-development smoke test from ticket 01 remains green with the completed Stage 2 credentials and configuration.
+- [ ] Root commands expose the container-first development runtime, containerized migration application, Docker-free quality checks, isolated PostgreSQL integration tests, and the full end-to-end tracer without restoring host application-runtime commands.
+- [ ] Workspace type-check, build, ordinary tests, the PostgreSQL integration suite, Data Service HTTP tests, BFF tests, container-development smoke test, and end-to-end tracer all pass through documented commands.
+- [ ] Developer documentation explains clean-checkout container startup, Compose Watch behavior, optional `.env` overrides, local-only credentials, ports and service privacy, schema generation and migration application, health/readiness, testing, shutdown, and persistent development data.
 - [ ] No object-storage SDK, Upload Intent, Media Asset or Lesson Audio route, OpenAPI layer, rate limiter, cache, Caddy configuration, production Compose override, CI/CD, or deployment automation is added.

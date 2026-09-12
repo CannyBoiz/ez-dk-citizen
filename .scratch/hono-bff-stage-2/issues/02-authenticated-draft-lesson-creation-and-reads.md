@@ -6,7 +6,7 @@ HTTP operations and PostgreSQL persistence. This slice establishes the admin
 and service authentication boundaries, strict public/internal validation, and
 the base Lesson aggregate representations used by later slices.
 
-**Blocked by:** 01 — Bootable public-to-private service spine.
+**Blocked by:** 01 — Bootable container-first service spine.
 
 **Status:** ready-for-agent
 
@@ -24,4 +24,3 @@ the base Lesson aggregate representations used by later slices.
 - [ ] Browser CORS accepts only exact configured admin origins and required methods/headers, with no wildcard origin or credentialed-cookie mode.
 - [ ] Data Service HTTP tests exercise the routes against migrated PostgreSQL, while BFF route tests use the injected Data Service client seam.
 - [ ] Tests prove unauthenticated callers cannot create or inspect admin Lesson data and that neither service leaks credentials or database diagnostics.
-
