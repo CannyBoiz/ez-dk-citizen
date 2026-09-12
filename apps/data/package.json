@@ -13,8 +13,8 @@
     "start": "node dist/src/index.js",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "tsx src/db/migrate.ts",
-    "test": "node --import tsx --test src/*.test.ts",
-    "test:compiled": "node --test --test-concurrency=1 dist/src/db/lesson.integration.test.js dist/src/db/source.integration.test.js dist/src/db/media-asset.integration.test.js dist/src/db/lesson-audio.integration.test.js dist/src/db/deletion.integration.test.js"
+    "test": "pnpm --filter @ez-dk-citizen/api-contracts build && node --import tsx --test src/*.test.ts",
+    "test:compiled": "node --test --test-concurrency=1 dist/src/db/lesson.integration.test.js dist/src/db/lesson-http.integration.test.js dist/src/db/source.integration.test.js dist/src/db/media-asset.integration.test.js dist/src/db/lesson-audio.integration.test.js dist/src/db/deletion.integration.test.js"
   },
   "dependencies": {
     "@ez-dk-citizen/api-contracts": "workspace:*",
