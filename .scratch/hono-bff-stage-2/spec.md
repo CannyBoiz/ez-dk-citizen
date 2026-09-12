@@ -17,6 +17,12 @@ list or read published Lessons in Thai. Implementing only a BFF shell or mocking
 its persistence dependency would not prove the service boundary described by
 the PoC architecture.
 
+The current local workflow also runs application processes directly on the
+host while Compose runs only PostgreSQL and a compiled Data Service topology.
+That split makes local networking and environment loading differ from the
+deployment shape, leaves the BFF without a container workflow, and requires
+developers to coordinate startup and migrations manually.
+
 ## Solution
 
 Build a functional Stage 2 vertical slice spanning the public Hono BFF and the
@@ -32,6 +38,13 @@ of transactions, lifecycle rules, relational invariants, and PostgreSQL. Add
 operational configuration, structured errors and logs, health and readiness
 behavior, local Docker Compose integration, and automated coverage culminating
 in one end-to-end HTTP and PostgreSQL tracer path.
+
+Make local application runtime container-first through Docker Compose Watch.
+The normal development command starts PostgreSQL, applies committed migrations,
+starts the private Data Service, and then starts the BFF, while source edits are
+synchronized into writable development containers. Keep fast quality commands
+and migration generation on the host, and keep compiled integration workflows
+isolated from the development override.
 
 This slice stops before object-storage integration. It establishes the public
 and internal seams that Stage 3 will extend with Upload Intents, Media Assets,
@@ -99,11 +112,16 @@ Lesson Audio, and temporary upload and playback authorization.
 58. As a developer, I want one end-to-end tracer test through both HTTP services and PostgreSQL, so that the architectural path is proven rather than inferred from isolated tests.
 59. As a developer, I want ordinary contract and BFF tests to run without Docker, so that the fast feedback loop remains fast.
 60. As a developer, I want explicit commands for unit, PostgreSQL integration, and end-to-end tests, so that infrastructure requirements are visible.
-61. As a developer, I want both applications available through root workspace commands, so that monorepo workflows remain discoverable.
-62. As a developer, I want host development ports that do not collide, so that the BFF and Data Service can run concurrently.
-63. As a developer, I want a local Compose stack with only the BFF publicly reachable, so that development reflects the intended service boundary.
-64. As a developer, I want clearly labeled local-only token defaults, so that a clean checkout can run without mistaking development values for production secrets.
-65. As a future storage integrator, I want Stage 2 responses free of speculative audio fields, so that Stage 3 can establish the media contract deliberately.
+61. As a developer, I want one root development command to start the complete local stack in containers, so that service startup and dependencies remain discoverable.
+62. As a developer, I want source edits synchronized into running development containers, so that container-first development retains a fast feedback loop.
+63. As a developer, I want dependency, shared-contract, and container-definition changes to rebuild the affected services automatically, so that running containers do not drift from tracked inputs.
+64. As a developer, I want only the BFF and PostgreSQL exposed on loopback while the Data Service remains private, so that local networking reflects the intended service boundary without preventing database inspection.
+65. As a developer, I want the local stack to start without creating an `.env` file, so that a clean checkout has no manual configuration gate.
+66. As an operator, I want local-only credentials and ports clearly distinguished from externally supplied deployment configuration, so that development convenience cannot silently weaken non-local startup validation.
+67. As a developer changing the schema, I want to generate migrations on the host and apply them inside the running Data container, so that authoring stays fast while execution uses container networking.
+68. As a developer, I want development database data to survive normal stack shutdown, so that stopping the application does not erase local work.
+69. As a developer, I want integration tests to use their own compiled containers and temporary database, so that tests cannot mutate development state or inherit Watch behavior.
+70. As a future storage integrator, I want Stage 2 responses free of speculative audio fields, so that Stage 3 can establish the media contract deliberately.
 
 ## Implementation Decisions
 
@@ -226,21 +244,28 @@ Lesson Audio, and temporary upload and playback authorization.
 - Data Service `/health` reports process liveness without querying PostgreSQL.
 - Data Service `/ready` succeeds only when its PostgreSQL check succeeds.
 - Both containers listen on configurable `PORT`, defaulting to container port 3000.
-- Host development runs the Data Service on port 3000 and the BFF on port 3001 by default.
-- Local Compose resolves the private Data Service by its service name and container port. Only the BFF is published to localhost, using configurable `BFF_PORT` with default 3001; PostgreSQL retains the existing local-development exposure.
+- Local application runtime is container-first and follows ADR-0003. There is no supported host application-runtime fallback.
+- Local Compose resolves the private Data Service by its service name and container port. The BFF is published to `127.0.0.1` through configurable `BFF_PORT` with default 3001, PostgreSQL remains available on `127.0.0.1` through configurable `POSTGRES_PORT` with default 5432, and the Data Service is not host-published.
 - BFF configuration includes the Data Service base URL, Data Service timeout, admin token, internal token, allowed admin origins, and port.
-- The tracked environment template contains placeholders and documents every new variable. Real environment files and production credentials remain untracked.
-- Local Compose may supply clearly labeled non-secret development token defaults so a clean local stack can start. Application code still rejects absent token configuration, and a future production override must require externally supplied secrets.
-- The BFF has its own reproducible Docker image and non-root runtime. Compose starts it only after the Data Service readiness check succeeds.
+- Local Compose supplies clearly labeled development-only defaults for PostgreSQL credentials, application credentials, ports, and admin origins, so a clean checkout starts without an `.env` file. An ignored root `.env` may override those defaults.
+- Container-specific `DATABASE_URL` and Data Service URL values are constructed by Compose and are not taken from host-oriented defaults. Application startup outside local Compose still rejects missing required credentials.
+- The tracked environment template documents every variable and marks local-only values clearly. Real environment files and production credentials remain untracked.
+- Both applications have reproducible Docker images with writable development targets and compiled non-root runtime targets in the same Dockerfiles. Compose starts the BFF only after Data Service readiness succeeds.
 
 ### Workspace and development workflow
 
 - The existing pnpm monorepo is extended to include shared package workspaces as well as application workspaces.
 - The BFF follows the repository's ESM, strict TypeScript, Node.js, Hono, pnpm, compiled-output, and Node built-in test conventions.
-- Explicit root development commands are provided for the Data Service and BFF. The root development command runs both concurrently.
+- The root development command runs Docker Compose Watch in the foreground for PostgreSQL, migrations, the Data Service, and the BFF. Stopping it stops application processes; normal Compose teardown preserves the named PostgreSQL volume.
+- The compiled base Compose topology remains free of development behavior. An automatically loaded local override selects development image targets, development commands, Watch rules, and loopback port publication; integration workflows explicitly select only the base topology.
+- Compose Watch synchronizes only BFF and Data Service source plus generated migration files. The applications use their existing TypeScript watch processes inside the containers.
+- Changes to shared contracts, package manifests, the workspace lockfile, or Dockerfiles rebuild affected development services. Host dependency directories and compiled output are never synchronized into containers.
+- Separate host-run Data Service and BFF development commands are removed rather than retained as a second supported runtime path. Package-level watch commands remain available for container entrypoints.
 - Root type-check, build, and ordinary test commands cover all workspace packages.
-- PostgreSQL integration and full end-to-end commands remain explicit because they provision infrastructure. Ordinary contract and BFF tests do not require Docker.
-- Existing Data Service workflows remain usable, and the isolated PostgreSQL foundation harness must not acquire unrelated BFF or credential dependencies.
+- Ordinary tests, typechecking, builds, and Drizzle migration generation remain host-run. Starting the application runtime requires pnpm and Docker but does not require host dependencies to have been installed.
+- Initial development startup applies committed migrations through a one-shot service after PostgreSQL becomes healthy. After host generation, the explicit migration command executes Drizzle Kit inside the running development Data container against its private PostgreSQL connection.
+- PostgreSQL integration and full end-to-end commands remain explicit because they provision infrastructure. The existing PostgreSQL foundation harness continues to use an isolated Compose project, random host port, temporary volume, compiled Data Service, and deterministic cleanup without BFF credentials or development overrides.
+- Host environment-file loading is limited to Drizzle migration generation. Application startup, migration execution, and verification inside containers consume explicitly injected environment variables rather than searching the host filesystem.
 - Ignored compiled residue is not an authoritative contract or implementation source. Only tracked source and the new agreed contracts define behavior.
 
 ## Testing Decisions
@@ -261,7 +286,9 @@ Lesson Audio, and temporary upload and playback authorization.
 - Error tests cover the principal public `401`, `404`, `409`, `422`, `502`, and `504` outcomes and verify the RFC 9457 media type, stable code, request ID, safe detail, and absence of internal diagnostics.
 - Logging tests focus only on correlation propagation, required structured completion fields, and redaction of tokens and bodies.
 - Liveness and readiness tests prove their distinct dependency semantics in both services. A database outage affects Data Service readiness, and a Data Service outage affects BFF readiness, without changing process liveness.
-- Compose configuration tests verify private Data Service exposure, BFF localhost publication, health-based startup ordering, configurable ports, and local-only token defaults.
+- A container-development smoke test starts an isolated merged development Compose project without an `.env` file, waits for BFF readiness, verifies BFF and PostgreSQL loopback publication, verifies private Data Service exposure and configured Watch rules, and removes only its own project resources afterward.
+- The development smoke test validates the repository's Watch configuration but does not re-test Docker Compose's own file synchronization implementation.
+- The existing PostgreSQL integration harness explicitly selects the compiled base Compose topology, proving that development targets, Watch rules, BFF configuration, and persistent development data cannot leak into integration behavior.
 - Existing PostgreSQL integration tests remain prior art for fresh-database isolation, real constraint verification, deterministic cleanup, and Node's built-in test runner.
 - A successful implementation passes formatting where configured, workspace type-checking, workspace build, ordinary tests, the existing PostgreSQL integration suite, the new Data Service HTTP suite, and the end-to-end tracer suite.
 
@@ -282,6 +309,11 @@ Lesson Audio, and temporary upload and playback authorization.
 - A circuit breaker or automatic Data Service retries.
 - Telemetry backends, distributed tracing infrastructure, metrics collection, or log shipping.
 - Caddy, production Compose overrides, Cloudflare configuration, GHCR, GitHub Actions, SSH deployment, Hetzner provisioning, DNS, TLS, or production secret provisioning.
+- Containerizing ordinary tests, typechecking, workspace builds, or migration generation.
+- A supported host application-runtime fallback or duplicate host/container development commands.
+- Synchronizing host dependency directories or compiled output into development containers.
+- Automatically resetting or deleting the persistent development database during ordinary startup or shutdown.
+- Testing Docker Compose Watch's internal synchronization implementation beyond validating the repository's declared rules.
 - Quiz, learner-state, payment, subscription, recommendation, or additional media domains.
 - Reorganizing the existing database schema or service boundaries beyond changes required to enforce the confirmed Stage 2 behavior.
 
@@ -289,7 +321,8 @@ Lesson Audio, and temporary upload and playback authorization.
 
 - The PostgreSQL and Drizzle foundation is substantively complete and remains the persistence base for this feature. Its HTTP layer currently exposes no resource operations, so the internal API is required rather than optional follow-up work.
 - The existing Source URL column already has an exact uniqueness constraint. This feature adds transport normalization and service-level conflict behavior rather than redefining Source identity.
-- ADR 0001 continues to require Lesson Text before future Lesson Audio. ADR 0002 continues to permit an unattached Pending Media Asset. Stage 2 does not exercise either media behavior but must not create contracts that contradict them.
+- The canonical product context continues to require Lesson Text before future Lesson Audio and permits an unattached Pending Media Asset. Stage 2 does not exercise either media behavior but must not create contracts that contradict them.
 - The canonical product context records the confirmed Source identity, Lesson lifecycle, immutability, aggregate timestamp, and atomic publication rules.
-- No new ADR is required. The feature implements the existing BFF/Data Service architecture and adds visible domain rules rather than choosing a surprising hard-to-reverse architecture.
+- ADR-0003 records the deliberate container-first local application runtime and the trade-off between environment parity and host-runtime convenience.
+- Container-first development foundations must be completed before authenticated Lesson work begins rather than waiting for final stack hardening. The final ticket retains full-stack readiness, documentation, and end-to-end tracer verification.
 - The complete Stage 2 work is large enough to split into tracer-bullet implementation tickets with explicit blocking relationships before implementation.
