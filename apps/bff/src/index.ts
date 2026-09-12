@@ -7,15 +7,19 @@ import { createDataServiceClient } from "./data-service-client.js";
 if (!process.env.DATA_SERVICE_URL) {
   throw new Error("DATA_SERVICE_URL is required.");
 }
-if (!process.env.ADMIN_API_TOKEN) {
+const adminApiToken = process.env.ADMIN_API_TOKEN;
+if (!adminApiToken) {
   throw new Error("ADMIN_API_TOKEN is required.");
 }
-if (!process.env.DATA_SERVICE_TOKEN) {
+const dataServiceToken = process.env.DATA_SERVICE_TOKEN;
+if (!dataServiceToken) {
   throw new Error("DATA_SERVICE_TOKEN is required.");
+}
+if (adminApiToken === dataServiceToken) {
+  throw new Error("ADMIN_API_TOKEN and DATA_SERVICE_TOKEN must differ.");
 }
 
 const dataServiceUrl = new URL(process.env.DATA_SERVICE_URL);
-const dataServiceToken = process.env.DATA_SERVICE_TOKEN;
 const dataServiceTimeoutMs = Number(
   process.env.DATA_SERVICE_TIMEOUT_MS ?? 2000,
 );
@@ -33,7 +37,7 @@ const app = createBffApp(
     }
   },
   {
-    adminApiToken: process.env.ADMIN_API_TOKEN,
+    adminApiToken,
     adminOrigins: (process.env.ADMIN_ORIGINS ?? "")
       .split(",")
       .map((origin) => origin.trim())

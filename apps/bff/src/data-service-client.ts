@@ -19,11 +19,12 @@ export interface DataServiceClient {
 }
 
 export class DataServiceError extends Error {
-  constructor(
-    readonly status: number,
-    readonly details: ProblemDetails,
-  ) {
+  constructor(readonly details: ProblemDetails) {
     super(details.detail);
+  }
+
+  get status(): number {
+    return this.details.status;
   }
 }
 
@@ -94,44 +95,34 @@ async function request<T>(
       error instanceof DOMException &&
       (error.name === "TimeoutError" || error.name === "AbortError")
     ) {
-      throw new DataServiceError(
-        504,
-        unavailableProblem("data_service_timeout"),
-      );
+      throw new DataServiceError(unavailableProblem("data_service_timeout", 504));
     }
-    throw new DataServiceError(
-      502,
-      unavailableProblem("data_service_unavailable"),
-    );
+    throw new DataServiceError(unavailableProblem("data_service_unavailable"));
   }
 
   const payload: unknown = await response.json().catch(() => undefined);
   if (!response.ok) {
     const details = problemDetailsSchema.safeParse(payload);
-    if (details.success)
-      throw new DataServiceError(response.status, details.data);
-    throw new DataServiceError(
-      502,
-      unavailableProblem("invalid_data_service_response"),
-    );
+    if (details.success) throw new DataServiceError(details.data);
+    throw new DataServiceError(unavailableProblem("invalid_data_service_response"));
   }
 
   try {
     return parse(payload);
   } catch {
-    throw new DataServiceError(
-      502,
-      unavailableProblem("invalid_data_service_response"),
-    );
+    throw new DataServiceError(unavailableProblem("invalid_data_service_response"));
   }
 }
 
-function unavailableProblem(code: string): ProblemDetails {
+function unavailableProblem(code: string, status = 502): ProblemDetails {
   return problemDetailsSchema.parse({
     type: `https://ez-dk-citizen.invalid/problems/${code}`,
-    title: "Bad Gateway",
-    status: 502,
-    detail: "The Data Service is unavailable.",
+    title: status === 504 ? "Gateway Timeout" : "Bad Gateway",
+    status,
+    detail:
+      status === 504
+        ? "The Data Service timed out."
+        : "The Data Service is unavailable.",
     instance: "/internal/lessons",
     code,
     requestId: "downstream",
