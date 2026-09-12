@@ -1,13 +1,19 @@
 import {
+  createSourceRequestSchema,
   createLessonRequestSchema,
   lessonDetailSchema,
   lessonListResponseSchema,
   problemDetailsSchema,
+  sourceListResponseSchema,
+  sourceResponseSchema,
   upsertLessonTextRequestSchema,
   type CreateLessonRequest,
+  type CreateSourceRequest,
   type LessonDetail,
   type LessonListResponse,
   type ProblemDetails,
+  type SourceListResponse,
+  type SourceResponse,
   type UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
 
@@ -24,6 +30,11 @@ export interface DataServiceClient {
   ): Promise<LessonDetail>;
   listLessons(requestId: string): Promise<LessonListResponse>;
   getLesson(id: number, requestId: string): Promise<LessonDetail>;
+  createSource(
+    input: CreateSourceRequest,
+    requestId: string,
+  ): Promise<SourceResponse>;
+  listSources(requestId: string): Promise<SourceListResponse>;
 }
 
 export class DataServiceError extends Error {
@@ -82,6 +93,26 @@ export function createDataServiceClient(
         requestId,
         undefined,
         lessonDetailSchema.parse,
+        timeoutMs,
+      ),
+    createSource: (input, requestId) =>
+      request(
+        new URL("/internal/sources", base),
+        "POST",
+        token,
+        requestId,
+        createSourceRequestSchema.parse(input),
+        sourceResponseSchema.parse,
+        timeoutMs,
+      ),
+    listSources: (requestId) =>
+      request(
+        new URL("/internal/sources", base),
+        "GET",
+        token,
+        requestId,
+        undefined,
+        sourceListResponseSchema.parse,
         timeoutMs,
       ),
   };

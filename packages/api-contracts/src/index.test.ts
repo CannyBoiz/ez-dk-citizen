@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  createSourceRequestSchema,
   createLessonRequestSchema,
   lessonDetailSchema,
   livenessResponseSchema,
@@ -73,6 +74,48 @@ test("Lesson Text upserts require non-blank strict content", () => {
     upsertLessonTextRequestSchema.parse({
       title: "Titel",
       content: "",
+      extra: true,
+    }),
+  );
+});
+
+test("Source contracts accept only trimmed HTTP URLs and offset timestamps", () => {
+  assert.deepEqual(
+    createSourceRequestSchema.parse({
+      url: " https://example.com/source ",
+      publishedAt: "2026-01-01T02:00:00+02:00",
+    }),
+    {
+      url: "https://example.com/source",
+      publishedAt: "2026-01-01T02:00:00+02:00",
+    },
+  );
+  assert.deepEqual(
+    createSourceRequestSchema.parse({
+      url: "http://example.com",
+      publishedAt: null,
+    }),
+    { url: "http://example.com", publishedAt: null },
+  );
+  assert.throws(() =>
+    createSourceRequestSchema.parse({
+      url: "ftp://example.com",
+      publishedAt: null,
+    }),
+  );
+  assert.throws(() =>
+    createSourceRequestSchema.parse({ url: "/source", publishedAt: null }),
+  );
+  assert.throws(() =>
+    createSourceRequestSchema.parse({
+      url: "https://example.com",
+      publishedAt: "2026-01-01T00:00:00",
+    }),
+  );
+  assert.throws(() =>
+    createSourceRequestSchema.parse({
+      url: "https://example.com",
+      publishedAt: null,
       extra: true,
     }),
   );
