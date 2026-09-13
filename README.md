@@ -56,6 +56,12 @@ workspaces. Both application containers listen on configurable `PORT=3000`.
 | `pnpm test:dev`         | Smoke-test the isolated merged development Compose topology.              |
 | `pnpm test:integration` | Build, migrate, and fully test an isolated PostgreSQL/Data Service stack. |
 
+`pnpm test:integration` is also the end-to-end tracer: it creates a temporary
+Compose project and volume, proves the admin-to-mobile flow, then removes both.
+It never uses the persistent development database. Use `pnpm db:down` to stop
+development services; add `--volumes` manually only when intentionally
+discarding local development data.
+
 Both services expose unauthenticated `GET /health` liveness and `GET /ready`
 dependency-readiness endpoints. The Data Service readiness check reaches
 PostgreSQL; the BFF readiness check reaches the Data Service.
@@ -69,3 +75,7 @@ that a failed migration prevents its dependent Data Service from starting. Its
 containers, network, and project-scoped volume are removed afterward, including
 after test failure. The normal development volume belongs to a different
 Compose project and is not removed.
+
+If a migration fails, Compose leaves the Data Service stopped. Fix or replace
+the committed migration, rebuild with `pnpm dev`, and verify with
+`pnpm test:integration`; do not delete the development volume as recovery.

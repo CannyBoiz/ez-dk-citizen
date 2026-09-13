@@ -22,6 +22,8 @@ services:
 
   hono-data:
     build:
+      context: .
+      dockerfile: apps/data/Dockerfile
       target: development
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-ez_dk_citizen_dev}:${POSTGRES_PASSWORD:-development-only-password}@postgres:5432/${POSTGRES_DB:-ez_dk_citizen_dev}
