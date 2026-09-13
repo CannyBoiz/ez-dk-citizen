@@ -29,6 +29,11 @@ const composeArguments = [
 ];
 
 await runDocker([...composeArguments, 'config', '--quiet']);
+assertPrivateCompiledTopology(
+  JSON.parse(
+    await captureDocker([...composeArguments, 'config', '--format', 'json']),
+  ),
+);
 
 let integrationFailure;
 
@@ -43,6 +48,8 @@ try {
     '120',
     'bff',
   ]);
+  await verifyBffReadiness();
+  await verifyDistinctCredentials();
   await runDocker([
     ...composeArguments,
     '--profile',
@@ -61,6 +68,7 @@ try {
     '-e',
     tracer(),
   ]);
+  await verifyTracerLogs();
   await runDocker([
     ...composeArguments,
     '--profile',
@@ -126,10 +134,98 @@ await call('/api/admin/lessons/' + lesson.body.id + '/sources/' + source.body.id
 await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'PUBLISHED' });
 const mobile = await fetch('http://127.0.0.1:3000/api/mobile/lessons');
 const list = await mobile.json();
-if (list.items[0]?.title !== 'ไทย' || 'status' in list.items[0]) throw new Error('Mobile list projection failed.');
+if (list.items[0]?.title !== 'ไทย' || list.items[0]?.languageCode !== 'th' || 'status' in list.items[0]) throw new Error('Mobile list projection failed.');
 const detail = await (await fetch('http://127.0.0.1:3000/api/mobile/lessons/' + lesson.body.id)).json();
-if (detail.content !== 'เนื้อหา' || detail.lessonSources[0]?.pageFrom !== 2 || 'audio' in detail) throw new Error('Mobile detail projection failed.');
+if (detail.content !== 'เนื้อหา' || !detail.availableLanguageCodes.includes('th') || detail.lessonSources[0]?.pageFrom !== 2 || detail.lessonSources[0]?.pageTo !== 3 || 'audio' in detail) throw new Error('Mobile detail projection failed.');
 `;
+}
+
+async function verifyBffReadiness() {
+  await runDocker([
+    ...composeArguments,
+    'exec',
+    '-T',
+    'bff',
+    'node',
+    '-e',
+    "Promise.all(['/health', '/ready'].map(async (path) => { const response = await fetch('http://127.0.0.1:3000' + path); if (!response.ok) throw new Error(path + ' is unavailable'); }))",
+  ]);
+  await runDocker([...composeArguments, 'pause', 'hono-data']);
+  try {
+    await runDocker([
+      ...composeArguments,
+      'exec',
+      '-T',
+      'bff',
+      'node',
+      '-e',
+      "Promise.all([fetch('http://127.0.0.1:3000/health'), fetch('http://127.0.0.1:3000/ready')]).then(async ([health, ready]) => { if (!health.ok || ready.status !== 503) throw new Error('BFF liveness and readiness are not independent'); })",
+    ]);
+  } finally {
+    await runDocker([...composeArguments, 'unpause', 'hono-data']);
+  }
+  await runDocker([
+    ...composeArguments,
+    'exec',
+    '-T',
+    'bff',
+    'node',
+    '-e',
+    "for (let attempt = 0; attempt < 20; attempt += 1) { if ((await fetch('http://127.0.0.1:3000/ready')).ok) process.exit(0); await new Promise((resolve) => setTimeout(resolve, 250)); } throw new Error('BFF did not become ready');",
+  ]);
+}
+
+async function verifyDistinctCredentials() {
+  await runDocker([
+    ...composeArguments,
+    'exec',
+    '-T',
+    'bff',
+    'node',
+    '-e',
+    "fetch('http://hono-data:3000/internal/lessons', { headers: { Authorization: 'Bearer integration-only-admin-token' } }).then((response) => { if (response.status !== 401) throw new Error('Admin credential reached the Data Service'); })",
+  ]);
+}
+
+async function verifyTracerLogs() {
+  const logs = await Promise.all(
+    ['bff', 'hono-data'].map((service) =>
+      captureDocker([
+        ...composeArguments,
+        'logs',
+        '--no-log-prefix',
+        service,
+      ]),
+    ),
+  );
+  for (const secret of [
+    'integration-only-admin-token',
+    'integration-only-data-service-token',
+    'เนื้อหา',
+  ]) {
+    for (const output of logs) {
+      assert.match(output, /"requestId":"stage-2-tracer"/);
+      assert.doesNotMatch(output, new RegExp(secret));
+    }
+  }
+}
+
+function assertPrivateCompiledTopology(config) {
+  assert.equal(config.services.postgres.ports, undefined);
+  assert.equal(config.services['hono-data'].ports, undefined);
+  assert.equal(config.services.bff.ports, undefined);
+  assert.equal(
+    config.services.bff.depends_on['hono-data'].condition,
+    'service_healthy',
+  );
+  assert.equal(
+    config.services['hono-data'].depends_on.migrate.condition,
+    'service_completed_successfully',
+  );
+  assert.equal(
+    config.services.migrate.depends_on.postgres.condition,
+    'service_healthy',
+  );
 }
 
 async function verifyFailedMigrationBlocksDataService() {
