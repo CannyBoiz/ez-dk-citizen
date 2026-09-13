@@ -1,5 +1,6 @@
 import {
   livenessResponseSchema,
+  problemDetailsSchema,
   readinessResponseSchema,
 } from "@ez-dk-citizen/api-contracts";
 import assert from "node:assert/strict";
@@ -42,4 +43,41 @@ test("Data Service readiness reflects PostgreSQL", async (context) => {
       status: "unavailable",
     });
   });
+});
+
+test("Data Service unmatched routes return Problem Details", async () => {
+  const app = createDataApp(async () => undefined);
+
+  const response = await app.request("/missing");
+
+  assert.equal(response.status, 404);
+  assert.equal(
+    response.headers.get("content-type"),
+    "application/problem+json",
+  );
+  assert.equal((await response.json()).code, "not_found");
+});
+
+test("Data Service rejects write bodies above 1 MiB with Problem Details", async () => {
+  const app = createDataApp(async () => undefined, {
+    dataServiceToken: "data-token",
+  });
+  const response = await app.request("/internal/lessons", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer data-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      chapter: 1,
+      version: 1,
+      padding: "x".repeat(1024 * 1024),
+    }),
+  });
+
+  assert.equal(response.status, 422);
+  assert.equal(
+    problemDetailsSchema.parse(await response.json()).code,
+    "body_too_large",
+  );
 });

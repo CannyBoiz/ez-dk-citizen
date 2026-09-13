@@ -12,7 +12,8 @@
     "db:down": "docker compose down",
     "test": "pnpm --recursive --if-present test",
     "test:dev": "node scripts/test-container-development.mjs",
-    "test:integration": "node scripts/test-postgres-integration.mjs"
+    "test:integration": "node scripts/test-postgres-integration.mjs",
+    "test:e2e": "node scripts/test-postgres-integration.mjs --end-to-end"
   },
   "devDependencies": {
     "prettier": "^3.9.6"
