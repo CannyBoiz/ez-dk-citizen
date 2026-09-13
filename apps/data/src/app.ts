@@ -1,13 +1,22 @@
 import {
   createSourceRequestSchema,
+  lessonIdParamsSchema,
+  lessonReadQuerySchema,
+  lessonSourceParamsSchema,
+  lessonTextParamsSchema,
   createLessonRequestSchema,
+  installRequestLifecycle,
   lessonDetailSchema,
+  lessonDetailListResponseSchema,
   lessonListResponseSchema,
-  mobileLessonDetailSchema,
-  mobileLessonListResponseSchema,
+  lessonStatusSchema,
   livenessResponseSchema,
   patchLessonRequestSchema,
+  problem,
   readinessResponseSchema,
+  requireBearerToken,
+  validateJson,
+  validateRequest,
   sourceListResponseSchema,
   sourceResponseSchema,
   upsertLessonSourceRequestSchema,
@@ -16,12 +25,16 @@ import {
 import type {
   CreateLessonRequest,
   CreateSourceRequest,
+  LessonStatus,
   PatchLessonRequest,
+  RequestIdEnvironment,
   UpsertLessonSourceRequest,
   UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
 import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { HTTPException } from "hono/http-exception";
 
 import { createDataDatabase } from "./db/database.js";
 import {
@@ -31,17 +44,10 @@ import {
   lessonText,
   source,
 } from "./db/schema.js";
-import {
-  type DataAppEnvironment,
-  installRequestLifecycle,
-  isPostgresError,
-  parseJsonBody,
-  parsePositiveId,
-  problem,
-  requireBearerToken,
-} from "./http.js";
-
 type DataDatabase = ReturnType<typeof createDataDatabase>["database"];
+type DataTransaction = Parameters<
+  Parameters<DataDatabase["transaction"]>[0]
+>[0];
 
 export interface DataAppOptions {
   database?: DataDatabase;
@@ -52,10 +58,18 @@ export function createDataApp(
   checkDatabaseReadiness: () => Promise<void>,
   options: DataAppOptions = {},
 ) {
-  const app = new Hono<DataAppEnvironment>();
+  const app = new Hono<RequestIdEnvironment>();
 
   installRequestLifecycle(app);
-  app.onError((_error, c) => {
+  app.onError((error, c) => {
+    if (error instanceof HTTPException && error.status === 400) {
+      return problem(
+        c,
+        400,
+        "malformed_json",
+        "Request body is not valid JSON.",
+      );
+    }
     return problem(
       c,
       500,
@@ -63,6 +77,9 @@ export function createDataApp(
       "The request could not be completed.",
     );
   });
+  app.notFound((c) =>
+    problem(c, 404, "not_found", "The requested resource was not found."),
+  );
 
   app.get("/", (c) => c.text("Hello Hono!"));
   app.get("/health", (c) =>
@@ -81,176 +98,272 @@ export function createDataApp(
   });
 
   app.use("/internal/*", requireBearerToken(options.dataServiceToken));
-  app.post("/internal/lessons", async (c) => {
-    const parsed = await parseJsonBody<CreateLessonRequest>(
-      c,
-      createLessonRequestSchema,
-    );
-    if ("response" in parsed) return parsed.response;
-    if (!options.database) {
-      return problem(
-        c,
-        500,
-        "internal_error",
-        "The request could not be completed.",
-      );
-    }
-
-    try {
-      const [created] = await options.database.transaction(
-        async (transaction) =>
-          transaction
-            .insert(lesson)
-            .values({ ...parsed.value, status: "DRAFT" })
-            .returning({ id: lesson.id }),
-      );
-      if (!created) throw new Error("Lesson insert returned no row.");
-      const detail = await loadLessonDetail(options.database, created.id);
-      if (!detail) throw new Error("Created Lesson could not be read.");
-      return c.json(lessonDetailSchema.parse(detail), 201);
-    } catch (error) {
-      if (isPostgresError(error, "23505")) {
+  app.use(
+    "/internal/*",
+    bodyLimit({
+      maxSize: 1024 * 1024,
+      onError: (c) =>
+        problem(c, 422, "body_too_large", "Request body exceeds 1 MiB."),
+    }),
+  );
+  app.post(
+    "/internal/lessons",
+    validateJson(createLessonRequestSchema),
+    async (c) => {
+      const input = c.req.valid("json") as CreateLessonRequest;
+      if (!options.database) {
         return problem(
           c,
-          409,
-          "lesson_version_conflict",
-          "A Lesson with this chapter and version already exists.",
+          500,
+          "internal_error",
+          "The request could not be completed.",
         );
       }
-      throw error;
-    }
-  });
 
-  app.post("/internal/sources", async (c) => {
-    const parsed = await parseJsonBody<CreateSourceRequest>(
-      c,
-      createSourceRequestSchema,
-    );
-    if ("response" in parsed) return parsed.response;
-    if (!options.database) {
-      return problem(
-        c,
-        500,
-        "internal_error",
-        "The request could not be completed.",
-      );
-    }
-    try {
-      const [created] = await options.database
-        .insert(source)
-        .values({
-          url: parsed.value.url,
-          publishedAt: parsed.value.publishedAt
-            ? new Date(parsed.value.publishedAt)
-            : null,
-        })
-        .returning();
-      if (!created) throw new Error("Source insert returned no row.");
-      return c.json(sourceResponseSchema.parse(toSource(created)), 201);
-    } catch (error) {
-      if (isPostgresError(error, "23505")) {
+      try {
+        const [created] = await options.database.transaction(
+          async (transaction) =>
+            transaction
+              .insert(lesson)
+              .values({ ...input, status: "DRAFT" })
+              .returning({ id: lesson.id }),
+        );
+        if (!created) throw new Error("Lesson insert returned no row.");
+        const detail = await loadLessonDetail(options.database, created.id);
+        if (!detail) throw new Error("Created Lesson could not be read.");
+        return c.json(lessonDetailSchema.parse(detail), 201);
+      } catch (error) {
+        if (isPostgresError(error, "23505")) {
+          return problem(
+            c,
+            409,
+            "lesson_version_conflict",
+            "A Lesson with this chapter and version already exists.",
+          );
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post(
+    "/internal/sources",
+    validateJson(createSourceRequestSchema),
+    async (c) => {
+      const input = c.req.valid("json") as CreateSourceRequest;
+      if (!options.database) {
         return problem(
           c,
-          409,
-          "source_url_conflict",
-          "A Source with this URL already exists.",
+          500,
+          "internal_error",
+          "The request could not be completed.",
         );
       }
-      throw error;
-    }
-  });
+      try {
+        const [created] = await options.database
+          .insert(source)
+          .values({
+            url: input.url,
+            publishedAt: input.publishedAt ? new Date(input.publishedAt) : null,
+          })
+          .returning();
+        if (!created) throw new Error("Source insert returned no row.");
+        return c.json(sourceResponseSchema.parse(toSource(created)), 201);
+      } catch (error) {
+        if (isPostgresError(error, "23505")) {
+          return problem(
+            c,
+            409,
+            "source_url_conflict",
+            "A Source with this URL already exists.",
+          );
+        }
+        throw error;
+      }
+    },
+  );
 
-  app.patch("/internal/lessons/:lessonId", async (c) => {
-    const id = parsePositiveId(c.req.param("lessonId"));
-    if (!id)
-      return problem(
-        c,
-        422,
-        "invalid_lesson_id",
-        "Lesson ID must be a positive integer.",
-      );
-    const parsed = await parseJsonBody<PatchLessonRequest>(
-      c,
-      patchLessonRequestSchema,
-    );
-    if ("response" in parsed) return parsed.response;
-    if (!options.database) {
-      return problem(
-        c,
-        500,
-        "internal_error",
-        "The request could not be completed.",
-      );
-    }
+  app.patch(
+    "/internal/lessons/:lessonId",
+    validateRequest("param", lessonIdParamsSchema),
+    validateJson(patchLessonRequestSchema),
+    async (c) => {
+      const { lessonId: id } = c.req.valid("param") as { lessonId: number };
+      const input = c.req.valid("json") as PatchLessonRequest;
+      if (!options.database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
 
-    try {
-      const outcome = await options.database.transaction(
-        async (transaction) => {
-          const [existing] = await transaction
-            .select({
-              chapter: lesson.chapter,
-              version: lesson.version,
-              status: lesson.status,
-              updatedAt: lesson.updatedAt,
-            })
-            .from(lesson)
-            .where(eq(lesson.id, id))
-            .for("update");
-          if (!existing) return "lesson_not_found" as const;
+      try {
+        const outcome = await options.database.transaction(
+          async (transaction) => {
+            const [existing] = await transaction
+              .select({
+                chapter: lesson.chapter,
+                version: lesson.version,
+                status: lesson.status,
+                updatedAt: lesson.updatedAt,
+              })
+              .from(lesson)
+              .where(eq(lesson.id, id))
+              .for("update");
+            if (!existing) return "lesson_not_found" as const;
 
-          const changesStructure =
-            parsed.value.chapter !== undefined ||
-            parsed.value.version !== undefined;
-          if (changesStructure && existing.status !== "DRAFT") {
-            return "lesson_not_editable" as const;
-          }
-          if (
-            parsed.value.status !== undefined &&
-            !isAllowedLessonTransition(existing.status, parsed.value.status)
-          ) {
-            return "lesson_lifecycle_conflict" as const;
-          }
+            const changesStructure =
+              input.chapter !== undefined || input.version !== undefined;
+            if (changesStructure && !isEditableLesson(existing.status)) {
+              return "lesson_not_editable" as const;
+            }
+            if (
+              input.status !== undefined &&
+              !isAllowedLessonTransition(existing.status, input.status)
+            ) {
+              return "lesson_lifecycle_conflict" as const;
+            }
 
-          const chapter = parsed.value.chapter ?? existing.chapter;
-          const version = parsed.value.version ?? existing.version;
-          const status = parsed.value.status ?? existing.status;
-          const [identityConflict] = await transaction
-            .select({ id: lesson.id })
-            .from(lesson)
-            .where(
-              and(
-                eq(lesson.chapter, chapter),
-                eq(lesson.version, version),
-                ne(lesson.id, id),
-              ),
-            );
-          if (identityConflict) return "lesson_version_conflict" as const;
-
-          if (status === "PUBLISHED") {
-            const [published] = await transaction
+            const chapter = input.chapter ?? existing.chapter;
+            const version = input.version ?? existing.version;
+            const status = input.status ?? existing.status;
+            const [identityConflict] = await transaction
               .select({ id: lesson.id })
               .from(lesson)
               .where(
                 and(
                   eq(lesson.chapter, chapter),
-                  eq(lesson.status, "PUBLISHED"),
+                  eq(lesson.version, version),
                   ne(lesson.id, id),
                 ),
               );
-            if (published) return "published_lesson_conflict" as const;
-          }
+            if (identityConflict) return "lesson_version_conflict" as const;
+
+            if (status === "PUBLISHED") {
+              const [published] = await transaction
+                .select({ id: lesson.id })
+                .from(lesson)
+                .where(
+                  and(
+                    eq(lesson.chapter, chapter),
+                    eq(lesson.status, "PUBLISHED"),
+                    ne(lesson.id, id),
+                  ),
+                );
+              if (published) return "published_lesson_conflict" as const;
+            }
+
+            await transaction
+              .update(lesson)
+              .set({
+                chapter,
+                version,
+                status,
+                updatedAt: nextUpdatedAt(existing.updatedAt),
+              })
+              .where(eq(lesson.id, id));
+            return id;
+          },
+        );
+
+        if (outcome === "lesson_not_found") {
+          return problem(c, 404, outcome, "Lesson was not found.");
+        }
+        if (outcome === "lesson_not_editable") {
+          return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
+        }
+        if (outcome === "lesson_lifecycle_conflict") {
+          return problem(
+            c,
+            409,
+            outcome,
+            "Lesson status transition is not allowed.",
+          );
+        }
+        if (outcome === "lesson_version_conflict") {
+          return problem(
+            c,
+            409,
+            outcome,
+            "A Lesson with this chapter and version already exists.",
+          );
+        }
+        if (outcome === "published_lesson_conflict") {
+          return problem(
+            c,
+            409,
+            outcome,
+            "This chapter already has a Published Lesson.",
+          );
+        }
+
+        const detail = await loadLessonDetail(options.database, outcome);
+        if (!detail) throw new Error("Updated Lesson could not be read.");
+        return c.json(lessonDetailSchema.parse(detail));
+      } catch (error) {
+        if (
+          isPostgresError(error, "23505", "lesson_one_published_per_chapter")
+        ) {
+          return problem(
+            c,
+            409,
+            "published_lesson_conflict",
+            "This chapter already has a Published Lesson.",
+          );
+        }
+        if (isPostgresError(error, "23505")) {
+          return problem(
+            c,
+            409,
+            "lesson_version_conflict",
+            "A Lesson with this chapter and version already exists.",
+          );
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.put(
+    "/internal/lessons/:lessonId/texts/:languageCode",
+    validateRequest("param", lessonTextParamsSchema),
+    validateJson(upsertLessonTextRequestSchema),
+    async (c) => {
+      const { lessonId: id, languageCode } = c.req.valid("param") as {
+        lessonId: number;
+        languageCode: string;
+      };
+      const input = c.req.valid("json") as UpsertLessonTextRequest;
+      if (!options.database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
+
+      const outcome = await options.database.transaction(
+        async (transaction) => {
+          const existing = await lockEditableDraft(transaction, id);
+          if (typeof existing === "string") return existing;
+
+          const [supported] = await transaction
+            .select({ code: language.code })
+            .from(language)
+            .where(eq(language.code, languageCode));
+          if (!supported) return "unsupported_language" as const;
 
           await transaction
-            .update(lesson)
-            .set({
-              chapter,
-              version,
-              status,
-              updatedAt: new Date(
-                Math.max(Date.now(), existing.updatedAt.getTime() + 1),
-              ),
-            })
-            .where(eq(lesson.id, id));
+            .insert(lessonText)
+            .values({ lessonId: id, languageCode, ...input })
+            .onConflictDoUpdate({
+              target: [lessonText.lessonId, lessonText.languageCode],
+              set: input,
+            });
+          await touchLesson(transaction, id, existing.updatedAt);
           return id;
         },
       );
@@ -261,338 +374,197 @@ export function createDataApp(
       if (outcome === "lesson_not_editable") {
         return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
       }
-      if (outcome === "lesson_lifecycle_conflict") {
-        return problem(
-          c,
-          409,
-          outcome,
-          "Lesson status transition is not allowed.",
-        );
-      }
-      if (outcome === "lesson_version_conflict") {
-        return problem(
-          c,
-          409,
-          outcome,
-          "A Lesson with this chapter and version already exists.",
-        );
-      }
-      if (outcome === "published_lesson_conflict") {
-        return problem(
-          c,
-          409,
-          outcome,
-          "This chapter already has a Published Lesson.",
-        );
+      if (outcome === "unsupported_language") {
+        return problem(c, 422, outcome, "Language is not supported.");
       }
 
       const detail = await loadLessonDetail(options.database, outcome);
       if (!detail) throw new Error("Updated Lesson could not be read.");
       return c.json(lessonDetailSchema.parse(detail));
-    } catch (error) {
-      if (isPostgresError(error, "23505", "lesson_one_published_per_chapter")) {
-        return problem(
-          c,
-          409,
-          "published_lesson_conflict",
-          "This chapter already has a Published Lesson.",
-        );
-      }
-      if (isPostgresError(error, "23505")) {
-        return problem(
-          c,
-          409,
-          "lesson_version_conflict",
-          "A Lesson with this chapter and version already exists.",
-        );
-      }
-      throw error;
-    }
-  });
+    },
+  );
 
-  app.put("/internal/lessons/:lessonId/texts/:languageCode", async (c) => {
-    const id = parsePositiveId(c.req.param("lessonId"));
-    if (!id)
-      return problem(
-        c,
-        422,
-        "invalid_lesson_id",
-        "Lesson ID must be a positive integer.",
-      );
-    const parsed = await parseJsonBody<UpsertLessonTextRequest>(
-      c,
-      upsertLessonTextRequestSchema,
-    );
-    if ("response" in parsed) return parsed.response;
-    if (!options.database) {
-      return problem(
-        c,
-        500,
-        "internal_error",
-        "The request could not be completed.",
-      );
-    }
-
-    const languageCode = c.req.param("languageCode");
-    const outcome = await options.database.transaction(async (transaction) => {
-      const [existing] = await transaction
-        .select({ status: lesson.status, updatedAt: lesson.updatedAt })
-        .from(lesson)
-        .where(eq(lesson.id, id))
-        .for("update");
-      if (!existing) return "lesson_not_found" as const;
-      if (existing.status !== "DRAFT") return "lesson_not_editable" as const;
-
-      const [supported] = await transaction
-        .select({ code: language.code })
-        .from(language)
-        .where(eq(language.code, languageCode));
-      if (!supported) return "unsupported_language" as const;
-
-      await transaction
-        .insert(lessonText)
-        .values({ lessonId: id, languageCode, ...parsed.value })
-        .onConflictDoUpdate({
-          target: [lessonText.lessonId, lessonText.languageCode],
-          set: parsed.value,
-        });
-      await transaction
-        .update(lesson)
-        .set({
-          updatedAt: new Date(
-            Math.max(Date.now(), existing.updatedAt.getTime() + 1),
-          ),
-        })
-        .where(eq(lesson.id, id));
-      return id;
-    });
-
-    if (outcome === "lesson_not_found") {
-      return problem(c, 404, outcome, "Lesson was not found.");
-    }
-    if (outcome === "lesson_not_editable") {
-      return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
-    }
-    if (outcome === "unsupported_language") {
-      return problem(c, 422, outcome, "Language is not supported.");
-    }
-
-    const detail = await loadLessonDetail(options.database, outcome);
-    if (!detail) throw new Error("Updated Lesson could not be read.");
-    return c.json(lessonDetailSchema.parse(detail));
-  });
-
-  app.put("/internal/lessons/:lessonId/sources/:sourceId", async (c) => {
-    const lessonId = parsePositiveId(c.req.param("lessonId"));
-    if (!lessonId)
-      return problem(
-        c,
-        422,
-        "invalid_lesson_id",
-        "Lesson ID must be a positive integer.",
-      );
-    const sourceId = parsePositiveId(c.req.param("sourceId"));
-    if (!sourceId)
-      return problem(
-        c,
-        422,
-        "invalid_source_id",
-        "Source ID must be a positive integer.",
-      );
-    const parsed = await parseJsonBody<UpsertLessonSourceRequest>(
-      c,
-      upsertLessonSourceRequestSchema,
-    );
-    if ("response" in parsed) return parsed.response;
-    if (!options.database) {
-      return problem(
-        c,
-        500,
-        "internal_error",
-        "The request could not be completed.",
-      );
-    }
-
-    const outcome = await options.database.transaction(async (transaction) => {
-      const [existing] = await transaction
-        .select({ status: lesson.status, updatedAt: lesson.updatedAt })
-        .from(lesson)
-        .where(eq(lesson.id, lessonId))
-        .for("update");
-      if (!existing) return "lesson_not_found" as const;
-      if (existing.status !== "DRAFT") return "lesson_not_editable" as const;
-
-      const [existingSource] = await transaction
-        .select({ id: source.id })
-        .from(source)
-        .where(eq(source.id, sourceId));
-      if (!existingSource) return "source_not_found" as const;
-
-      const locators = {
-        pageFrom: parsed.value.pageFrom ?? null,
-        pageTo: parsed.value.pageTo ?? null,
-        sectionReference: parsed.value.sectionReference ?? null,
+  app.put(
+    "/internal/lessons/:lessonId/sources/:sourceId",
+    validateRequest("param", lessonSourceParamsSchema),
+    validateJson(upsertLessonSourceRequestSchema),
+    async (c) => {
+      const { lessonId, sourceId } = c.req.valid("param") as {
+        lessonId: number;
+        sourceId: number;
       };
-      await transaction
-        .insert(lessonSource)
-        .values({ lessonId, sourceId, ...locators })
-        .onConflictDoUpdate({
-          target: [lessonSource.lessonId, lessonSource.sourceId],
-          set: locators,
-        });
-      await transaction
-        .update(lesson)
-        .set({
-          updatedAt: new Date(
-            Math.max(Date.now(), existing.updatedAt.getTime() + 1),
-          ),
-        })
-        .where(eq(lesson.id, lessonId));
-      return lessonId;
-    });
+      const input = c.req.valid("json") as UpsertLessonSourceRequest;
+      if (!options.database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
 
-    if (outcome === "lesson_not_found") {
-      return problem(c, 404, outcome, "Lesson was not found.");
-    }
-    if (outcome === "source_not_found") {
-      return problem(c, 404, outcome, "Source was not found.");
-    }
-    if (outcome === "lesson_not_editable") {
-      return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
-    }
+      const outcome = await options.database.transaction(
+        async (transaction) => {
+          const existing = await lockEditableDraft(transaction, lessonId);
+          if (typeof existing === "string") return existing;
 
-    const detail = await loadLessonDetail(options.database, outcome);
-    if (!detail) throw new Error("Updated Lesson could not be read.");
-    return c.json(lessonDetailSchema.parse(detail));
-  });
+          const [existingSource] = await transaction
+            .select({ id: source.id })
+            .from(source)
+            .where(eq(source.id, sourceId));
+          if (!existingSource) return "source_not_found" as const;
 
-  app.delete("/internal/lessons/:lessonId/sources/:sourceId", async (c) => {
-    const lessonId = parsePositiveId(c.req.param("lessonId"));
-    if (!lessonId)
-      return problem(
-        c,
-        422,
-        "invalid_lesson_id",
-        "Lesson ID must be a positive integer.",
+          const locators = {
+            pageFrom: input.pageFrom ?? null,
+            pageTo: input.pageTo ?? null,
+            sectionReference: input.sectionReference ?? null,
+          };
+          await transaction
+            .insert(lessonSource)
+            .values({ lessonId, sourceId, ...locators })
+            .onConflictDoUpdate({
+              target: [lessonSource.lessonId, lessonSource.sourceId],
+              set: locators,
+            });
+          await touchLesson(transaction, lessonId, existing.updatedAt);
+          return lessonId;
+        },
       );
-    const sourceId = parsePositiveId(c.req.param("sourceId"));
-    if (!sourceId)
-      return problem(
-        c,
-        422,
-        "invalid_source_id",
-        "Source ID must be a positive integer.",
+
+      if (outcome === "lesson_not_found") {
+        return problem(c, 404, outcome, "Lesson was not found.");
+      }
+      if (outcome === "source_not_found") {
+        return problem(c, 404, outcome, "Source was not found.");
+      }
+      if (outcome === "lesson_not_editable") {
+        return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
+      }
+
+      const detail = await loadLessonDetail(options.database, outcome);
+      if (!detail) throw new Error("Updated Lesson could not be read.");
+      return c.json(lessonDetailSchema.parse(detail));
+    },
+  );
+
+  app.delete(
+    "/internal/lessons/:lessonId/sources/:sourceId",
+    validateRequest("param", lessonSourceParamsSchema),
+    async (c) => {
+      const { lessonId, sourceId } = c.req.valid("param") as {
+        lessonId: number;
+        sourceId: number;
+      };
+      if (!options.database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
+
+      const outcome = await options.database.transaction(
+        async (transaction) => {
+          const existing = await lockEditableDraft(transaction, lessonId);
+          if (typeof existing === "string") return existing;
+
+          const [existingSource] = await transaction
+            .select({ id: source.id })
+            .from(source)
+            .where(eq(source.id, sourceId));
+          if (!existingSource) return "source_not_found" as const;
+
+          const deleted = await transaction
+            .delete(lessonSource)
+            .where(
+              and(
+                eq(lessonSource.lessonId, lessonId),
+                eq(lessonSource.sourceId, sourceId),
+              ),
+            )
+            .returning({ lessonId: lessonSource.lessonId });
+          if (!deleted.length) return;
+          await touchLesson(transaction, lessonId, existing.updatedAt);
+        },
       );
-    if (!options.database) {
-      return problem(
-        c,
-        500,
-        "internal_error",
-        "The request could not be completed.",
-      );
-    }
 
-    const outcome = await options.database.transaction(async (transaction) => {
-      const [existing] = await transaction
-        .select({ status: lesson.status, updatedAt: lesson.updatedAt })
-        .from(lesson)
-        .where(eq(lesson.id, lessonId))
-        .for("update");
-      if (!existing) return "lesson_not_found" as const;
-      if (existing.status !== "DRAFT") return "lesson_not_editable" as const;
+      if (outcome === "lesson_not_found") {
+        return problem(c, 404, outcome, "Lesson was not found.");
+      }
+      if (outcome === "source_not_found") {
+        return problem(c, 404, outcome, "Source was not found.");
+      }
+      if (outcome === "lesson_not_editable") {
+        return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
+      }
+      return c.body(null, 204);
+    },
+  );
 
-      const [existingSource] = await transaction
-        .select({ id: source.id })
-        .from(source)
-        .where(eq(source.id, sourceId));
-      if (!existingSource) return "source_not_found" as const;
+  app.get(
+    "/internal/lessons",
+    validateRequest("query", lessonReadQuerySchema),
+    async (c) => {
+      if (!options.database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
 
-      const deleted = await transaction
-        .delete(lessonSource)
-        .where(
-          and(
-            eq(lessonSource.lessonId, lessonId),
-            eq(lessonSource.sourceId, sourceId),
-          ),
+      const { language: languageCode, status: filteredStatus } = c.req.valid(
+        "query",
+      ) as { language?: string; status?: LessonStatus };
+      if (languageCode !== undefined) {
+        const [supported] = await options.database
+          .select({ code: language.code })
+          .from(language)
+          .where(eq(language.code, languageCode));
+        if (!supported)
+          return problem(
+            c,
+            422,
+            "unsupported_language",
+            "Language is not supported.",
+          );
+        const rows = await options.database
+          .select({ id: lesson.id })
+          .from(lesson)
+          .where(filteredStatus ? eq(lesson.status, filteredStatus) : undefined)
+          .orderBy(asc(lesson.chapter), desc(lesson.version));
+        const items = (
+          await Promise.all(
+            rows.map(({ id }) => loadLessonDetail(options.database!, id)),
+          )
         )
-        .returning({ lessonId: lessonSource.lessonId });
-      if (!deleted.length) return;
-      await transaction
-        .update(lesson)
-        .set({
-          updatedAt: new Date(
-            Math.max(Date.now(), existing.updatedAt.getTime() + 1),
-          ),
-        })
-        .where(eq(lesson.id, lessonId));
-    });
-
-    if (outcome === "lesson_not_found") {
-      return problem(c, 404, outcome, "Lesson was not found.");
-    }
-    if (outcome === "source_not_found") {
-      return problem(c, 404, outcome, "Source was not found.");
-    }
-    if (outcome === "lesson_not_editable") {
-      return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
-    }
-    return c.body(null, 204);
-  });
-
-  app.get("/internal/lessons", async (c) => {
-    if (!options.database) {
-      return problem(
-        c,
-        500,
-        "internal_error",
-        "The request could not be completed.",
-      );
-    }
-
-    const languageCode = c.req.query("language");
-    const status = c.req.query("status");
-    if (status && !["DRAFT", "PUBLISHED", "ARCHIVED"].includes(status))
-      return problem(c, 422, "validation_failed", "Status is invalid.");
-    const filteredStatus = status as
-      | "DRAFT"
-      | "PUBLISHED"
-      | "ARCHIVED"
-      | undefined;
-    if (languageCode) {
-      const [supported] = await options.database
-        .select({ code: language.code })
-        .from(language)
-        .where(eq(language.code, languageCode));
-      if (!supported)
-        return problem(c, 422, "unsupported_language", "Language is not supported.");
+          .filter((detail): detail is NonNullable<typeof detail> =>
+            Boolean(detail),
+          )
+          .filter((detail) =>
+            detail.lessonTexts.some(
+              (item) => item.languageCode === languageCode,
+            ),
+          );
+        return c.json(lessonDetailListResponseSchema.parse({ items }));
+      }
       const rows = await options.database
-        .select({ id: lesson.id })
+        .select()
         .from(lesson)
-        .where(eq(lesson.status, filteredStatus ?? "PUBLISHED"))
-        .orderBy(asc(lesson.chapter));
-      const items = (await Promise.all(rows.map(({ id }) => loadLessonDetail(options.database!, id))))
-        .filter((detail): detail is NonNullable<typeof detail> => Boolean(detail))
-        .flatMap((detail) => {
-          const text = detail.lessonTexts.find((item) => item.languageCode === languageCode);
-          return text
-            ? [{ id: detail.id, chapter: detail.chapter, version: detail.version, languageCode, title: text.title }]
-            : [];
-        });
-      return c.json(mobileLessonListResponseSchema.parse({ items }));
-    }
-    const rows = await options.database
-      .select()
-      .from(lesson)
-      .orderBy(asc(lesson.chapter), desc(lesson.version));
-    const items = await Promise.all(
-      rows.map(async ({ id }) => {
-        const detail = await loadLessonDetail(options.database!, id);
-        if (!detail) throw new Error("Lesson could not be read.");
-        return toSummary(detail);
-      }),
-    );
-    return c.json(lessonListResponseSchema.parse({ items }));
-  });
+        .where(filteredStatus ? eq(lesson.status, filteredStatus) : undefined)
+        .orderBy(asc(lesson.chapter), desc(lesson.version));
+      const items = await Promise.all(
+        rows.map(async ({ id }) => {
+          const detail = await loadLessonDetail(options.database!, id);
+          if (!detail) throw new Error("Lesson could not be read.");
+          return toSummary(detail);
+        }),
+      );
+      return c.json(lessonListResponseSchema.parse({ items }));
+    },
+  );
 
   app.get("/internal/sources", async (c) => {
     if (!options.database) {
@@ -612,61 +584,57 @@ export function createDataApp(
     );
   });
 
-  app.get("/internal/lessons/:lessonId", async (c) => {
-    const id = parsePositiveId(c.req.param("lessonId"));
-    if (!id)
-      return problem(
-        c,
-        422,
-        "invalid_lesson_id",
-        "Lesson ID must be a positive integer.",
-      );
-    if (!options.database) {
-      return problem(
-        c,
-        500,
-        "internal_error",
-        "The request could not be completed.",
-      );
-    }
+  app.get(
+    "/internal/lessons/:lessonId",
+    validateRequest("param", lessonIdParamsSchema),
+    validateRequest("query", lessonReadQuerySchema),
+    async (c) => {
+      const { lessonId: id } = c.req.valid("param") as { lessonId: number };
+      if (!options.database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
 
-    const languageCode = c.req.query("language");
-    const status = c.req.query("status");
-    if (status && !["DRAFT", "PUBLISHED", "ARCHIVED"].includes(status))
-      return problem(c, 422, "validation_failed", "Status is invalid.");
-    const filteredStatus = status as
-      | "DRAFT"
-      | "PUBLISHED"
-      | "ARCHIVED"
-      | undefined;
-    if (languageCode) {
-      const [supported] = await options.database
-        .select({ code: language.code })
-        .from(language)
-        .where(eq(language.code, languageCode));
-      if (!supported)
-        return problem(c, 422, "unsupported_language", "Language is not supported.");
-    }
-    const detail = await loadLessonDetail(options.database, id);
-    if (!detail)
-      return problem(c, 404, "lesson_not_found", "Lesson was not found.");
-    if (languageCode) {
-      if (detail.status !== (filteredStatus ?? "PUBLISHED"))
+      const { language: languageCode, status: filteredStatus } = c.req.valid(
+        "query",
+      ) as { language?: string; status?: LessonStatus };
+      if (languageCode !== undefined) {
+        const [supported] = await options.database
+          .select({ code: language.code })
+          .from(language)
+          .where(eq(language.code, languageCode));
+        if (!supported)
+          return problem(
+            c,
+            422,
+            "unsupported_language",
+            "Language is not supported.",
+          );
+      }
+      const detail = await loadLessonDetail(options.database, id);
+      if (!detail)
         return problem(c, 404, "lesson_not_found", "Lesson was not found.");
-      const text = detail.lessonTexts.find((item) => item.languageCode === languageCode);
-      if (!text)
-        return problem(c, 404, "lesson_text_not_found", "Lesson Text was not found.");
-      return c.json(
-        mobileLessonDetailSchema.parse({
-          id: detail.id, chapter: detail.chapter, version: detail.version,
-          languageCode, title: text.title, content: text.content,
-          availableLanguageCodes: detail.availableLanguageCodes,
-          lessonSources: detail.lessonSources,
-        }),
-      );
-    }
-    return c.json(lessonDetailSchema.parse(detail));
-  });
+      if (filteredStatus && detail.status !== filteredStatus)
+        return problem(c, 404, "lesson_not_found", "Lesson was not found.");
+      if (languageCode) {
+        const text = detail.lessonTexts.find(
+          (item) => item.languageCode === languageCode,
+        );
+        if (!text)
+          return problem(
+            c,
+            404,
+            "lesson_text_not_found",
+            "Lesson Text was not found.",
+          );
+      }
+      return c.json(lessonDetailSchema.parse(detail));
+    },
+  );
 
   return app;
 }
@@ -735,12 +703,59 @@ function toSource(row: { id: number; url: string; publishedAt: Date | null }) {
   };
 }
 
-function isAllowedLessonTransition(
-  from: "DRAFT" | "PUBLISHED" | "ARCHIVED",
-  to: "DRAFT" | "PUBLISHED" | "ARCHIVED",
-) {
+function isAllowedLessonTransition(from: LessonStatus, to: LessonStatus) {
   return (
     (from === "DRAFT" && (to === "PUBLISHED" || to === "ARCHIVED")) ||
     (from === "PUBLISHED" && to === "ARCHIVED")
   );
+}
+
+function isPostgresError(
+  error: unknown,
+  code: string,
+  constraint?: string,
+): boolean {
+  let candidate = error;
+  while (candidate && typeof candidate === "object") {
+    if (
+      "code" in candidate &&
+      candidate.code === code &&
+      (!constraint ||
+        ("constraint" in candidate && candidate.constraint === constraint))
+    ) {
+      return true;
+    }
+    candidate = "cause" in candidate ? candidate.cause : undefined;
+  }
+  return false;
+}
+
+function isEditableLesson(status: LessonStatus) {
+  return status === "DRAFT";
+}
+
+async function lockEditableDraft(transaction: DataTransaction, id: number) {
+  const [existing] = await transaction
+    .select({ status: lesson.status, updatedAt: lesson.updatedAt })
+    .from(lesson)
+    .where(eq(lesson.id, id))
+    .for("update");
+  if (!existing) return "lesson_not_found" as const;
+  if (!isEditableLesson(existing.status)) return "lesson_not_editable" as const;
+  return existing;
+}
+
+async function touchLesson(
+  transaction: DataTransaction,
+  id: number,
+  updatedAt: Date,
+) {
+  await transaction
+    .update(lesson)
+    .set({ updatedAt: nextUpdatedAt(updatedAt) })
+    .where(eq(lesson.id, id));
+}
+
+function nextUpdatedAt(updatedAt: Date) {
+  return new Date(Math.max(Date.now(), updatedAt.getTime() + 1));
 }

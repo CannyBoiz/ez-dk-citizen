@@ -358,6 +358,95 @@ test("internal Lesson Source operations replace locators and detach safely", asy
   );
 });
 
+test("internal localized reads filter by status and return Lesson aggregates", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const createLesson = async (chapter: number, version: number) => {
+    const response = await app.request("/internal/lessons", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ chapter, version }),
+    });
+    assert.equal(response.status, 201);
+    return response.json();
+  };
+
+  const published = await createLesson(50, 1);
+  const localized = await app.request(
+    `/internal/lessons/${published.id}/texts/th`,
+    {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ title: "บท", content: "เนื้อหา" }),
+    },
+  );
+  assert.equal(localized.status, 200);
+  const publish = await app.request(`/internal/lessons/${published.id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ status: "PUBLISHED" }),
+  });
+  assert.equal(publish.status, 200);
+
+  const hidden = await createLesson(51, 1);
+  const filteredList = await app.request(
+    "/internal/lessons?status=PUBLISHED&language=th",
+    { headers: { Authorization: "Bearer data-token" } },
+  );
+  assert.equal(filteredList.status, 200);
+  const filteredItems = (await filteredList.json()).items;
+  assert.deepEqual(
+    filteredItems.find((item: { id: number }) => item.id === published.id),
+    {
+      id: published.id,
+      chapter: 50,
+      version: 1,
+      status: "PUBLISHED",
+      createdAt: published.createdAt,
+      updatedAt: (await publish.json()).updatedAt,
+      availableLanguageCodes: ["th"],
+      lessonTexts: [{ languageCode: "th", title: "บท", content: "เนื้อหา" }],
+      lessonSources: [],
+    },
+  );
+
+  const hiddenDetail = await app.request(
+    `/internal/lessons/${hidden.id}?status=PUBLISHED`,
+    { headers: { Authorization: "Bearer data-token" } },
+  );
+  assert.equal(hiddenDetail.status, 404);
+  assert.equal((await hiddenDetail.json()).code, "lesson_not_found");
+
+  const statusOnlyList = await app.request(
+    "/internal/lessons?status=PUBLISHED",
+    {
+      headers: { Authorization: "Bearer data-token" },
+    },
+  );
+  assert.equal(statusOnlyList.status, 200);
+  assert.equal(
+    (await statusOnlyList.json()).items.some(
+      (item: { id: number }) => item.id === hidden.id,
+    ),
+    false,
+  );
+
+  for (const path of [
+    "/internal/lessons?status=",
+    `/internal/lessons/${published.id}?language=`,
+  ]) {
+    const response = await app.request(path, {
+      headers: { Authorization: "Bearer data-token" },
+    });
+    assert.equal(response.status, 422);
+    const details = await response.json();
+    assert.equal(details.code, "validation_failed");
+    assert.ok(details.errors?.length);
+  }
+});
+
 test("internal Lesson patches enforce lifecycle and immutable history", async () => {
   const headers = {
     Authorization: "Bearer data-token",

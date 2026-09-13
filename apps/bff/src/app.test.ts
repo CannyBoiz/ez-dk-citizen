@@ -14,6 +14,28 @@ import {
   type DataServiceClient,
 } from "./data-service-client.js";
 
+function createTestDataServiceClient(
+  overrides: Partial<DataServiceClient>,
+): DataServiceClient {
+  const unused = async (): Promise<never> => {
+    throw new Error("not used");
+  };
+  return {
+    createLesson: unused,
+    upsertLessonText: unused,
+    listLessons: unused,
+    getLesson: unused,
+    patchLesson: unused,
+    createSource: unused,
+    listSources: unused,
+    upsertLessonSource: unused,
+    deleteLessonSource: unused,
+    listPublishedLessons: unused,
+    getPublishedLesson: unused,
+    ...overrides,
+  };
+}
+
 test("BFF health is independent of the Data Service", async () => {
   let checks = 0;
   const app = createBffApp(async () => {
@@ -51,6 +73,30 @@ test("BFF readiness reflects the Data Service", async (context) => {
   });
 });
 
+test("BFF rejects write bodies above 1 MiB with Problem Details", async () => {
+  const app = createBffApp(async () => undefined, {
+    adminApiToken: "admin-token",
+  });
+  const response = await app.request("/api/admin/lessons", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      chapter: 1,
+      version: 1,
+      padding: "x".repeat(1024 * 1024),
+    }),
+  });
+
+  assert.equal(response.status, 422);
+  assert.equal(
+    problemDetailsSchema.parse(await response.json()).code,
+    "body_too_large",
+  );
+});
+
 test("admin Lesson routes authenticate and use the Data Service client seam", async () => {
   const detail = lessonDetailSchema.parse({
     id: 7,
@@ -73,12 +119,9 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
     updatedAt: detail.updatedAt,
     availableLanguageCodes: detail.availableLanguageCodes,
   };
-  const client: DataServiceClient = {
+  const client = createTestDataServiceClient({
     async createLesson(input, requestId) {
       calls.push(`create:${input.chapter}:${input.version}:${requestId}`);
-      return detail;
-    },
-    async upsertLessonText() {
       return detail;
     },
     async listLessons(requestId) {
@@ -89,26 +132,7 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
       calls.push(`get:${id}:${requestId}`);
       return detail;
     },
-    async patchLesson() {
-      return detail;
-    },
-    async createSource() {
-      return sourceResponseSchema.parse({
-        id: 1,
-        url: "https://example.com",
-        publishedAt: null,
-      });
-    },
-    async listSources() {
-      return { items: [] };
-    },
-    async upsertLessonSource() {
-      return detail;
-    },
-    async deleteLessonSource() {},
-    async listPublishedLessons() { return { items: [] }; },
-    async getPublishedLesson() { throw new Error("not used"); },
-  };
+  });
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
     adminOrigins: ["https://admin.example"],
@@ -189,37 +213,11 @@ test("BFF preserves safe Data Service resource failures", async () => {
   });
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
-    dataServiceClient: {
-      async createLesson() {
-        throw new DataServiceError(details);
-      },
-      async upsertLessonText() {
-        throw new DataServiceError(details);
-      },
-      async listLessons() {
-        throw new DataServiceError(details);
-      },
+    dataServiceClient: createTestDataServiceClient({
       async getLesson() {
         throw new DataServiceError(details);
       },
-      async patchLesson() {
-        throw new DataServiceError(details);
-      },
-      async createSource() {
-        throw new DataServiceError(details);
-      },
-      async listSources() {
-        throw new DataServiceError(details);
-      },
-      async upsertLessonSource() {
-        throw new DataServiceError(details);
-      },
-      async deleteLessonSource() {
-        throw new DataServiceError(details);
-      },
-      async listPublishedLessons() { throw new DataServiceError(details); },
-      async getPublishedLesson() { throw new DataServiceError(details); },
-    },
+    }),
   });
 
   const response = await app.request("/api/admin/lessons/99", {
@@ -246,19 +244,7 @@ test("BFF upserts a localized Lesson Text through its client seam", async () => 
     lessonSources: [],
   });
   const calls: string[] = [];
-  const client = {
-    async createLesson() {
-      return detail;
-    },
-    async listLessons() {
-      return { items: [] };
-    },
-    async getLesson() {
-      return detail;
-    },
-    async patchLesson() {
-      return detail;
-    },
+  const client = createTestDataServiceClient({
     async upsertLessonText(
       lessonId: number,
       languageCode: string,
@@ -270,23 +256,7 @@ test("BFF upserts a localized Lesson Text through its client seam", async () => 
       );
       return detail;
     },
-    async createSource() {
-      return sourceResponseSchema.parse({
-        id: 1,
-        url: "https://example.com",
-        publishedAt: null,
-      });
-    },
-    async listSources() {
-      return { items: [] };
-    },
-    async upsertLessonSource() {
-      return detail;
-    },
-    async deleteLessonSource() {},
-    async listPublishedLessons() { return { items: [] }; },
-    async getPublishedLesson() { throw new Error("not used"); },
-  };
+  });
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
     dataServiceClient: client,
@@ -315,6 +285,7 @@ test("BFF upserts a localized Lesson Text through its client seam", async () => 
     body: JSON.stringify({ title: "บท", content: "เนื้อหา" }),
   });
   assert.equal(invalidId.status, 422);
+  assert.ok(problemDetailsSchema.parse(await invalidId.json()).errors?.length);
 });
 
 test("BFF hides unrecognized downstream failures", async () => {
@@ -329,37 +300,11 @@ test("BFF hides unrecognized downstream failures", async () => {
   });
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
-    dataServiceClient: {
-      async createLesson() {
-        throw new DataServiceError(details);
-      },
-      async upsertLessonText() {
-        throw new DataServiceError(details);
-      },
-      async listLessons() {
-        throw new DataServiceError(details);
-      },
+    dataServiceClient: createTestDataServiceClient({
       async getLesson() {
         throw new DataServiceError(details);
       },
-      async patchLesson() {
-        throw new DataServiceError(details);
-      },
-      async createSource() {
-        throw new DataServiceError(details);
-      },
-      async listSources() {
-        throw new DataServiceError(details);
-      },
-      async upsertLessonSource() {
-        throw new DataServiceError(details);
-      },
-      async deleteLessonSource() {
-        throw new DataServiceError(details);
-      },
-      async listPublishedLessons() { throw new DataServiceError(details); },
-      async getPublishedLesson() { throw new DataServiceError(details); },
-    },
+    }),
   });
 
   const response = await app.request("/api/admin/lessons/99", {
@@ -387,22 +332,7 @@ test("BFF creates and lists canonical Sources through its client seam", async ()
       requestId: "downstream",
     }),
   );
-  const client: DataServiceClient = {
-    async createLesson() {
-      throw new Error("not used");
-    },
-    async upsertLessonText() {
-      throw new Error("not used");
-    },
-    async listLessons() {
-      return { items: [] };
-    },
-    async getLesson() {
-      throw new Error("not used");
-    },
-    async patchLesson() {
-      throw new Error("not used");
-    },
+  const client = createTestDataServiceClient({
     async createSource(input, requestId) {
       if (input.url.endsWith("conflict")) throw conflict;
       calls.push(`${input.url}:${input.publishedAt}:${requestId}`);
@@ -412,15 +342,7 @@ test("BFF creates and lists canonical Sources through its client seam", async ()
       calls.push(`list:${requestId}`);
       return { items: [source] };
     },
-    async upsertLessonSource() {
-      throw new Error("not used");
-    },
-    async deleteLessonSource() {
-      throw new Error("not used");
-    },
-    async listPublishedLessons() { return { items: [] }; },
-    async getPublishedLesson() { throw new Error("not used"); },
-  };
+  });
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
     dataServiceClient: client,
@@ -550,28 +472,7 @@ test("BFF replaces and detaches Draft Lesson Sources through its client seam", a
     }),
   );
   const calls: string[] = [];
-  const client: DataServiceClient = {
-    async createLesson() {
-      throw new Error("not used");
-    },
-    async upsertLessonText() {
-      throw new Error("not used");
-    },
-    async listLessons() {
-      return { items: [] };
-    },
-    async getLesson() {
-      return detail;
-    },
-    async patchLesson() {
-      return detail;
-    },
-    async createSource() {
-      throw new Error("not used");
-    },
-    async listSources() {
-      return { items: [] };
-    },
+  const client = createTestDataServiceClient({
     async upsertLessonSource(lessonId, sourceId, input, requestId) {
       if (sourceId === 99) throw sourceNotFound;
       calls.push(`${lessonId}:${sourceId}:${input.pageFrom}:${requestId}`);
@@ -580,9 +481,7 @@ test("BFF replaces and detaches Draft Lesson Sources through its client seam", a
     async deleteLessonSource(lessonId, sourceId, requestId) {
       calls.push(`delete:${lessonId}:${sourceId}:${requestId}`);
     },
-    async listPublishedLessons() { return { items: [] }; },
-    async getPublishedLesson() { throw new Error("not used"); },
-  };
+  });
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
     dataServiceClient: client,
@@ -675,37 +574,13 @@ test("BFF patches Lessons through its client seam", async () => {
     }),
   );
   const calls: string[] = [];
-  const client: DataServiceClient = {
-    async createLesson() {
-      throw new Error("not used");
-    },
-    async upsertLessonText() {
-      throw new Error("not used");
-    },
-    async listLessons() {
-      return { items: [] };
-    },
-    async getLesson() {
-      return detail;
-    },
+  const client = createTestDataServiceClient({
     async patchLesson(id, input, requestId) {
       if (input.chapter === 99) throw conflict;
       calls.push(`${id}:${input.chapter}:${input.status}:${requestId}`);
       return detail;
     },
-    async createSource() {
-      throw new Error("not used");
-    },
-    async listSources() {
-      return { items: [] };
-    },
-    async upsertLessonSource() {
-      return detail;
-    },
-    async deleteLessonSource() {},
-    async listPublishedLessons() { return { items: [] }; },
-    async getPublishedLesson() { throw new Error("not used"); },
-  };
+  });
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
     dataServiceClient: client,
@@ -747,4 +622,163 @@ test("BFF patches Lessons through its client seam", async () => {
     (await publishedConflict.json()).code,
     "published_lesson_conflict",
   );
+});
+
+test("BFF composes localized mobile responses from Lesson aggregates", async () => {
+  const detail = lessonDetailSchema.parse({
+    id: 7,
+    chapter: 2,
+    version: 1,
+    status: "PUBLISHED",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:01:00.000Z",
+    availableLanguageCodes: ["da", "th"],
+    lessonTexts: [
+      { languageCode: "da", title: "Dansk", content: "Indhold" },
+      { languageCode: "th", title: "ไทย", content: "เนื้อหา" },
+    ],
+    lessonSources: [
+      {
+        id: 3,
+        url: "https://example.com/source",
+        publishedAt: null,
+        pageFrom: 2,
+        pageTo: 3,
+        sectionReference: null,
+      },
+    ],
+  });
+  const nextLesson = lessonDetailSchema.parse({
+    ...detail,
+    id: 8,
+    chapter: 3,
+    lessonTexts: [{ languageCode: "th", title: "ถัดไป", content: "ต่อไป" }],
+  });
+  const untranslatedLesson = lessonDetailSchema.parse({
+    ...detail,
+    id: 9,
+    chapter: 4,
+    lessonTexts: [
+      { languageCode: "da", title: "Kun dansk", content: "Indhold" },
+    ],
+  });
+  const unsupportedLanguage = new DataServiceError(
+    problemDetailsSchema.parse({
+      type: "https://ez-dk-citizen.invalid/problems/unsupported_language",
+      title: "Unprocessable Content",
+      status: 422,
+      detail: "Language is not supported.",
+      instance: "/internal/lessons",
+      code: "unsupported_language",
+      requestId: "downstream",
+    }),
+  );
+  const calls: string[] = [];
+  const client = createTestDataServiceClient({
+    async listPublishedLessons(languageCode: string, requestId: string) {
+      calls.push(`list:${languageCode}:${requestId}`);
+      if (languageCode === "xx") throw unsupportedLanguage;
+      return { items: [detail, nextLesson, untranslatedLesson] };
+    },
+    async getPublishedLesson(
+      id: number,
+      languageCode: string,
+      requestId: string,
+    ) {
+      calls.push(`detail:${id}:${languageCode}:${requestId}`);
+      return detail;
+    },
+  });
+  const app = createBffApp(async () => undefined, {
+    dataServiceClient: client,
+  });
+
+  const list = await app.request("/api/mobile/lessons", {
+    headers: { "X-Request-ID": "mobile-list" },
+  });
+  assert.equal(list.status, 200);
+  assert.deepEqual(await list.json(), {
+    items: [
+      {
+        id: 7,
+        chapter: 2,
+        version: 1,
+        languageCode: "th",
+        title: "ไทย",
+      },
+      {
+        id: 8,
+        chapter: 3,
+        version: 1,
+        languageCode: "th",
+        title: "ถัดไป",
+      },
+    ],
+  });
+
+  const explicitList = await app.request("/api/mobile/lessons?language=da", {
+    headers: { "X-Request-ID": "mobile-da" },
+  });
+  assert.equal(explicitList.status, 200);
+  assert.deepEqual(await explicitList.json(), {
+    items: [
+      {
+        id: 7,
+        chapter: 2,
+        version: 1,
+        languageCode: "da",
+        title: "Dansk",
+      },
+      {
+        id: 9,
+        chapter: 4,
+        version: 1,
+        languageCode: "da",
+        title: "Kun dansk",
+      },
+    ],
+  });
+
+  const inspected = await app.request("/api/mobile/lessons/7?language=da", {
+    headers: { "X-Request-ID": "mobile-detail" },
+  });
+  assert.equal(inspected.status, 200);
+  assert.deepEqual(await inspected.json(), {
+    id: 7,
+    chapter: 2,
+    version: 1,
+    languageCode: "da",
+    title: "Dansk",
+    content: "Indhold",
+    availableLanguageCodes: ["da", "th"],
+    lessonSources: detail.lessonSources,
+  });
+
+  const emptyLanguage = await app.request("/api/mobile/lessons?language=");
+  assert.equal(emptyLanguage.status, 422);
+  assert.ok(
+    problemDetailsSchema.parse(await emptyLanguage.json()).errors?.length,
+  );
+  const unsupported = await app.request("/api/mobile/lessons?language=xx");
+  assert.equal(unsupported.status, 422);
+  assert.equal((await unsupported.json()).code, "unsupported_language");
+  assert.deepEqual(calls.slice(0, 3), [
+    "list:th:mobile-list",
+    "list:da:mobile-da",
+    "detail:7:da:mobile-detail",
+  ]);
+  assert.match(calls[3]!, /^list:xx:[\da-f-]{36}$/);
+});
+
+test("BFF unmatched routes return Problem Details", async () => {
+  const app = createBffApp(async () => undefined);
+
+  const response = await app.request("/missing");
+
+  assert.equal(response.status, 404);
+  assert.equal(
+    response.headers.get("content-type"),
+    "application/problem+json",
+  );
+  assert.equal((await response.json()).code, "not_found");
 });

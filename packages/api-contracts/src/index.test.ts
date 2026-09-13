@@ -5,9 +5,12 @@ import {
   createSourceRequestSchema,
   createLessonRequestSchema,
   lessonDetailSchema,
+  lessonIdParamsSchema,
+  lessonReadQuerySchema,
   livenessResponseSchema,
   readinessResponseSchema,
   patchLessonRequestSchema,
+  problemDetailsSchema,
   upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
 } from "./index.js";
@@ -21,6 +24,21 @@ test("health contracts reject response drift", () => {
   });
   assert.throws(() => livenessResponseSchema.parse({ status: "unavailable" }));
   assert.throws(() => readinessResponseSchema.parse({ status: "unknown" }));
+});
+
+test("path, query, and Problem Details contracts are strict", () => {
+  assert.deepEqual(lessonIdParamsSchema.parse({ lessonId: "7" }), {
+    lessonId: 7,
+  });
+  assert.deepEqual(
+    lessonReadQuerySchema.parse({ status: "PUBLISHED", language: "th" }),
+    { status: "PUBLISHED", language: "th" },
+  );
+  assert.throws(() => lessonIdParamsSchema.parse({ lessonId: "0" }));
+  assert.throws(() => lessonReadQuerySchema.parse({ status: "" }));
+  assert.throws(() =>
+    problemDetailsSchema.parse({ status: 422, code: "validation_failed" }),
+  );
 });
 
 test("Lesson transport contracts are strict and keep database fields private", () => {

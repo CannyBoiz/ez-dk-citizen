@@ -1,6 +1,13 @@
 import { z } from "zod";
 
+export * from "./http.js";
+
 const positiveInteger = z.number().int().positive();
+const positiveId = z
+  .string()
+  .regex(/^[1-9]\d*$/)
+  .transform(Number)
+  .refine(Number.isSafeInteger);
 const timestamp = z.iso.datetime({ offset: true });
 const nonBlankText = z.string().refine((value) => value.trim().length > 0);
 const sourceUrl = z
@@ -18,6 +25,22 @@ export const readinessResponseSchema = z.strictObject({
 });
 
 export const lessonStatusSchema = z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]);
+
+export const lessonIdParamsSchema = z.strictObject({ lessonId: positiveId });
+export const lessonSourceParamsSchema = z.strictObject({
+  lessonId: positiveId,
+  sourceId: positiveId,
+});
+export const lessonTextParamsSchema = z.strictObject({
+  lessonId: positiveId,
+  languageCode: z.string().min(1),
+});
+export const languageQuerySchema = z.strictObject({
+  language: z.string().min(1).optional(),
+});
+export const lessonReadQuerySchema = languageQuerySchema.extend({
+  status: lessonStatusSchema.optional(),
+});
 
 export const createLessonRequestSchema = z.strictObject({
   chapter: positiveInteger,
@@ -88,7 +111,7 @@ export const lessonTextResponseSchema = z.strictObject({
 
 export const lessonSourceResponseSchema = z.strictObject({
   id: positiveInteger,
-  url: z.string().url(),
+  url: z.url(),
   publishedAt: timestamp.nullable(),
   pageFrom: positiveInteger.nullable(),
   pageTo: positiveInteger.nullable(),
@@ -103,6 +126,10 @@ export const lessonDetailSchema = z.strictObject({
 
 export const lessonListResponseSchema = z.strictObject({
   items: z.array(lessonSummarySchema),
+});
+
+export const lessonDetailListResponseSchema = z.strictObject({
+  items: z.array(lessonDetailSchema),
 });
 
 export const mobileLessonSummarySchema = z.strictObject({
@@ -159,6 +186,9 @@ export type LessonStatus = z.infer<typeof lessonStatusSchema>;
 export type LessonSummary = z.infer<typeof lessonSummarySchema>;
 export type LessonDetail = z.infer<typeof lessonDetailSchema>;
 export type LessonListResponse = z.infer<typeof lessonListResponseSchema>;
+export type LessonDetailListResponse = z.infer<
+  typeof lessonDetailListResponseSchema
+>;
 export type MobileLessonDetail = z.infer<typeof mobileLessonDetailSchema>;
 export type MobileLessonListResponse = z.infer<
   typeof mobileLessonListResponseSchema

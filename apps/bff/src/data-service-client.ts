@@ -2,9 +2,8 @@ import {
   createSourceRequestSchema,
   createLessonRequestSchema,
   lessonDetailSchema,
+  lessonDetailListResponseSchema,
   lessonListResponseSchema,
-  mobileLessonDetailSchema,
-  mobileLessonListResponseSchema,
   patchLessonRequestSchema,
   problemDetailsSchema,
   sourceListResponseSchema,
@@ -14,9 +13,8 @@ import {
   type CreateLessonRequest,
   type CreateSourceRequest,
   type LessonDetail,
+  type LessonDetailListResponse,
   type LessonListResponse,
-  type MobileLessonDetail,
-  type MobileLessonListResponse,
   type PatchLessonRequest,
   type ProblemDetails,
   type SourceListResponse,
@@ -59,8 +57,15 @@ export interface DataServiceClient {
     sourceId: number,
     requestId: string,
   ): Promise<void>;
-  listPublishedLessons(languageCode: string, requestId: string): Promise<MobileLessonListResponse>;
-  getPublishedLesson(id: number, languageCode: string, requestId: string): Promise<MobileLessonDetail>;
+  listPublishedLessons(
+    languageCode: string,
+    requestId: string,
+  ): Promise<LessonDetailListResponse>;
+  getPublishedLesson(
+    id: number,
+    languageCode: string,
+    requestId: string,
+  ): Promise<LessonDetail>;
 }
 
 export class DataServiceError extends Error {
@@ -79,107 +84,111 @@ export function createDataServiceClient(
   timeoutMs = 2_000,
 ): DataServiceClient {
   const base = new URL(baseUrl);
+  const call = <T>(
+    path: string,
+    method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT",
+    requestId: string,
+    body: unknown,
+    parse: (value: unknown) => T,
+  ) =>
+    request(
+      new URL(path, base),
+      method,
+      token,
+      requestId,
+      body,
+      parse,
+      timeoutMs,
+    );
 
   return {
     createLesson: (input, requestId) =>
-      request(
-        new URL("/internal/lessons", base),
+      call(
+        "/internal/lessons",
         "POST",
-        token,
         requestId,
         createLessonRequestSchema.parse(input),
         lessonDetailSchema.parse,
-        timeoutMs,
       ),
     upsertLessonText: (lessonId, languageCode, input, requestId) =>
-      request(
-        new URL(`/internal/lessons/${lessonId}/texts/${languageCode}`, base),
+      call(
+        `/internal/lessons/${lessonId}/texts/${languageCode}`,
         "PUT",
-        token,
         requestId,
         upsertLessonTextRequestSchema.parse(input),
         lessonDetailSchema.parse,
-        timeoutMs,
       ),
     listLessons: (requestId) =>
-      request(
-        new URL("/internal/lessons", base),
+      call(
+        "/internal/lessons",
         "GET",
-        token,
         requestId,
         undefined,
         lessonListResponseSchema.parse,
-        timeoutMs,
       ),
     getLesson: (id, requestId) =>
-      request(
-        new URL(`/internal/lessons/${id}`, base),
+      call(
+        `/internal/lessons/${id}`,
         "GET",
-        token,
         requestId,
         undefined,
         lessonDetailSchema.parse,
-        timeoutMs,
       ),
     patchLesson: (id, input, requestId) =>
-      request(
-        new URL(`/internal/lessons/${id}`, base),
+      call(
+        `/internal/lessons/${id}`,
         "PATCH",
-        token,
         requestId,
         patchLessonRequestSchema.parse(input),
         lessonDetailSchema.parse,
-        timeoutMs,
       ),
     createSource: (input, requestId) =>
-      request(
-        new URL("/internal/sources", base),
+      call(
+        "/internal/sources",
         "POST",
-        token,
         requestId,
         createSourceRequestSchema.parse(input),
         sourceResponseSchema.parse,
-        timeoutMs,
       ),
     listSources: (requestId) =>
-      request(
-        new URL("/internal/sources", base),
+      call(
+        "/internal/sources",
         "GET",
-        token,
         requestId,
         undefined,
         sourceListResponseSchema.parse,
-        timeoutMs,
       ),
     upsertLessonSource: (lessonId, sourceId, input, requestId) =>
-      request(
-        new URL(`/internal/lessons/${lessonId}/sources/${sourceId}`, base),
+      call(
+        `/internal/lessons/${lessonId}/sources/${sourceId}`,
         "PUT",
-        token,
         requestId,
         upsertLessonSourceRequestSchema.parse(input),
         lessonDetailSchema.parse,
-        timeoutMs,
       ),
     deleteLessonSource: (lessonId, sourceId, requestId) =>
-      request(
-        new URL(`/internal/lessons/${lessonId}/sources/${sourceId}`, base),
+      call(
+        `/internal/lessons/${lessonId}/sources/${sourceId}`,
         "DELETE",
-        token,
         requestId,
         undefined,
         () => undefined,
-        timeoutMs,
       ),
     listPublishedLessons: (languageCode, requestId) =>
-      request(
-        new URL(`/internal/lessons?status=PUBLISHED&language=${encodeURIComponent(languageCode)}`, base),
-        "GET", token, requestId, undefined, mobileLessonListResponseSchema.parse, timeoutMs,
+      call(
+        `/internal/lessons?status=PUBLISHED&language=${encodeURIComponent(languageCode)}`,
+        "GET",
+        requestId,
+        undefined,
+        lessonDetailListResponseSchema.parse,
       ),
     getPublishedLesson: (id, languageCode, requestId) =>
-      request(
-        new URL(`/internal/lessons/${id}?status=PUBLISHED&language=${encodeURIComponent(languageCode)}`, base),
-        "GET", token, requestId, undefined, mobileLessonDetailSchema.parse, timeoutMs,
+      call(
+        `/internal/lessons/${id}?status=PUBLISHED&language=${encodeURIComponent(languageCode)}`,
+        "GET",
+        requestId,
+        undefined,
+        lessonDetailSchema.parse,
       ),
   };
 }
@@ -208,7 +217,9 @@ async function request<T>(
     });
   } catch (error) {
     if (signal.aborted || isAbortError(error)) {
-      throw new DataServiceError(unavailableProblem("data_service_timeout", 504));
+      throw new DataServiceError(
+        unavailableProblem("data_service_timeout", 504),
+      );
     }
     throw new DataServiceError(unavailableProblem("data_service_unavailable"));
   }
@@ -224,26 +235,34 @@ async function request<T>(
         unavailableProblem("data_service_timeout", 504),
       );
     }
-    throw new DataServiceError(unavailableProblem("invalid_data_service_response"));
+    throw new DataServiceError(
+      unavailableProblem("invalid_data_service_response"),
+    );
   }
   if (!response.ok) {
     const details = problemDetailsSchema.safeParse(payload);
     if (details.success && details.data.status === response.status) {
       throw new DataServiceError(details.data);
     }
-    throw new DataServiceError(unavailableProblem("invalid_data_service_response"));
+    throw new DataServiceError(
+      unavailableProblem("invalid_data_service_response"),
+    );
   }
 
   try {
     return parse(payload);
   } catch {
-    throw new DataServiceError(unavailableProblem("invalid_data_service_response"));
+    throw new DataServiceError(
+      unavailableProblem("invalid_data_service_response"),
+    );
   }
 }
 
 function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException &&
-    (error.name === "TimeoutError" || error.name === "AbortError");
+  return (
+    error instanceof DOMException &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  );
 }
 
 function unavailableProblem(code: string, status = 502): ProblemDetails {

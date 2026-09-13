@@ -55,12 +55,13 @@ workspaces. Both application containers listen on configurable `PORT=3000`.
 | `pnpm test`             | Run Docker-free contract and service-boundary tests.                      |
 | `pnpm test:dev`         | Smoke-test the isolated merged development Compose topology.              |
 | `pnpm test:integration` | Build, migrate, and fully test an isolated PostgreSQL/Data Service stack. |
+| `pnpm test:e2e`         | Run the isolated BFF-to-PostgreSQL Stage 2 tracer.                        |
 
-`pnpm test:integration` is also the end-to-end tracer: it creates a temporary
-Compose project and volume, proves the admin-to-mobile flow, then removes both.
-It never uses the persistent development database. Use `pnpm db:down` to stop
-development services; add `--volumes` manually only when intentionally
-discarding local development data.
+Both container workflows create a temporary Compose project and volume, then
+remove both. `pnpm test:e2e` proves the admin-to-mobile flow; neither command
+uses the persistent development database. Use `pnpm db:down` to stop development
+services; add `--volumes` manually only when intentionally discarding local
+development data.
 
 Both services expose unauthenticated `GET /health` liveness and `GET /ready`
 dependency-readiness endpoints. The Data Service readiness check reaches

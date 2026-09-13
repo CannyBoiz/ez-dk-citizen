@@ -794,28 +794,28 @@ Never persist the temporary playback URL.
 
 # 12. PoC tech stack
 
-| Concern | PoC choice |
-|---|---|
-| Admin frontend | React + Vite |
-| Mobile | React Native + Expo |
-| Public backend | Hono + TypeScript |
-| Data service | Hono + TypeScript |
-| ORM | Drizzle ORM |
-| Migration tooling | Drizzle Kit |
-| Database | PostgreSQL |
-| Object storage | AWS S3 **or** Azure Blob Storage |
-| TTS for PoC | ElevenLabs web app manually |
-| Future TTS | ElevenLabs API |
-| Runtime | Node.js |
-| Package manager | pnpm |
-| Hosting | Hetzner CX23 VPS |
-| Containers | Docker + Docker Compose |
-| Reverse proxy | Caddy |
-| Admin hosting | Cloudflare Pages |
-| DNS | Cloudflare |
-| CI/CD | GitHub Actions |
-| Registry | GHCR |
-| VPS deployment | SSH + Docker Compose |
+| Concern           | PoC choice                       |
+| ----------------- | -------------------------------- |
+| Admin frontend    | React + Vite                     |
+| Mobile            | React Native + Expo              |
+| Public backend    | Hono + TypeScript                |
+| Data service      | Hono + TypeScript                |
+| ORM               | Drizzle ORM                      |
+| Migration tooling | Drizzle Kit                      |
+| Database          | PostgreSQL                       |
+| Object storage    | AWS S3 **or** Azure Blob Storage |
+| TTS for PoC       | ElevenLabs web app manually      |
+| Future TTS        | ElevenLabs API                   |
+| Runtime           | Node.js                          |
+| Package manager   | pnpm                             |
+| Hosting           | Hetzner CX23 VPS                 |
+| Containers        | Docker + Docker Compose          |
+| Reverse proxy     | Caddy                            |
+| Admin hosting     | Cloudflare Pages                 |
+| DNS               | Cloudflare                       |
+| CI/CD             | GitHub Actions                   |
+| Registry          | GHCR                             |
+| VPS deployment    | SSH + Docker Compose             |
 
 ---
 
