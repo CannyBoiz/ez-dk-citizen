@@ -4,6 +4,8 @@ import { test } from "node:test";
 import {
   createSourceRequestSchema,
   createLessonRequestSchema,
+  createPendingMediaAssetRequestSchema,
+  createUploadIntentRequestSchema,
   lessonDetailSchema,
   lessonIdParamsSchema,
   lessonReadQuerySchema,
@@ -13,6 +15,7 @@ import {
   problemDetailsSchema,
   upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
+  uploadIntentResponseSchema,
 } from "./index.js";
 
 test("health contracts reject response drift", () => {
@@ -38,6 +41,61 @@ test("path, query, and Problem Details contracts are strict", () => {
   assert.throws(() => lessonReadQuerySchema.parse({ status: "" }));
   assert.throws(() =>
     problemDetailsSchema.parse({ status: 422, code: "validation_failed" }),
+  );
+});
+
+test("Upload Intent contracts accept only one safe declared MP3", () => {
+  const input = {
+    lessonId: 7,
+    languageCode: "th",
+    originalFilename: "lesson.mp3",
+    contentType: "audio/mpeg",
+    sizeBytes: 50 * 1024 * 1024,
+  };
+  assert.deepEqual(createUploadIntentRequestSchema.parse(input), input);
+  assert.throws(() =>
+    createUploadIntentRequestSchema.parse({ ...input, sizeBytes: 0 }),
+  );
+  assert.throws(() =>
+    createUploadIntentRequestSchema.parse({
+      ...input,
+      sizeBytes: 50 * 1024 * 1024 + 1,
+    }),
+  );
+  assert.throws(() =>
+    createUploadIntentRequestSchema.parse({
+      ...input,
+      originalFilename: "lesson.wav",
+    }),
+  );
+  assert.throws(() =>
+    createUploadIntentRequestSchema.parse({ ...input, extra: true }),
+  );
+
+  assert.deepEqual(
+    createPendingMediaAssetRequestSchema.parse({
+      languageCode: "th",
+      storageProvider: "s3",
+      storageContainer: "citizenship-audio",
+      objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
+      originalFilename: "lesson.mp3",
+      contentType: "audio/mpeg",
+      sizeBytes: 1,
+    }).sizeBytes,
+    1,
+  );
+  assert.deepEqual(
+    uploadIntentResponseSchema.parse({
+      mediaAssetId: 1,
+      uploadUrl: "https://bucket.example/audio.mp3",
+      uploadHeaders: {
+        "Content-Type": "audio/mpeg",
+        "Content-Length": "1",
+        "If-None-Match": "*",
+      },
+      expiresAt: "2026-01-01T00:15:00.000Z",
+    }).mediaAssetId,
+    1,
   );
 });
 

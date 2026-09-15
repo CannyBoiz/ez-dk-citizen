@@ -60,6 +60,10 @@ services:
       DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:-development-only-data-service-token}
       DATA_SERVICE_URL: http://hono-data:3000
       DATA_SERVICE_TIMEOUT_MS: ${DATA_SERVICE_TIMEOUT_MS:-2000}
+      AWS_REGION: ${AWS_REGION:-eu-north-1}
+      S3_BUCKET: ${S3_BUCKET:-development-only-bucket}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-development-only-access-key-id}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-development-only-secret-access-key}
       PORT: 3000
     command: pnpm --filter @ez-dk-citizen/bff dev
     ports:
