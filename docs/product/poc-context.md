@@ -7,7 +7,7 @@
 > **ORM:** Drizzle ORM + Drizzle Kit
 > **Database:** PostgreSQL
 > **Deployment:** Docker Compose on Hetzner CX23
-> **Media:** AWS S3 or Azure Blob Storage
+> **Media:** AWS S3
 > **PoC TTS:** MP3 generated manually in the ElevenLabs web app
 
 ---
@@ -163,7 +163,7 @@ storage_container
 object_key
 ```
 
-Temporary signed/SAS URLs are not Media Asset identity.
+Temporary presigned URLs are not Media Asset identity.
 
 ## Lesson Audio
 
@@ -173,15 +173,25 @@ A versioned audio rendition associated with:
 Lesson + Language + Media Asset
 ```
 
+A `PUBLISHED` Lesson may receive its first Lesson Audio or promote a new audio
+version without creating a new Lesson version. This does not permit changes to
+the Lesson's structure, Lesson Texts, or Lesson Source associations. An
+`ARCHIVED` Lesson cannot receive or promote Lesson Audio. Completing the same
+Media Asset more than once returns the existing Lesson Audio rather than
+creating another version.
+
 ## Upload Intent
 
 Short-lived authorization that lets the admin browser upload one specific object directly to object storage.
+
+For the PoC it accepts one `.mp3` file declared as `audio/mpeg`, from 1 byte
+through 50 MiB, and expires after 15 minutes.
 
 ## Playback URL
 
 Short-lived, read-only access to one Media Asset.
 
-It is generated at runtime and never persisted.
+It is generated at runtime, expires after one hour, and is never persisted.
 
 ## BFF
 
@@ -294,14 +304,18 @@ PUBLISHED -> ARCHIVED
 `ARCHIVED` is terminal. Lesson structure, Lesson Texts, and Lesson Source
 associations may be changed only while the Lesson is `DRAFT`. After it leaves
 `DRAFT`, corrections require a new Lesson version rather than editing the
-published or archived version in place.
+published or archived version in place. Lesson Audio is independently
+versioned: a `PUBLISHED` Lesson may receive or replace its current audio, but an
+`ARCHIVED` Lesson may not.
 
 Both `created_at` and `updated_at` default to the database clock on insertion.
 `updated_at` represents the last change to the complete Lesson aggregate. The
 Data Service explicitly advances it when Lesson structure or status, a Lesson
-Text, or a Lesson Source association changes; no database trigger maintains it.
-Final draft edits and the transition to `PUBLISHED` may be submitted as one
-command, and the Data Service applies them atomically.
+Text, a Lesson Source association, or the current Lesson Audio changes; no
+database trigger maintains it. Creating a `PENDING` Media Asset alone does not
+advance the Lesson timestamp. Final draft edits and the transition to
+`PUBLISHED` may be submitted as one command, and the Data Service applies them
+atomically.
 
 ## `language`
 
@@ -462,7 +476,9 @@ media_asset
 
 `created_at`, `content_type`, and `size_bytes` are required when the Media Asset
 is created. `uploaded_at` remains `NULL` while it is `PENDING` and is set only
-after successful object validation. `duration_ms` is optional.
+after successful object validation. `duration_ms` is optional and remains
+`NULL` in Stage 3 because the BFF does not inspect MP3 bytes or trust a
+client-supplied duration.
 
 Constraints require `size_bytes > 0`, `duration_ms > 0` when present, and a
 non-blank `content_type`. The database does not restrict Media Assets to one
@@ -485,6 +501,10 @@ FAILED
 DELETED
 ```
 
+`FAILED` is terminal in Stage 3 and requires a new Upload Intent. Superseded
+`READY` Media Assets and their Lesson Audio rows remain as immutable history.
+Stage 3 does not implement `DELETED` behavior.
+
 The PostgreSQL enum is named `media_asset_status`; do not use the overloaded
 name `status` for the enum type.
 
@@ -494,7 +514,6 @@ Never store:
 MP3 bytes
 permanent cloud credentials
 temporary presigned URLs
-temporary SAS URLs
 ```
 
 ## `lesson_audio`
@@ -616,19 +635,105 @@ stored object has been validated and the Media Asset is `READY`.
 
 ## 8.4 Object-storage provider
 
-The architecture supports either:
+The PoC uses AWS S3 in `eu-north-1`. Do not build Azure Blob Storage support or
+dual-provider synchronization.
 
-```text
-AWS S3
-```
+## 8.5 Audio for published Lessons
 
-or:
+A `PUBLISHED` Lesson may receive its first Lesson Audio or atomically promote a
+new current audio version. Lesson Audio has its own version history, so this
+does not reopen the Lesson or create a new Lesson version. Promotion advances
+the Lesson's `updated_at`; creating a `PENDING` Media Asset does not. An
+`ARCHIVED` Lesson cannot receive or promote Lesson Audio.
 
-```text
-Azure Blob Storage
-```
+## 8.6 Playback authorization
 
-Choose one provider for the PoC. Do not build dual-provider synchronization.
+Mobile Lesson detail includes current Lesson Audio metadata and a freshly
+generated Playback URL. Playback does not require a separate API request, and
+the response uses `Cache-Control: no-store`. When no current `READY` rendition
+exists, `audio` is `null`. The BFF generates playback authorization without an
+additional S3 metadata request and returns its expiry with the URL.
+
+## 8.7 Upload acceptance and validation
+
+The PoC accepts filenames ending in `.mp3`, declared as `audio/mpeg`, with a
+size from 1 byte through 50 MiB. After upload, the BFF checks S3 object metadata
+for the expected content type and exact declared size. It does not download or
+inspect MP3 bytes. The signed upload requires `If-None-Match: *`, and the bucket
+policy enforces conditional writes so a generated object key can be written
+only once. The signature also binds the declared exact `Content-Length` and
+`Content-Type`. The browser tracer must prove those signed headers work before
+Stage 3 is complete. The PoC does not enable S3 bucket versioning.
+
+## 8.8 Upload completion semantics
+
+Completion is idempotent per Media Asset. Repeating completion returns its
+existing Lesson Audio and never creates another audio version. When distinct
+uploads for the same Lesson and Language complete, each receives the next
+audio version atomically and the last successful completion becomes current.
+
+For the PoC, the authenticated admin resubmits `lessonId` and `languageCode` at
+completion. The BFF revalidates them, and the first successful completion binds
+the Media Asset. The Upload Intent target is not persisted separately; add
+durable intent binding if multiple or untrusted admins make resubmission unsafe.
+
+Completion requires a matching Lesson Text and a Lesson in `DRAFT` or
+`PUBLISHED`. A missing target returns `404`; a missing Lesson Text or an
+`ARCHIVED` Lesson returns `409`. These target failures leave the Media Asset
+`PENDING` so the admin can correct and retry.
+
+After the BFF validates S3 metadata, one internal Data Service command uses one
+PostgreSQL transaction to mark the Media Asset `READY`, allocate the next audio
+version, demote the previous current version, create the new current Lesson
+Audio, and advance the Lesson's `updated_at`. A transaction failure leaves the
+object and `PENDING` row safe to retry.
+
+Superseded `READY` objects and Lesson Audio rows remain as immutable history.
+A `FAILED` Media Asset is terminal and requires a new Upload Intent. `DELETED`
+behavior is outside Stage 3.
+
+## 8.9 Storage verification
+
+Automated tests use an injected fake storage implementation. One opt-in tracer
+uses isolated `smoke/` objects in the existing S3 bucket and deletes the exact
+objects it creates. The PoC does not add MinIO or a second bucket.
+
+Required S3 configuration is validated at BFF startup, but readiness does not
+make a network request to S3. Per-request storage failures and the live tracer
+provide the operational signal.
+
+## 8.10 Object keys and failed uploads
+
+Final audio object keys use `audio/{random UUID}.mp3`; they contain no Lesson
+ID, Language code, or original filename. Live-tracer keys use
+`smoke/{random UUID}.mp3`.
+
+A transient S3 error or missing object during completion leaves the Media Asset
+`PENDING` and returns a retryable error. An exact-size or content-type mismatch
+first marks the Media Asset `FAILED`, then attempts to delete the private object.
+A deletion failure is logged and may leave an inert orphan, but invalid media
+cannot become playable. Abandoned `PENDING` rows or objects are not cleaned up
+automatically in the PoC; add cleanup when leakage becomes measurable.
+
+## 8.11 S3 access boundary
+
+The S3 bucket is private with public access blocked. Its CORS policy allows
+`PUT` from the local Admin origin and, once known, the production Admin origin;
+it uses no wildcard origins or unnecessary methods and headers. Its bucket
+policy requires `If-None-Match` for object writes.
+
+The Hetzner-hosted BFF uses the dedicated least-privilege IAM user maintained
+by the infrastructure repository. Its rotatable access key exists only in
+deployment and runtime secrets, is provisioned through the human setup wizard,
+and is never committed or exposed to clients.
+
+The BFF storage configuration consists only of `AWS_REGION`, `S3_BUCKET`,
+`AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`. Provider, endpoint, upload
+limits, and authorization lifetimes are fixed for the PoC.
+
+Storage logs include the request ID, operation, Media Asset ID, and AWS error or
+request code. They never include presigned URLs or credentials. Stage 3 adds no
+custom metrics or dashboards.
 
 ---
 
@@ -645,7 +750,7 @@ flowchart LR
     BFF -->|Internal REST| Data[Hono Data Service]
     Data -->|Drizzle ORM| DB[(PostgreSQL)]
 
-    BFF -->|Presign / SAS / HEAD| Storage[(Object Storage)]
+    BFF -->|Presign / HEAD| Storage[(Object Storage)]
     Web -->|Direct MP3 PUT| Storage
     Mobile -->|Direct stream / download| Storage
 
@@ -721,12 +826,10 @@ storage_container
 object_key
 ```
 
-Potential provider:
+PoC provider:
 
 ```text
-AWS S3
-OR
-Azure Blob Storage
+AWS S3 (`eu-north-1`)
 ```
 
 MP3 bytes should bypass the backend.
@@ -737,12 +840,14 @@ MP3 bytes should bypass the backend.
 1. Admin chooses MP3.
 2. Admin web sends metadata to BFF.
 3. BFF validates the admin request.
-4. BFF generates the object key.
+4. BFF generates an opaque `audio/{random UUID}.mp3` object key.
 5. BFF creates PENDING Media Asset via Data Service.
-6. BFF generates short-lived upload authorization.
+6. BFF generates short-lived upload authorization binding the declared exact
+   `Content-Length`, `Content-Type: audio/mpeg`, and `If-None-Match: *`.
 7. Browser PUTs directly to object storage.
 8. Browser notifies BFF of completion.
-9. BFF validates object metadata/HEAD.
+9. BFF validates the object's exact content length and `audio/mpeg` content
+   type through S3 object metadata.
 10. BFF marks Media Asset READY via Data Service.
 11. Lesson Audio association/version is created or updated.
 ```
@@ -803,7 +908,7 @@ Never persist the temporary playback URL.
 | ORM               | Drizzle ORM                      |
 | Migration tooling | Drizzle Kit                      |
 | Database          | PostgreSQL                       |
-| Object storage    | AWS S3 **or** Azure Blob Storage |
+| Object storage    | AWS S3                            |
 | TTS for PoC       | ElevenLabs web app manually      |
 | Future TTS        | ElevenLabs API                   |
 | Runtime           | Node.js                          |
@@ -961,7 +1066,7 @@ Commit schema + migration
 
 # 15. API boundaries
 
-Exact route names are not frozen.
+The Stage 3 media route names below are fixed by the Object Storage design.
 
 ## BFF admin routes
 
@@ -971,17 +1076,33 @@ GET    /api/admin/lessons/:id
 PATCH  /api/admin/lessons/:id
 
 POST   /api/admin/media/upload-intents
-POST   /api/admin/media/:id/complete
-GET    /api/admin/media/:id
+POST   /api/admin/media/:mediaAssetId/complete
 ```
+
+Upload Intent accepts `lessonId`, `languageCode`, `originalFilename`,
+`contentType`, and `sizeBytes`. It returns `mediaAssetId`, `uploadUrl`, required
+upload headers, and `expiresAt`.
+
+Completion accepts `lessonId` and `languageCode`. Both the first successful
+completion and idempotent retries return `200` with the `READY` Media Asset and
+its current Lesson Audio metadata.
 
 ## BFF mobile routes
 
 ```text
 GET /api/mobile/lessons
 GET /api/mobile/lessons/:id
-GET /api/mobile/media/:id/playback-url
 ```
+
+Mobile Lesson detail includes current Lesson Audio metadata and its temporary
+Playback URL and expiry, or `null` audio when no current `READY` rendition
+exists. It generates the URL without another S3 metadata request and responds
+with `Cache-Control: no-store`.
+
+The non-null `audio` object contains only `mediaAssetId`, `audioVersion`,
+`contentType`, numeric `sizeBytes`, nullable `durationMs`, `playbackUrl`, and
+`playbackExpiresAt`. It does not expose the provider, bucket, object key, or
+original filename.
 
 ## Data Service internal routes
 
@@ -999,12 +1120,12 @@ POST   /internal/lesson-sources
 DELETE /internal/lesson-sources/:lessonId/:sourceId
 
 POST   /internal/media-assets
-GET    /internal/media-assets/:id
-PATCH  /internal/media-assets/:id
-
-POST   /internal/lesson-audio
-PATCH  /internal/lesson-audio/:id
+POST   /internal/media-assets/:mediaAssetId/complete
 ```
+
+The internal completion command owns the atomic Media Asset and Lesson Audio
+transaction. Generic independent write routes for those records are not part
+of Stage 3.
 
 ---
 
@@ -1028,7 +1149,7 @@ Hetzner CX23
 └── postgres
 
 External
-└── AWS S3 or Azure Blob Storage
+└── AWS S3 (`eu-north-1`)
 ```
 
 Network path:
@@ -1094,18 +1215,29 @@ Never commit:
 ```text
 database passwords
 AWS access keys
-Azure storage keys
-SAS signing credentials
 JWT secrets
 ElevenLabs API key
 production .env files
 ```
 
-Upload authorization should be short-lived, write-only, and scoped to one generated object key.
+Upload authorization expires after 15 minutes and is write-only and scoped to
+one generated object key.
 
-Playback authorization should be short-lived, read-only, and scoped to one object.
+Playback authorization expires after one hour and is read-only and scoped to
+one object.
 
 Frontend clients never receive permanent cloud credentials.
+
+The S3 bucket blocks public access. Browser upload CORS uses an explicit origin
+allow-list and permits only the required method and headers. The dedicated BFF
+IAM user's access key is stored only in deployment and runtime secrets and is
+rotated rather than shared with clients.
+
+The bucket policy requires conditional writes for upload object keys. Presigned
+uploads include `If-None-Match: *`, preventing reuse from overwriting an
+existing Media Asset.
+
+Logs never contain presigned URLs or AWS credentials.
 
 ---
 
@@ -1275,7 +1407,7 @@ Prefer vertical slices and fast feedback loops.
 
 ## Stage 3 — Object storage
 
-1. Choose AWS S3 or Azure Blob.
+1. Configure AWS S3.
 2. Add storage adapter.
 3. Implement upload intent.
 4. Implement direct browser upload.
@@ -1283,6 +1415,10 @@ Prefer vertical slices and fast feedback loops.
 6. Persist Media Asset.
 7. Persist Lesson Audio.
 8. Generate playback URL.
+
+The Stage 3 spec and tickets live in this application repository. One blocking
+infrastructure ticket updates the sibling repository's Terraform before the
+live S3 tracer runs; the credentials wizard follows that infrastructure work.
 
 ## Stage 4 — Admin UI
 
@@ -1327,7 +1463,7 @@ Preserve these unless a deliberate decision changes them:
 5. **Hono BFF is the public orchestration boundary.**
 6. **Clients transfer MP3 bytes directly to/from object storage.**
 7. **Permanent cloud credentials never reach frontend clients.**
-8. **Temporary signed/SAS URLs are not persisted.**
+8. **Temporary presigned URLs are not persisted.**
 9. **Canonical Sources are reusable and relate to Lessons M:N through `lesson_source`.**
 10. **The PoC favors simplicity over premature microservices.**
 11. **Manual ElevenLabs generation is valid for the PoC.**
@@ -1436,7 +1572,6 @@ Use for current third-party implementation questions involving primary documenta
 Hono
 Drizzle ORM / Drizzle Kit
 AWS S3 presigned upload
-Azure Blob SAS
 ElevenLabs
 Expo background audio
 ```
@@ -1459,16 +1594,17 @@ Accepted:
 0001 - Require localized Lesson Text before Lesson Audio
 0002 - Allow pending Media Assets without Lesson Audio
 0003 - Use a container-first local application runtime
+0004 - Use AWS S3 for PoC object storage
+0005 - Transfer media directly between clients and S3
 ```
 
-Create additional ADRs when these decisions become final:
+Consider additional ADRs when these decisions become final and retain useful
+trade-off context:
 
 ```text
-0004 - Use Hono + Drizzle instead of .NET + EF Core
-0005 - Keep BFF and Data Service as separate Hono services
-0006 - Model Lesson ↔ Source as M:N via lesson_source
-0007 - Choose AWS S3 or Azure Blob Storage for PoC
-0008 - Direct client-to-object-storage media transfer
+Use Hono + Drizzle instead of .NET + EF Core
+Keep BFF and Data Service as separate Hono services
+Model Lesson ↔ Source as M:N via lesson_source
 ```
 
 Do not create ADRs for trivial implementation details.
@@ -1486,7 +1622,7 @@ When working in this repository:
 - Do not let the BFF import the Data Service DB client as a shortcut.
 - Do not store audio bytes in PostgreSQL.
 - Do not proxy ordinary MP3 transfer through the VPS.
-- Do not store signed/SAS URLs.
+- Do not store presigned URLs.
 - Do not duplicate canonical Sources per Lesson.
 - Do not introduce quiz/user tables until their feature is being implemented.
 - Prefer small vertical slices.
