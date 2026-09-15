@@ -3,6 +3,7 @@ import { z } from "zod";
 export * from "./http.js";
 
 const positiveInteger = z.number().int().positive();
+const safePositiveInteger = positiveInteger.refine(Number.isSafeInteger);
 const positiveId = z
   .string()
   .regex(/^[1-9]\d*$/)
@@ -27,6 +28,9 @@ export const readinessResponseSchema = z.strictObject({
 export const lessonStatusSchema = z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]);
 
 export const lessonIdParamsSchema = z.strictObject({ lessonId: positiveId });
+export const mediaAssetIdParamsSchema = z.strictObject({
+  mediaAssetId: positiveId,
+});
 export const lessonSourceParamsSchema = z.strictObject({
   lessonId: positiveId,
   sourceId: positiveId,
@@ -151,6 +155,66 @@ export const mobileLessonListResponseSchema = z.strictObject({
   items: z.array(mobileLessonSummarySchema),
 });
 
+export const maxUploadSizeBytes = 50 * 1024 * 1024;
+const languageCode = z.string().trim().min(1).max(35);
+const mp3Filename = z.string().min(1).endsWith(".mp3");
+const uploadSizeBytes = safePositiveInteger.max(maxUploadSizeBytes);
+const audioObjectKey = z
+  .string()
+  .regex(
+    /^audio\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.mp3$/,
+  );
+
+export const createUploadIntentRequestSchema = z.strictObject({
+  lessonId: safePositiveInteger,
+  languageCode,
+  originalFilename: mp3Filename,
+  contentType: z.literal("audio/mpeg"),
+  sizeBytes: uploadSizeBytes,
+});
+
+export const createPendingMediaAssetRequestSchema = z.strictObject({
+  languageCode,
+  storageProvider: z.literal("s3"),
+  storageContainer: nonBlankText,
+  objectKey: audioObjectKey,
+  originalFilename: mp3Filename,
+  contentType: z.literal("audio/mpeg"),
+  sizeBytes: uploadSizeBytes,
+});
+
+export const mediaAssetStatusSchema = z.enum([
+  "PENDING",
+  "READY",
+  "FAILED",
+  "DELETED",
+]);
+
+export const mediaAssetResponseSchema = z.strictObject({
+  id: safePositiveInteger,
+  storageProvider: z.literal("s3"),
+  storageContainer: nonBlankText,
+  objectKey: audioObjectKey,
+  originalFilename: mp3Filename,
+  contentType: z.literal("audio/mpeg"),
+  sizeBytes: safePositiveInteger,
+  durationMs: safePositiveInteger.nullable(),
+  status: mediaAssetStatusSchema,
+  createdAt: timestamp,
+  uploadedAt: timestamp.nullable(),
+});
+
+export const uploadIntentResponseSchema = z.strictObject({
+  mediaAssetId: safePositiveInteger,
+  uploadUrl: z.url(),
+  uploadHeaders: z.strictObject({
+    "Content-Type": z.literal("audio/mpeg"),
+    "Content-Length": z.string().regex(/^[1-9]\d*$/),
+    "If-None-Match": z.literal("*"),
+  }),
+  expiresAt: timestamp,
+});
+
 export const problemDetailsSchema = z.strictObject({
   type: z.url(),
   title: z.string(),
@@ -194,3 +258,11 @@ export type MobileLessonListResponse = z.infer<
   typeof mobileLessonListResponseSchema
 >;
 export type ProblemDetails = z.infer<typeof problemDetailsSchema>;
+export type CreateUploadIntentRequest = z.infer<
+  typeof createUploadIntentRequestSchema
+>;
+export type CreatePendingMediaAssetRequest = z.infer<
+  typeof createPendingMediaAssetRequestSchema
+>;
+export type MediaAssetResponse = z.infer<typeof mediaAssetResponseSchema>;
+export type UploadIntentResponse = z.infer<typeof uploadIntentResponseSchema>;

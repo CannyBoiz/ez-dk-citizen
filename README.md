@@ -20,6 +20,9 @@ not published to the host.
 
 The defaults are development-only. Copy `.env.example` to `.env` to override
 credentials, origins, or ports locally. Real `.env` files are ignored by Git.
+For direct S3 upload authorization, set `AWS_REGION`, `S3_BUCKET`,
+`AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`; the tracked example contains
+placeholders only.
 
 Stop the stack without deleting its named PostgreSQL volume:
 

@@ -1,5 +1,6 @@
 import {
   createSourceRequestSchema,
+  createPendingMediaAssetRequestSchema,
   lessonIdParamsSchema,
   lessonReadQuerySchema,
   lessonSourceParamsSchema,
@@ -10,6 +11,7 @@ import {
   lessonDetailListResponseSchema,
   lessonListResponseSchema,
   lessonStatusSchema,
+  mediaAssetResponseSchema,
   livenessResponseSchema,
   patchLessonRequestSchema,
   problem,
@@ -25,6 +27,7 @@ import {
 import type {
   CreateLessonRequest,
   CreateSourceRequest,
+  CreatePendingMediaAssetRequest,
   LessonStatus,
   PatchLessonRequest,
   RequestIdEnvironment,
@@ -40,6 +43,7 @@ import { createDataDatabase } from "./db/database.js";
 import {
   language,
   lesson,
+  mediaAsset,
   lessonSource,
   lessonText,
   source,
@@ -106,6 +110,52 @@ export function createDataApp(
         problem(c, 422, "body_too_large", "Request body exceeds 1 MiB."),
     }),
   );
+  app.post(
+    "/internal/media-assets",
+    validateJson(createPendingMediaAssetRequestSchema),
+    async (c) => {
+      const input = c.req.valid("json") as CreatePendingMediaAssetRequest;
+      if (!options.database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
+
+      const [supported] = await options.database
+        .select({ code: language.code })
+        .from(language)
+        .where(eq(language.code, input.languageCode));
+      if (!supported) {
+        return problem(
+          c,
+          422,
+          "unsupported_language",
+          "Language is not supported.",
+        );
+      }
+
+      const [created] = await options.database
+        .insert(mediaAsset)
+        .values({
+          storageProvider: input.storageProvider,
+          storageContainer: input.storageContainer,
+          objectKey: input.objectKey,
+          originalFilename: input.originalFilename,
+          contentType: input.contentType,
+          sizeBytes: BigInt(input.sizeBytes),
+          status: "PENDING",
+          durationMs: null,
+          uploadedAt: null,
+        })
+        .returning();
+      if (!created) throw new Error("Media Asset insert returned no row.");
+      return c.json(mediaAssetResponseSchema.parse(toMediaAsset(created)), 201);
+    },
+  );
+
   app.post(
     "/internal/lessons",
     validateJson(createLessonRequestSchema),
@@ -701,6 +751,42 @@ function toSource(row: { id: number; url: string; publishedAt: Date | null }) {
     url: row.url,
     publishedAt: row.publishedAt?.toISOString() ?? null,
   };
+}
+
+function toMediaAsset(row: {
+  id: number;
+  storageProvider: string;
+  storageContainer: string;
+  objectKey: string;
+  originalFilename: string;
+  contentType: string;
+  sizeBytes: bigint;
+  durationMs: bigint | null;
+  status: "PENDING" | "READY" | "FAILED" | "DELETED";
+  createdAt: Date;
+  uploadedAt: Date | null;
+}) {
+  return {
+    id: row.id,
+    storageProvider: row.storageProvider,
+    storageContainer: row.storageContainer,
+    objectKey: row.objectKey,
+    originalFilename: row.originalFilename,
+    contentType: row.contentType,
+    sizeBytes: toSafeNumber(row.sizeBytes),
+    durationMs: row.durationMs === null ? null : toSafeNumber(row.durationMs),
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+    uploadedAt: row.uploadedAt?.toISOString() ?? null,
+  };
+}
+
+function toSafeNumber(value: bigint) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number)) {
+    throw new Error("Database value is not safe for JSON.");
+  }
+  return number;
 }
 
 function isAllowedLessonTransition(from: LessonStatus, to: LessonStatus) {

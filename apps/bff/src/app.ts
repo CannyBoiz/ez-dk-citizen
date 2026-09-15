@@ -1,4 +1,5 @@
 import {
+  createUploadIntentRequestSchema,
   createSourceRequestSchema,
   createLessonRequestSchema,
   languageQuerySchema,
@@ -21,13 +22,16 @@ import {
   sourceResponseSchema,
   upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
+  uploadIntentResponseSchema,
   type RequestIdEnvironment,
+  type CreateUploadIntentRequest,
   type CreateLessonRequest,
   type CreateSourceRequest,
   type PatchLessonRequest,
   type UpsertLessonSourceRequest,
   type UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
+import { randomUUID } from "node:crypto";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
@@ -37,10 +41,13 @@ import {
   DataServiceError,
   type DataServiceClient,
 } from "./data-service-client.js";
+import type { Storage } from "./storage.js";
 export interface BffAppOptions {
   adminApiToken?: string;
   adminOrigins?: string[];
   dataServiceClient?: DataServiceClient;
+  storage?: Storage;
+  storageBucket?: string;
 }
 
 export function createBffApp(
@@ -103,6 +110,68 @@ export function createBffApp(
       onError: (c) =>
         problem(c, 422, "body_too_large", "Request body exceeds 1 MiB."),
     }),
+  );
+
+  app.post(
+    "/api/admin/media/upload-intents",
+    validateJson(createUploadIntentRequestSchema),
+    async (c) => {
+      const input = c.req.valid("json") as CreateUploadIntentRequest;
+      if (!options.dataServiceClient) {
+        return problem(
+          c,
+          502,
+          "data_service_unavailable",
+          "The Data Service is unavailable.",
+        );
+      }
+      if (!options.storage || !options.storageBucket) {
+        return problem(
+          c,
+          502,
+          "storage_unavailable",
+          "Storage authorization is unavailable.",
+        );
+      }
+
+      const objectKey = `audio/${randomUUID()}.mp3`;
+      try {
+        const mediaAsset =
+          await options.dataServiceClient.createPendingMediaAsset(
+            {
+              languageCode: input.languageCode,
+              storageProvider: "s3",
+              storageContainer: options.storageBucket,
+              objectKey,
+              originalFilename: input.originalFilename,
+              contentType: input.contentType,
+              sizeBytes: input.sizeBytes,
+            },
+            c.get("requestId"),
+          );
+        const authorization = await options.storage.createUploadAuthorization({
+          key: objectKey,
+          contentType: input.contentType,
+          sizeBytes: input.sizeBytes,
+        });
+        return c.json(
+          uploadIntentResponseSchema.parse({
+            mediaAssetId: mediaAsset.id,
+            ...authorization,
+          }),
+          201,
+        );
+      } catch (error) {
+        if (error instanceof DataServiceError)
+          return mapDataServiceError(c, error);
+        return problem(
+          c,
+          502,
+          "storage_unavailable",
+          "Storage authorization is unavailable.",
+        );
+      }
+    },
   );
 
   app.post(

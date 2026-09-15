@@ -1,9 +1,11 @@
 import {
   createSourceRequestSchema,
+  createPendingMediaAssetRequestSchema,
   createLessonRequestSchema,
   lessonDetailSchema,
   lessonDetailListResponseSchema,
   lessonListResponseSchema,
+  mediaAssetResponseSchema,
   patchLessonRequestSchema,
   problemDetailsSchema,
   sourceListResponseSchema,
@@ -12,9 +14,11 @@ import {
   upsertLessonTextRequestSchema,
   type CreateLessonRequest,
   type CreateSourceRequest,
+  type CreatePendingMediaAssetRequest,
   type LessonDetail,
   type LessonDetailListResponse,
   type LessonListResponse,
+  type MediaAssetResponse,
   type PatchLessonRequest,
   type ProblemDetails,
   type SourceListResponse,
@@ -24,6 +28,10 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 
 export interface DataServiceClient {
+  createPendingMediaAsset(
+    input: CreatePendingMediaAssetRequest,
+    requestId: string,
+  ): Promise<MediaAssetResponse>;
   createLesson(
     input: CreateLessonRequest,
     requestId: string,
@@ -102,6 +110,14 @@ export function createDataServiceClient(
     );
 
   return {
+    createPendingMediaAsset: (input, requestId) =>
+      call(
+        "/internal/media-assets",
+        "POST",
+        requestId,
+        createPendingMediaAssetRequestSchema.parse(input),
+        mediaAssetResponseSchema.parse,
+      ),
     createLesson: (input, requestId) =>
       call(
         "/internal/lessons",

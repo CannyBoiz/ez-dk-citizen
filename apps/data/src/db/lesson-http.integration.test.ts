@@ -12,6 +12,67 @@ const app = createDataApp(async () => undefined, {
   dataServiceToken: "data-token",
 });
 
+test("internal Media Asset creation validates Language and persists an unbound pending asset", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const unsupported = await app.request("/internal/media-assets", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      languageCode: "zz",
+      storageProvider: "s3",
+      storageContainer: "citizenship-audio",
+      objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
+      originalFilename: "lesson.mp3",
+      contentType: "audio/mpeg",
+      sizeBytes: 1,
+    }),
+  });
+  assert.equal(unsupported.status, 422);
+  assert.equal((await unsupported.json()).code, "unsupported_language");
+
+  const created = await app.request("/internal/media-assets", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      languageCode: "th",
+      storageProvider: "s3",
+      storageContainer: "citizenship-audio",
+      objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
+      originalFilename: "lesson.mp3",
+      contentType: "audio/mpeg",
+      sizeBytes: 50 * 1024 * 1024,
+    }),
+  });
+  assert.equal(created.status, 201);
+  const asset = await created.json();
+  assert.deepEqual(
+    {
+      status: asset.status,
+      sizeBytes: asset.sizeBytes,
+      durationMs: asset.durationMs,
+      uploadedAt: asset.uploadedAt,
+    },
+    {
+      status: "PENDING",
+      sizeBytes: 50 * 1024 * 1024,
+      durationMs: null,
+      uploadedAt: null,
+    },
+  );
+  assert.equal(
+    (
+      await database.query.mediaAsset.findFirst({
+        where: { id: asset.id },
+        with: { lessonAudio: true },
+      })
+    )?.lessonAudio,
+    null,
+  );
+});
+
 test("internal Lesson HTTP operations persist and return aggregate transport shapes", async () => {
   const unauthorized = await app.request("/internal/lessons", {
     method: "POST",
