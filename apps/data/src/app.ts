@@ -1,4 +1,6 @@
 import {
+  completeMediaAssetRequestSchema,
+  completeMediaAssetResponseSchema,
   createSourceRequestSchema,
   createPendingMediaAssetRequestSchema,
   lessonIdParamsSchema,
@@ -11,6 +13,8 @@ import {
   lessonDetailListResponseSchema,
   lessonListResponseSchema,
   lessonStatusSchema,
+  mediaAssetIdParamsSchema,
+  mediaAssetLookupResponseSchema,
   mediaAssetResponseSchema,
   livenessResponseSchema,
   patchLessonRequestSchema,
@@ -25,6 +29,7 @@ import {
   upsertLessonTextRequestSchema,
 } from "@ez-dk-citizen/api-contracts";
 import type {
+  CompleteMediaAssetRequest,
   CreateLessonRequest,
   CreateSourceRequest,
   CreatePendingMediaAssetRequest,
@@ -43,6 +48,7 @@ import { createDataDatabase } from "./db/database.js";
 import {
   language,
   lesson,
+  lessonAudio,
   mediaAsset,
   lessonSource,
   lessonText,
@@ -153,6 +159,146 @@ export function createDataApp(
         .returning();
       if (!created) throw new Error("Media Asset insert returned no row.");
       return c.json(mediaAssetResponseSchema.parse(toMediaAsset(created)), 201);
+    },
+  );
+
+  app.get(
+    "/internal/media-assets/:mediaAssetId",
+    validateRequest("param", mediaAssetIdParamsSchema),
+    async (c) => {
+      const { mediaAssetId } = c.req.valid("param") as {
+        mediaAssetId: number;
+      };
+      if (!options.database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
+      const [asset] = await options.database
+        .select()
+        .from(mediaAsset)
+        .where(eq(mediaAsset.id, mediaAssetId));
+      if (!asset)
+        return problem(
+          c,
+          404,
+          "media_asset_not_found",
+          "Media Asset was not found.",
+        );
+      return c.json(mediaAssetLookupResponseSchema.parse(toMediaAsset(asset)));
+    },
+  );
+
+  app.post(
+    "/internal/media-assets/:mediaAssetId/complete",
+    validateRequest("param", mediaAssetIdParamsSchema),
+    validateJson(completeMediaAssetRequestSchema),
+    async (c) => {
+      const { mediaAssetId } = c.req.valid("param") as {
+        mediaAssetId: number;
+      };
+      const input = c.req.valid("json") as CompleteMediaAssetRequest;
+      if (!options.database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
+
+      const outcome = await options.database.transaction(
+        async (transaction) => {
+          const [asset] = await transaction
+            .select()
+            .from(mediaAsset)
+            .where(eq(mediaAsset.id, mediaAssetId))
+            .for("update");
+          if (!asset) return "media_asset_not_found" as const;
+          if (asset.status !== "PENDING")
+            return "media_asset_not_pending" as const;
+
+          const [supported] = await transaction
+            .select({ code: language.code })
+            .from(language)
+            .where(eq(language.code, input.languageCode));
+          if (!supported) return "unsupported_language" as const;
+
+          const [target] = await transaction
+            .select({ status: lesson.status, updatedAt: lesson.updatedAt })
+            .from(lesson)
+            .where(eq(lesson.id, input.lessonId))
+            .for("update");
+          if (!target) return "lesson_not_found" as const;
+          if (target.status === "ARCHIVED") return "lesson_archived" as const;
+
+          const [text] = await transaction
+            .select({ lessonId: lessonText.lessonId })
+            .from(lessonText)
+            .where(
+              and(
+                eq(lessonText.lessonId, input.lessonId),
+                eq(lessonText.languageCode, input.languageCode),
+              ),
+            );
+          if (!text) return "lesson_text_not_found" as const;
+
+          const now = new Date();
+          const [readyAsset] = await transaction
+            .update(mediaAsset)
+            .set({ status: "READY", uploadedAt: now })
+            .where(eq(mediaAsset.id, asset.id))
+            .returning();
+          if (!readyAsset)
+            throw new Error("Media Asset update returned no row.");
+          const [audio] = await transaction
+            .insert(lessonAudio)
+            .values({
+              lessonId: input.lessonId,
+              languageCode: input.languageCode,
+              mediaAssetId: asset.id,
+              audioVersion: 1,
+              isCurrent: true,
+            })
+            .returning();
+          if (!audio) throw new Error("Lesson Audio insert returned no row.");
+          await touchLesson(transaction, input.lessonId, target.updatedAt);
+          return { readyAsset, audio };
+        },
+      );
+
+      if (outcome === "media_asset_not_found") {
+        return problem(c, 404, outcome, "Media Asset was not found.");
+      }
+      if (outcome === "lesson_not_found") {
+        return problem(c, 404, outcome, "Lesson was not found.");
+      }
+      if (outcome === "unsupported_language") {
+        return problem(c, 422, outcome, "Language is not supported.");
+      }
+      if (outcome === "lesson_text_not_found") {
+        return problem(c, 409, outcome, "Lesson Text was not found.");
+      }
+      if (outcome === "lesson_archived") {
+        return problem(
+          c,
+          409,
+          outcome,
+          "Archived Lessons cannot receive audio.",
+        );
+      }
+      if (outcome === "media_asset_not_pending") {
+        return problem(c, 409, outcome, "Media Asset is not pending.");
+      }
+      return c.json(
+        completeMediaAssetResponseSchema.parse({
+          mediaAsset: toCompletedMediaAsset(outcome.readyAsset),
+          lessonAudio: toLessonAudio(outcome.audio),
+        }),
+      );
     },
   );
 
@@ -778,6 +924,42 @@ function toMediaAsset(row: {
     status: row.status,
     createdAt: row.createdAt.toISOString(),
     uploadedAt: row.uploadedAt?.toISOString() ?? null,
+  };
+}
+
+function toCompletedMediaAsset(row: {
+  id: number;
+  contentType: string;
+  sizeBytes: bigint;
+  durationMs: bigint | null;
+  status: "PENDING" | "READY" | "FAILED" | "DELETED";
+  uploadedAt: Date | null;
+}) {
+  return {
+    id: row.id,
+    status: row.status,
+    contentType: row.contentType,
+    sizeBytes: toSafeNumber(row.sizeBytes),
+    durationMs: row.durationMs === null ? null : toSafeNumber(row.durationMs),
+    uploadedAt: row.uploadedAt?.toISOString() ?? null,
+  };
+}
+
+function toLessonAudio(row: {
+  id: number;
+  lessonId: number;
+  languageCode: string;
+  audioVersion: number;
+  isCurrent: boolean;
+  createdAt: Date;
+}) {
+  return {
+    id: row.id,
+    lessonId: row.lessonId,
+    languageCode: row.languageCode,
+    audioVersion: row.audioVersion,
+    isCurrent: row.isCurrent,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 

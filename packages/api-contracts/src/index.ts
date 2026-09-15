@@ -183,6 +183,11 @@ export const createPendingMediaAssetRequestSchema = z.strictObject({
   sizeBytes: uploadSizeBytes,
 });
 
+export const completeMediaAssetRequestSchema = z.strictObject({
+  lessonId: safePositiveInteger,
+  languageCode,
+});
+
 export const mediaAssetStatusSchema = z.enum([
   "PENDING",
   "READY",
@@ -203,6 +208,7 @@ export const mediaAssetResponseSchema = z.strictObject({
   createdAt: timestamp,
   uploadedAt: timestamp.nullable(),
 });
+export const mediaAssetLookupResponseSchema = mediaAssetResponseSchema;
 
 export const uploadIntentResponseSchema = z.strictObject({
   mediaAssetId: safePositiveInteger,
@@ -213,6 +219,29 @@ export const uploadIntentResponseSchema = z.strictObject({
     "If-None-Match": z.literal("*"),
   }),
   expiresAt: timestamp,
+});
+
+export const completedMediaAssetResponseSchema = z.strictObject({
+  id: safePositiveInteger,
+  status: z.literal("READY"),
+  contentType: z.literal("audio/mpeg"),
+  sizeBytes: safePositiveInteger,
+  durationMs: safePositiveInteger.nullable(),
+  uploadedAt: timestamp,
+});
+
+export const lessonAudioResponseSchema = z.strictObject({
+  id: safePositiveInteger,
+  lessonId: safePositiveInteger,
+  languageCode,
+  audioVersion: positiveInteger,
+  isCurrent: z.literal(true),
+  createdAt: timestamp,
+});
+
+export const completeMediaAssetResponseSchema = z.strictObject({
+  mediaAsset: completedMediaAssetResponseSchema,
+  lessonAudio: lessonAudioResponseSchema,
 });
 
 export const problemDetailsSchema = z.strictObject({
@@ -264,5 +293,11 @@ export type CreateUploadIntentRequest = z.infer<
 export type CreatePendingMediaAssetRequest = z.infer<
   typeof createPendingMediaAssetRequestSchema
 >;
+export type CompleteMediaAssetRequest = z.infer<
+  typeof completeMediaAssetRequestSchema
+>;
 export type MediaAssetResponse = z.infer<typeof mediaAssetResponseSchema>;
 export type UploadIntentResponse = z.infer<typeof uploadIntentResponseSchema>;
+export type CompleteMediaAssetResponse = z.infer<
+  typeof completeMediaAssetResponseSchema
+>;

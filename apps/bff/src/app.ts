@@ -1,9 +1,12 @@
 import {
+  completeMediaAssetRequestSchema,
+  completeMediaAssetResponseSchema,
   createUploadIntentRequestSchema,
   createSourceRequestSchema,
   createLessonRequestSchema,
   languageQuerySchema,
   lessonIdParamsSchema,
+  mediaAssetIdParamsSchema,
   lessonSourceParamsSchema,
   lessonTextParamsSchema,
   lessonDetailSchema,
@@ -25,6 +28,7 @@ import {
   uploadIntentResponseSchema,
   type RequestIdEnvironment,
   type CreateUploadIntentRequest,
+  type CompleteMediaAssetRequest,
   type CreateLessonRequest,
   type CreateSourceRequest,
   type PatchLessonRequest,
@@ -169,6 +173,73 @@ export function createBffApp(
           502,
           "storage_unavailable",
           "Storage authorization is unavailable.",
+        );
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/media/:mediaAssetId/complete",
+    validateRequest("param", mediaAssetIdParamsSchema),
+    validateJson(completeMediaAssetRequestSchema),
+    async (c) => {
+      const { mediaAssetId } = c.req.valid("param") as {
+        mediaAssetId: number;
+      };
+      const input = c.req.valid("json") as CompleteMediaAssetRequest;
+      if (!options.dataServiceClient) {
+        return problem(
+          c,
+          502,
+          "data_service_unavailable",
+          "The Data Service is unavailable.",
+        );
+      }
+      if (!options.storage) {
+        return problem(
+          c,
+          502,
+          "storage_unavailable",
+          "Storage is unavailable.",
+        );
+      }
+
+      try {
+        const asset = await options.dataServiceClient.getMediaAsset(
+          mediaAssetId,
+          c.get("requestId"),
+        );
+        if (asset.status === "PENDING") {
+          const object = await options.storage.inspectObject(asset.objectKey);
+          if (
+            object.contentType !== asset.contentType ||
+            object.sizeBytes !== asset.sizeBytes
+          ) {
+            return problem(
+              c,
+              409,
+              "uploaded_object_mismatch",
+              "Uploaded object does not match its declared media metadata.",
+            );
+          }
+        }
+        return c.json(
+          completeMediaAssetResponseSchema.parse(
+            await options.dataServiceClient.completeMediaAsset(
+              mediaAssetId,
+              input,
+              c.get("requestId"),
+            ),
+          ),
+        );
+      } catch (error) {
+        if (error instanceof DataServiceError)
+          return mapDataServiceError(c, error);
+        return problem(
+          c,
+          502,
+          "storage_unavailable",
+          "Storage is unavailable.",
         );
       }
     },
@@ -533,16 +604,22 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
 
   const knownStatus =
     error.status === 404 &&
-    ["lesson_not_found", "lesson_text_not_found", "source_not_found"].includes(
-      error.details.code,
-    )
+    [
+      "lesson_not_found",
+      "lesson_text_not_found",
+      "media_asset_not_found",
+      "source_not_found",
+    ].includes(error.details.code)
       ? 404
       : error.status === 409 &&
           [
             "lesson_not_editable",
             "lesson_lifecycle_conflict",
+            "lesson_text_not_found",
             "lesson_version_conflict",
             "published_lesson_conflict",
+            "lesson_archived",
+            "media_asset_not_pending",
             "source_url_conflict",
           ].includes(error.details.code)
         ? 409

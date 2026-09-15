@@ -6,8 +6,11 @@ import {
   createLessonRequestSchema,
   createPendingMediaAssetRequestSchema,
   createUploadIntentRequestSchema,
+  completeMediaAssetRequestSchema,
+  completeMediaAssetResponseSchema,
   lessonDetailSchema,
   lessonIdParamsSchema,
+  mediaAssetIdParamsSchema,
   lessonReadQuerySchema,
   livenessResponseSchema,
   readinessResponseSchema,
@@ -33,11 +36,17 @@ test("path, query, and Problem Details contracts are strict", () => {
   assert.deepEqual(lessonIdParamsSchema.parse({ lessonId: "7" }), {
     lessonId: 7,
   });
+  assert.deepEqual(mediaAssetIdParamsSchema.parse({ mediaAssetId: "9" }), {
+    mediaAssetId: 9,
+  });
   assert.deepEqual(
     lessonReadQuerySchema.parse({ status: "PUBLISHED", language: "th" }),
     { status: "PUBLISHED", language: "th" },
   );
   assert.throws(() => lessonIdParamsSchema.parse({ lessonId: "0" }));
+  assert.throws(() =>
+    mediaAssetIdParamsSchema.parse({ mediaAssetId: "not-an-id" }),
+  );
   assert.throws(() => lessonReadQuerySchema.parse({ status: "" }));
   assert.throws(() =>
     problemDetailsSchema.parse({ status: 422, code: "validation_failed" }),
@@ -96,6 +105,48 @@ test("Upload Intent contracts accept only one safe declared MP3", () => {
       expiresAt: "2026-01-01T00:15:00.000Z",
     }).mediaAssetId,
     1,
+  );
+});
+
+test("Media Asset completion contracts keep storage locators internal", () => {
+  const completion = {
+    mediaAsset: {
+      id: 1,
+      status: "READY",
+      contentType: "audio/mpeg",
+      sizeBytes: 1,
+      durationMs: null,
+      uploadedAt: "2026-01-01T00:00:00.000Z",
+    },
+    lessonAudio: {
+      id: 2,
+      lessonId: 7,
+      languageCode: "th",
+      audioVersion: 1,
+      isCurrent: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    },
+  };
+  assert.deepEqual(
+    completeMediaAssetRequestSchema.parse({ lessonId: 7, languageCode: "th" }),
+    { lessonId: 7, languageCode: "th" },
+  );
+  assert.deepEqual(
+    completeMediaAssetResponseSchema.parse(completion),
+    completion,
+  );
+  assert.throws(() =>
+    completeMediaAssetRequestSchema.parse({
+      lessonId: 7,
+      languageCode: "th",
+      extra: true,
+    }),
+  );
+  assert.throws(() =>
+    completeMediaAssetResponseSchema.parse({
+      ...completion,
+      mediaAsset: { ...completion.mediaAsset, objectKey: "audio/private.mp3" },
+    }),
   );
 });
 

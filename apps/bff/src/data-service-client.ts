@@ -1,4 +1,6 @@
 import {
+  completeMediaAssetRequestSchema,
+  completeMediaAssetResponseSchema,
   createSourceRequestSchema,
   createPendingMediaAssetRequestSchema,
   createLessonRequestSchema,
@@ -6,6 +8,7 @@ import {
   lessonDetailListResponseSchema,
   lessonListResponseSchema,
   mediaAssetResponseSchema,
+  mediaAssetLookupResponseSchema,
   patchLessonRequestSchema,
   problemDetailsSchema,
   sourceListResponseSchema,
@@ -13,6 +16,8 @@ import {
   upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
   type CreateLessonRequest,
+  type CompleteMediaAssetRequest,
+  type CompleteMediaAssetResponse,
   type CreateSourceRequest,
   type CreatePendingMediaAssetRequest,
   type LessonDetail,
@@ -32,6 +37,12 @@ export interface DataServiceClient {
     input: CreatePendingMediaAssetRequest,
     requestId: string,
   ): Promise<MediaAssetResponse>;
+  getMediaAsset(id: number, requestId: string): Promise<MediaAssetResponse>;
+  completeMediaAsset(
+    id: number,
+    input: CompleteMediaAssetRequest,
+    requestId: string,
+  ): Promise<CompleteMediaAssetResponse>;
   createLesson(
     input: CreateLessonRequest,
     requestId: string,
@@ -117,6 +128,22 @@ export function createDataServiceClient(
         requestId,
         createPendingMediaAssetRequestSchema.parse(input),
         mediaAssetResponseSchema.parse,
+      ),
+    getMediaAsset: (id, requestId) =>
+      call(
+        `/internal/media-assets/${id}`,
+        "GET",
+        requestId,
+        undefined,
+        mediaAssetLookupResponseSchema.parse,
+      ),
+    completeMediaAsset: (id, input, requestId) =>
+      call(
+        `/internal/media-assets/${id}/complete`,
+        "POST",
+        requestId,
+        completeMediaAssetRequestSchema.parse(input),
+        completeMediaAssetResponseSchema.parse,
       ),
     createLesson: (input, requestId) =>
       call(
