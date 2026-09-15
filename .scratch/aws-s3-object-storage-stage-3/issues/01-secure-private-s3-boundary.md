@@ -8,16 +8,16 @@ the Stage 3 access rules explicit and reviewable.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Keep AWS S3 in `eu-north-1` and evolve the existing bucket and dedicated application IAM user in place rather than replacing them.
-- [ ] Block all forms of public bucket and object access explicitly.
-- [ ] Allow browser CORS only from the explicit local Admin origin and an optional explicit production Admin origin; do not use a wildcard origin.
-- [ ] Limit browser CORS to conditional PUT uploads and only the request headers needed by the signed upload contract.
-- [ ] Add a bucket policy that rejects object writes unless `If-None-Match` is present, so an existing generated key cannot be overwritten.
-- [ ] Restrict the application IAM policy to GetObject, PutObject, and DeleteObject for only the `audio/` and `smoke/` prefixes in this bucket.
-- [ ] Do not grant bucket listing, bucket administration, unrelated AWS permissions, or access to other buckets.
-- [ ] Keep S3 bucket versioning disabled for the PoC.
-- [ ] Do not create IAM access keys or place secret values in Terraform configuration, state outputs, source control, or logs.
-- [ ] Format and validate the Terraform configuration and inspect a plan showing the public-access block, CORS policy, conditional-write policy, and narrowed IAM resources without destroying or replacing the bucket.
+- [x] Keep AWS S3 in `eu-north-1` and evolve the existing bucket and dedicated application IAM user in place rather than replacing them.
+- [x] Block all forms of public bucket and object access explicitly.
+- [x] Allow browser CORS only from the explicit local Admin origin and an optional explicit production Admin origin; do not use a wildcard origin.
+- [x] Limit browser CORS to conditional PUT uploads and only the request headers needed by the signed upload contract.
+- [x] Add a bucket policy that rejects object writes unless `If-None-Match` is present, so an existing generated key cannot be overwritten.
+- [x] Restrict the application IAM policy to GetObject, PutObject, and DeleteObject for only the `audio/` and `smoke/` prefixes in this bucket.
+- [x] Do not grant bucket listing, bucket administration, unrelated AWS permissions, or access to other buckets.
+- [x] Keep S3 bucket versioning disabled for the PoC.
+- [x] Do not create IAM access keys or place secret values in Terraform configuration, state outputs, source control, or logs.
+- [x] Format and validate the Terraform configuration and inspect a plan showing the public-access block, CORS policy, conditional-write policy, and narrowed IAM resources without destroying or replacing the bucket.
 
