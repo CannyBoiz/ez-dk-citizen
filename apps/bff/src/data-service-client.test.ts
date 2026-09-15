@@ -39,6 +39,80 @@ test("Data Service client preserves boundary failures and correlation", async (c
     }
   });
 
+  await context.test(
+    "reads and completes a Media Asset through its narrow routes",
+    async () => {
+      const calls: Array<{ url: string; method?: string; body?: string }> = [];
+      globalThis.fetch = async (input, init) => {
+        calls.push({
+          url: input.toString(),
+          method: init?.method,
+          body: init?.body as string | undefined,
+        });
+        if (init?.method === "GET") {
+          return Response.json({
+            id: 9,
+            storageProvider: "s3",
+            storageContainer: "citizenship-audio",
+            objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
+            originalFilename: "lesson.mp3",
+            contentType: "audio/mpeg",
+            sizeBytes: 1,
+            durationMs: null,
+            status: "PENDING",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            uploadedAt: null,
+          });
+        }
+        return Response.json({
+          mediaAsset: {
+            id: 9,
+            status: "READY",
+            contentType: "audio/mpeg",
+            sizeBytes: 1,
+            durationMs: null,
+            uploadedAt: "2026-01-01T00:01:00.000Z",
+          },
+          lessonAudio: {
+            id: 1,
+            lessonId: 7,
+            languageCode: "th",
+            audioVersion: 1,
+            isCurrent: true,
+            createdAt: "2026-01-01T00:01:00.000Z",
+          },
+        });
+      };
+
+      try {
+        const client = createDataServiceClient(
+          "http://data.example",
+          "data-token",
+        );
+        await client.getMediaAsset(9, "request-6");
+        await client.completeMediaAsset(
+          9,
+          { lessonId: 7, languageCode: "th" },
+          "request-6",
+        );
+        assert.deepEqual(calls, [
+          {
+            url: "http://data.example/internal/media-assets/9",
+            method: "GET",
+            body: undefined,
+          },
+          {
+            url: "http://data.example/internal/media-assets/9/complete",
+            method: "POST",
+            body: '{"lessonId":7,"languageCode":"th"}',
+          },
+        ]);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  );
+
   await context.test("does not retry unavailable dependencies", async () => {
     let calls = 0;
     globalThis.fetch = async () => {

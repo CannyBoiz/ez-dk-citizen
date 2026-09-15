@@ -65,6 +65,16 @@ try {
       "-e",
       tracer(),
     ]);
+    await runDocker([
+      ...composeArguments,
+      "exec",
+      "-T",
+      "bff",
+      "node",
+      "--input-type=module",
+      "-e",
+      completionTracer(),
+    ]);
     await verifyTracerLogs();
   } else {
     await runDocker([
@@ -149,6 +159,37 @@ const list = await mobile.json();
 if (list.items[0]?.title !== 'ไทย' || list.items[0]?.languageCode !== 'th' || 'status' in list.items[0]) throw new Error('Mobile list projection failed.');
 const detail = await (await fetch('http://127.0.0.1:3000/api/mobile/lessons/' + lesson.body.id)).json();
 if (detail.content !== 'เนื้อหา' || !detail.availableLanguageCodes.includes('th') || detail.lessonSources[0]?.pageFrom !== 2 || detail.lessonSources[0]?.pageTo !== 3 || 'audio' in detail) throw new Error('Mobile detail projection failed.');
+`;
+}
+
+function completionTracer() {
+  return String.raw`
+import { createBffApp } from './dist/app.js';
+import { createDataServiceClient } from './dist/data-service-client.js';
+import { FakeStorage } from './dist/storage.js';
+
+const requestId = 'stage-3-completion-tracer';
+const headers = { Authorization: 'Bearer integration-only-admin-token', 'Content-Type': 'application/json', 'X-Request-ID': requestId };
+const storage = new FakeStorage();
+const app = createBffApp(async () => undefined, {
+  adminApiToken: 'integration-only-admin-token',
+  storage,
+  storageBucket: 'integration-only-bucket',
+  dataServiceClient: createDataServiceClient('http://hono-data:3000', 'integration-only-data-service-token'),
+});
+const call = async (path, method, body) => {
+  const response = await app.request(path, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+  return { response, body: response.status === 204 ? undefined : await response.json() };
+};
+const lesson = await call('/api/admin/lessons', 'POST', { chapter: 2, version: 1 });
+if (lesson.response.status !== 201) throw new Error('Completion tracer Lesson creation failed.');
+const text = await call('/api/admin/lessons/' + lesson.body.id + '/texts/th', 'PUT', { title: 'ไทย', content: 'เนื้อหา' });
+if (text.response.status !== 200) throw new Error('Completion tracer localization failed.');
+const intent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'lesson.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+if (intent.response.status !== 201 || storage.uploads.length !== 1) throw new Error('Completion tracer Upload Intent failed.');
+storage.putObject(storage.uploads[0].key, { contentType: 'audio/mpeg', sizeBytes: 1 });
+const completed = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
+if (completed.response.status !== 200 || completed.body.mediaAsset.status !== 'READY' || completed.body.lessonAudio.audioVersion !== 1 || completed.body.lessonAudio.isCurrent !== true || 'objectKey' in completed.body.mediaAsset) throw new Error('Completion tracer did not promote safe current audio.');
 `;
 }
 

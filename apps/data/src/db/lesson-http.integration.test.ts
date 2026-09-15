@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { createDataApp } from "../app.js";
 import { useIntegrationDatabase } from "./integration-test-database.js";
-import { lesson as lessonTable } from "./schema.js";
+import { lesson as lessonTable, lessonAudio, mediaAsset } from "./schema.js";
 
 const database = useIntegrationDatabase();
 const app = createDataApp(async () => undefined, {
@@ -71,6 +71,90 @@ test("internal Media Asset creation validates Language and persists an unbound p
     )?.lessonAudio,
     null,
   );
+});
+
+test("internal Media Asset completion makes the first matching Lesson Audio current", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const lessonResponse = await app.request("/internal/lessons", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ chapter: 70, version: 1 }),
+  });
+  const lesson = await lessonResponse.json();
+  const localized = await app.request(
+    `/internal/lessons/${lesson.id}/texts/th`,
+    {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ title: "บท", content: "เนื้อหา" }),
+    },
+  );
+  const before = await localized.json();
+  const pending = await app.request("/internal/media-assets", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      languageCode: "th",
+      storageProvider: "s3",
+      storageContainer: "citizenship-audio",
+      objectKey: "audio/123e4567-e89b-12d3-a456-426614174001.mp3",
+      originalFilename: "lesson.mp3",
+      contentType: "audio/mpeg",
+      sizeBytes: 1,
+    }),
+  });
+  const asset = await pending.json();
+
+  const completed = await app.request(
+    `/internal/media-assets/${asset.id}/complete`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ lessonId: lesson.id, languageCode: "th" }),
+    },
+  );
+
+  assert.equal(completed.status, 200);
+  const result = await completed.json();
+  assert.deepEqual(Object.keys(result.mediaAsset).sort(), [
+    "contentType",
+    "durationMs",
+    "id",
+    "sizeBytes",
+    "status",
+    "uploadedAt",
+  ]);
+  assert.deepEqual(result.lessonAudio, {
+    id: result.lessonAudio.id,
+    lessonId: lesson.id,
+    languageCode: "th",
+    audioVersion: 1,
+    isCurrent: true,
+    createdAt: result.lessonAudio.createdAt,
+  });
+  assert.equal(result.mediaAsset.status, "READY");
+  assert.equal(result.mediaAsset.id, asset.id);
+
+  const [storedAsset] = await database
+    .select()
+    .from(mediaAsset)
+    .where(eq(mediaAsset.id, asset.id));
+  const [storedAudio] = await database
+    .select()
+    .from(lessonAudio)
+    .where(eq(lessonAudio.mediaAssetId, asset.id));
+  const [storedLesson] = await database
+    .select()
+    .from(lessonTable)
+    .where(eq(lessonTable.id, lesson.id));
+  assert.equal(storedAsset?.status, "READY");
+  assert.ok(storedAsset?.uploadedAt);
+  assert.equal(storedAudio?.audioVersion, 1);
+  assert.equal(storedAudio?.isCurrent, true);
+  assert.notEqual(storedLesson?.updatedAt.toISOString(), before.updatedAt);
 });
 
 test("internal Lesson HTTP operations persist and return aggregate transport shapes", async () => {
