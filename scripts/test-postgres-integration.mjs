@@ -19,6 +19,10 @@ const composeEnvironment = {
   POSTGRES_USER: databaseUser,
   POSTGRES_PASSWORD: databasePassword,
   DATA_SERVICE_TOKEN: "integration-only-data-service-token",
+  AWS_REGION: "eu-north-1",
+  S3_BUCKET: "integration-only-bucket",
+  AWS_ACCESS_KEY_ID: "integration-only-access-key-id",
+  AWS_SECRET_ACCESS_KEY: "integration-only-secret-access-key",
   ...(endToEnd ? { ADMIN_API_TOKEN: "integration-only-admin-token" } : {}),
 };
 const composeArguments = [

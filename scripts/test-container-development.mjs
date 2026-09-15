@@ -24,6 +24,10 @@ const composeEnvironment = {
 for (const name of [
   "ADMIN_API_TOKEN",
   "ADMIN_ORIGINS",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_REGION",
+  "AWS_SECRET_ACCESS_KEY",
+  "S3_BUCKET",
   "DATABASE_URL",
   "DATA_SERVICE_TOKEN",
   "POSTGRES_DB",
