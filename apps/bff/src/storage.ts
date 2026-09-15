@@ -62,7 +62,14 @@ export function createS3Storage(input: {
             ContentLength: sizeBytes,
             IfNoneMatch: "*",
           }),
-          { expiresIn: uploadExpirySeconds },
+          {
+            expiresIn: uploadExpirySeconds,
+            signableHeaders: new Set([
+              "content-length",
+              "content-type",
+              "if-none-match",
+            ]),
+          },
         ),
         uploadHeaders: uploadHeaders(contentType, sizeBytes),
         expiresAt,
