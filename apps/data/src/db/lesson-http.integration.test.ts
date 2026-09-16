@@ -204,6 +204,315 @@ test("internal Media Asset failure is terminal", async () => {
   assert.equal((await retry.json()).code, "media_asset_failed");
 });
 
+test("internal Media Asset completion promotes corrections and returns matching retries", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const createdLesson = await app.request("/internal/lessons", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ chapter: 71, version: 1 }),
+  });
+  const lesson = await createdLesson.json();
+  for (const languageCode of ["th", "da"]) {
+    await app.request(`/internal/lessons/${lesson.id}/texts/${languageCode}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ title: "Title", content: "Content" }),
+    });
+  }
+  const createAsset = (key: string) =>
+    app.request("/internal/media-assets", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        languageCode: "th",
+        storageProvider: "s3",
+        storageContainer: "citizenship-audio",
+        objectKey: key,
+        originalFilename: "lesson.mp3",
+        contentType: "audio/mpeg",
+        sizeBytes: 1,
+      }),
+    });
+  const complete = (id: number, languageCode = "th") =>
+    app.request(`/internal/media-assets/${id}/complete`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ lessonId: lesson.id, languageCode }),
+    });
+
+  const firstAsset = await (
+    await createAsset("audio/123e4567-e89b-12d3-a456-426614174010.mp3")
+  ).json();
+  const first = await complete(firstAsset.id);
+  assert.equal(first.status, 200);
+  const firstResult = await first.json();
+  assert.equal(firstResult.lessonAudio.audioVersion, 1);
+
+  const firstRetry = await complete(firstAsset.id);
+  assert.equal(firstRetry.status, 200);
+  assert.deepEqual(await firstRetry.json(), firstResult);
+
+  const published = await app.request(`/internal/lessons/${lesson.id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ status: "PUBLISHED" }),
+  });
+  const beforeCorrection = await published.json();
+  const secondAsset = await (
+    await createAsset("audio/123e4567-e89b-12d3-a456-426614174011.mp3")
+  ).json();
+  const second = await complete(secondAsset.id);
+  assert.equal(second.status, 200);
+  const secondResult = await second.json();
+  assert.equal(secondResult.lessonAudio.audioVersion, 2);
+  assert.equal(secondResult.lessonAudio.isCurrent, true);
+
+  const history = await database
+    .select({
+      mediaAssetId: lessonAudio.mediaAssetId,
+      audioVersion: lessonAudio.audioVersion,
+      isCurrent: lessonAudio.isCurrent,
+    })
+    .from(lessonAudio)
+    .where(eq(lessonAudio.lessonId, lesson.id))
+    .orderBy(lessonAudio.audioVersion);
+  assert.deepEqual(history, [
+    { mediaAssetId: firstAsset.id, audioVersion: 1, isCurrent: false },
+    { mediaAssetId: secondAsset.id, audioVersion: 2, isCurrent: true },
+  ]);
+  const afterCorrection = await app.request(`/internal/lessons/${lesson.id}`, {
+    headers,
+  });
+  const afterCorrectionBody = await afterCorrection.json();
+  assert.ok(
+    Date.parse(afterCorrectionBody.updatedAt) >
+      Date.parse(beforeCorrection.updatedAt),
+  );
+
+  const secondRetry = await complete(secondAsset.id);
+  assert.equal(secondRetry.status, 200);
+  assert.deepEqual(await secondRetry.json(), secondResult);
+  const afterRetry = await app.request(`/internal/lessons/${lesson.id}`, {
+    headers,
+  });
+  assert.equal(
+    (await afterRetry.json()).updatedAt,
+    afterCorrectionBody.updatedAt,
+  );
+
+  const rebind = await complete(firstAsset.id, "da");
+  assert.equal(rebind.status, 409);
+  assert.equal((await rebind.json()).code, "media_asset_rebind_conflict");
+
+  const archivedLesson = await app.request("/internal/lessons", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ chapter: 73, version: 1 }),
+  });
+  const archived = await archivedLesson.json();
+  await app.request(`/internal/lessons/${archived.id}/texts/th`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ title: "Title", content: "Content" }),
+  });
+  await app.request(`/internal/lessons/${archived.id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ status: "ARCHIVED" }),
+  });
+  const archivedAsset = await (
+    await createAsset("audio/123e4567-e89b-12d3-a456-426614174012.mp3")
+  ).json();
+  const archivedCompletion = await app.request(
+    `/internal/media-assets/${archivedAsset.id}/complete`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ lessonId: archived.id, languageCode: "th" }),
+    },
+  );
+  assert.equal(archivedCompletion.status, 409);
+  assert.equal((await archivedCompletion.json()).code, "lesson_archived");
+});
+
+test("internal Media Asset completion rolls back every promotion write", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const lessonResponse = await app.request("/internal/lessons", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ chapter: 72, version: 1 }),
+  });
+  const lesson = await lessonResponse.json();
+  await app.request(`/internal/lessons/${lesson.id}/texts/th`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ title: "Title", content: "Content" }),
+  });
+  const createAsset = (key: string) =>
+    app.request("/internal/media-assets", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        languageCode: "th",
+        storageProvider: "s3",
+        storageContainer: "citizenship-audio",
+        objectKey: key,
+        originalFilename: "lesson.mp3",
+        contentType: "audio/mpeg",
+        sizeBytes: 1,
+      }),
+    });
+  const currentAsset = await (
+    await createAsset("audio/123e4567-e89b-12d3-a456-426614174013.mp3")
+  ).json();
+  await app.request(`/internal/media-assets/${currentAsset.id}/complete`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ lessonId: lesson.id, languageCode: "th" }),
+  });
+  const before = await (
+    await app.request(`/internal/lessons/${lesson.id}`, { headers })
+  ).json();
+  const assetResponse = await createAsset(
+    "audio/123e4567-e89b-12d3-a456-426614174014.mp3",
+  );
+  const asset = await assetResponse.json();
+  const rollbackApp = createDataApp(async () => undefined, {
+    database: new Proxy(database, {
+      get(target, property, receiver) {
+        if (property === "transaction") {
+          return async (callback: any) =>
+            target.transaction(async (transaction) => {
+              await callback(transaction);
+              throw new Error("forced rollback");
+            });
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    }),
+    dataServiceToken: "data-token",
+  });
+
+  const response = await rollbackApp.request(
+    `/internal/media-assets/${asset.id}/complete`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ lessonId: lesson.id, languageCode: "th" }),
+    },
+  );
+  assert.equal(response.status, 500);
+  assert.equal(
+    (
+      await database
+        .select({ status: mediaAsset.status })
+        .from(mediaAsset)
+        .where(eq(mediaAsset.id, asset.id))
+    )[0]?.status,
+    "PENDING",
+  );
+  assert.equal(
+    (
+      await database
+        .select({ id: lessonAudio.id })
+        .from(lessonAudio)
+        .where(eq(lessonAudio.mediaAssetId, asset.id))
+    ).length,
+    0,
+  );
+  assert.deepEqual(
+    await database
+      .select({
+        mediaAssetId: lessonAudio.mediaAssetId,
+        isCurrent: lessonAudio.isCurrent,
+      })
+      .from(lessonAudio)
+      .where(eq(lessonAudio.lessonId, lesson.id)),
+    [{ mediaAssetId: currentAsset.id, isCurrent: true }],
+  );
+  const after = await app.request(`/internal/lessons/${lesson.id}`, {
+    headers,
+  });
+  assert.equal((await after.json()).updatedAt, before.updatedAt);
+});
+
+test("internal Media Asset completion serializes concurrent corrections", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const lessonResponse = await app.request("/internal/lessons", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ chapter: 74, version: 1 }),
+  });
+  const lesson = await lessonResponse.json();
+  await app.request(`/internal/lessons/${lesson.id}/texts/th`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ title: "Title", content: "Content" }),
+  });
+  const createAsset = (key: string) =>
+    app.request("/internal/media-assets", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        languageCode: "th",
+        storageProvider: "s3",
+        storageContainer: "citizenship-audio",
+        objectKey: key,
+        originalFilename: "lesson.mp3",
+        contentType: "audio/mpeg",
+        sizeBytes: 1,
+      }),
+    });
+  const [firstAsset, secondAsset] = await Promise.all(
+    [
+      "audio/123e4567-e89b-12d3-a456-426614174015.mp3",
+      "audio/123e4567-e89b-12d3-a456-426614174016.mp3",
+    ].map(async (key) => (await createAsset(key)).json()),
+  );
+  const completions = await Promise.all(
+    [firstAsset, secondAsset].map((asset) =>
+      app.request(`/internal/media-assets/${asset.id}/complete`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ lessonId: lesson.id, languageCode: "th" }),
+      }),
+    ),
+  );
+  assert.deepEqual(
+    completions.map(({ status }) => status),
+    [200, 200],
+  );
+  const history = await database
+    .select({
+      mediaAssetId: lessonAudio.mediaAssetId,
+      audioVersion: lessonAudio.audioVersion,
+      isCurrent: lessonAudio.isCurrent,
+    })
+    .from(lessonAudio)
+    .where(eq(lessonAudio.lessonId, lesson.id))
+    .orderBy(lessonAudio.audioVersion);
+  assert.deepEqual(
+    history.map(({ audioVersion, isCurrent }) => ({ audioVersion, isCurrent })),
+    [
+      { audioVersion: 1, isCurrent: false },
+      { audioVersion: 2, isCurrent: true },
+    ],
+  );
+  assert.deepEqual(
+    history.map(({ mediaAssetId }) => mediaAssetId).sort(),
+    [firstAsset.id, secondAsset.id].sort(),
+  );
+});
+
 test("internal Lesson HTTP operations persist and return aggregate transport shapes", async () => {
   const unauthorized = await app.request("/internal/lessons", {
     method: "POST",
