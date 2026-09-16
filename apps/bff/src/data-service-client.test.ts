@@ -90,6 +90,7 @@ test("Data Service client preserves boundary failures and correlation", async (c
           "data-token",
         );
         await client.getMediaAsset(9, "request-6");
+        await client.failMediaAsset(9, "request-6");
         await client.completeMediaAsset(
           9,
           { lessonId: 7, languageCode: "th" },
@@ -99,6 +100,11 @@ test("Data Service client preserves boundary failures and correlation", async (c
           {
             url: "http://data.example/internal/media-assets/9",
             method: "GET",
+            body: undefined,
+          },
+          {
+            url: "http://data.example/internal/media-assets/9/fail",
+            method: "POST",
             body: undefined,
           },
           {

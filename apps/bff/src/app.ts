@@ -210,15 +210,30 @@ export function createBffApp(
           c.get("requestId"),
         );
         if (asset.status === "PENDING") {
-          const object = await options.storage.inspectObject(asset.objectKey);
+          let object: { contentType?: string; sizeBytes?: number };
+          try {
+            object = await options.storage.inspectObject(asset.objectKey);
+          } catch (error) {
+            logStorageFailure(c.get("requestId"), "inspect", asset.id, error);
+            return storageFailureProblem(c, error);
+          }
           if (
             object.contentType !== asset.contentType ||
             object.sizeBytes !== asset.sizeBytes
           ) {
+            await options.dataServiceClient.failMediaAsset(
+              mediaAssetId,
+              c.get("requestId"),
+            );
+            try {
+              await options.storage.deleteObject(asset.objectKey);
+            } catch (error) {
+              logStorageFailure(c.get("requestId"), "delete", asset.id, error);
+            }
             return problem(
               c,
-              409,
-              "uploaded_object_mismatch",
+              422,
+              "invalid_uploaded_media",
               "Uploaded object does not match its declared media metadata.",
             );
           }
@@ -620,6 +635,7 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
             "published_lesson_conflict",
             "lesson_archived",
             "media_asset_not_pending",
+            "media_asset_failed",
             "source_url_conflict",
           ].includes(error.details.code)
         ? 409
@@ -655,4 +671,62 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
     "data_service_unavailable",
     "The Data Service is unavailable.",
   );
+}
+
+function storageFailureProblem(
+  c: Parameters<typeof problem>[0],
+  error: unknown,
+) {
+  const name = storageErrorName(error);
+  if (["NoSuchKey", "NotFound", "NoSuchObject"].includes(name)) {
+    return problem(
+      c,
+      409,
+      "upload_incomplete",
+      "Uploaded object is not available yet.",
+    );
+  }
+  if (["TimeoutError", "RequestTimeout", "ETIMEDOUT"].includes(name)) {
+    return problem(c, 504, "storage_timeout", "Storage timed out.");
+  }
+  return problem(c, 503, "storage_unavailable", "Storage is unavailable.");
+}
+
+function logStorageFailure(
+  requestId: string,
+  operation: "inspect" | "delete",
+  mediaAssetId: number,
+  error: unknown,
+) {
+  console.log(
+    JSON.stringify({
+      requestId,
+      operation,
+      mediaAssetId,
+      storageErrorCode: storageErrorName(error),
+      storageRequestId: storageRequestId(error),
+    }),
+  );
+}
+
+function storageErrorName(error: unknown) {
+  return error &&
+    typeof error === "object" &&
+    "name" in error &&
+    typeof error.name === "string"
+    ? error.name
+    : "unknown";
+}
+
+function storageRequestId(error: unknown) {
+  if (!error || typeof error !== "object" || !("$metadata" in error)) {
+    return undefined;
+  }
+  const metadata = error.$metadata;
+  return metadata &&
+    typeof metadata === "object" &&
+    "requestId" in metadata &&
+    typeof metadata.requestId === "string"
+    ? metadata.requestId
+    : undefined;
 }

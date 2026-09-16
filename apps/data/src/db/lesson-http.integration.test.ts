@@ -157,6 +157,53 @@ test("internal Media Asset completion makes the first matching Lesson Audio curr
   assert.notEqual(storedLesson?.updatedAt.toISOString(), before.updatedAt);
 });
 
+test("internal Media Asset failure is terminal", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const pending = await app.request("/internal/media-assets", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      languageCode: "th",
+      storageProvider: "s3",
+      storageContainer: "citizenship-audio",
+      objectKey: "audio/123e4567-e89b-12d3-a456-426614174002.mp3",
+      originalFilename: "lesson.mp3",
+      contentType: "audio/mpeg",
+      sizeBytes: 1,
+    }),
+  });
+  const asset = await pending.json();
+
+  const failed = await app.request(`/internal/media-assets/${asset.id}/fail`, {
+    method: "POST",
+    headers,
+  });
+  assert.equal(failed.status, 204);
+  assert.equal(
+    (
+      await database
+        .select({ status: mediaAsset.status })
+        .from(mediaAsset)
+        .where(eq(mediaAsset.id, asset.id))
+    )[0]?.status,
+    "FAILED",
+  );
+
+  const retry = await app.request(
+    `/internal/media-assets/${asset.id}/complete`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ lessonId: 1, languageCode: "th" }),
+    },
+  );
+  assert.equal(retry.status, 409);
+  assert.equal((await retry.json()).code, "media_asset_failed");
+});
+
 test("internal Lesson HTTP operations persist and return aggregate transport shapes", async () => {
   const unauthorized = await app.request("/internal/lessons", {
     method: "POST",

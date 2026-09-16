@@ -28,7 +28,7 @@ export interface Storage {
   }): Promise<UploadAuthorization>;
   inspectObject(
     key: string,
-  ): Promise<{ contentType: string; sizeBytes: number }>;
+  ): Promise<{ contentType?: string; sizeBytes?: number }>;
   createPlaybackAuthorization(key: string): Promise<{
     playbackUrl: string;
     expiresAt: string;
@@ -79,12 +79,6 @@ export function createS3Storage(input: {
       const object = await client.send(
         new HeadObjectCommand({ Bucket: input.bucket, Key: key }),
       );
-      if (
-        object.ContentType === undefined ||
-        object.ContentLength === undefined
-      ) {
-        throw new Error("S3 object metadata is incomplete.");
-      }
       return {
         contentType: object.ContentType,
         sizeBytes: object.ContentLength,
@@ -136,9 +130,14 @@ export class FakeStorage implements Storage {
     this.objects.set(key, object);
   }
 
-  async inspectObject(key: string) {
+  async inspectObject(
+    key: string,
+  ): Promise<{ contentType?: string; sizeBytes?: number }> {
     const object = this.objects.get(key);
-    if (!object) throw new Error("S3 object was not found.");
+    if (!object)
+      throw Object.assign(new Error("S3 object was not found."), {
+        name: "NotFound",
+      });
     return object;
   }
 

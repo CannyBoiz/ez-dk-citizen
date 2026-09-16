@@ -25,6 +25,7 @@ function createTestDataServiceClient(
   return {
     createPendingMediaAsset: unused,
     getMediaAsset: unused,
+    failMediaAsset: unused,
     completeMediaAsset: unused,
     createLesson: unused,
     upsertLessonText: unused,
@@ -223,6 +224,246 @@ test("BFF completes matching stored media through the admin route", async () => 
     body: JSON.stringify({ lessonId: 7, languageCode: "th" }),
   });
   assert.equal(unauthorized.status, 401);
+});
+
+test("BFF keeps incomplete uploads pending and fails invalid uploads before exact cleanup", async (context) => {
+  const asset = mediaAssetResponseSchema.parse({
+    id: 9,
+    storageProvider: "s3",
+    storageContainer: "citizenship-audio",
+    objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
+    originalFilename: "lesson.mp3",
+    contentType: "audio/mpeg",
+    sizeBytes: 1,
+    status: "PENDING",
+    durationMs: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    uploadedAt: null,
+  });
+  const request = (app: ReturnType<typeof createBffApp>) =>
+    app.request("/api/admin/media/9/complete", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer admin-token",
+        "Content-Type": "application/json",
+        "X-Request-ID": "failure-request",
+      },
+      body: JSON.stringify({ lessonId: 7, languageCode: "th" }),
+    });
+
+  await context.test("reports a missing object as retryable", async () => {
+    const storage = new FakeStorage();
+    const app = createBffApp(async () => undefined, {
+      adminApiToken: "admin-token",
+      storage,
+      dataServiceClient: createTestDataServiceClient({
+        async getMediaAsset() {
+          return asset;
+        },
+      }),
+    });
+
+    const response = await request(app);
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).code, "upload_incomplete");
+  });
+
+  await context.test(
+    "reports transient and timed-out storage failures as retryable",
+    async () => {
+      for (const [name, status, code] of [
+        ["SlowDown", 503, "storage_unavailable"],
+        ["TimeoutError", 504, "storage_timeout"],
+      ] as const) {
+        const storage = new FakeStorage();
+        storage.inspectObject = async () => {
+          throw Object.assign(new Error(name), { name });
+        };
+        const app = createBffApp(async () => undefined, {
+          adminApiToken: "admin-token",
+          storage,
+          dataServiceClient: createTestDataServiceClient({
+            async getMediaAsset() {
+              return asset;
+            },
+          }),
+        });
+
+        const response = await request(app);
+        assert.equal(response.status, status);
+        assert.equal((await response.json()).code, code);
+      }
+    },
+  );
+
+  await context.test("logs inspect failures without secrets", async () => {
+    const storage = new FakeStorage();
+    const logs: unknown[] = [];
+    storage.inspectObject = async () => {
+      throw Object.assign(
+        new Error(
+          "Bearer admin-token https://storage.invalid/audio/private.mp3?signature=secret request body",
+        ),
+        { name: "SlowDown", $metadata: { requestId: "aws-request" } },
+      );
+    };
+    const app = createBffApp(async () => undefined, {
+      adminApiToken: "admin-token",
+      storage,
+      dataServiceClient: createTestDataServiceClient({
+        async getMediaAsset() {
+          return asset;
+        },
+      }),
+    });
+    const originalLog = console.log;
+    console.log = (entry: unknown) => logs.push(entry);
+    try {
+      assert.equal((await request(app)).status, 503);
+    } finally {
+      console.log = originalLog;
+    }
+
+    const inspectLog = logs
+      .map((entry) => JSON.parse(String(entry)))
+      .find((entry) => entry.operation === "inspect");
+    assert.deepEqual(inspectLog, {
+      requestId: "failure-request",
+      operation: "inspect",
+      mediaAssetId: asset.id,
+      storageErrorCode: "SlowDown",
+      storageRequestId: "aws-request",
+    });
+    assert.doesNotMatch(
+      logs.join("\n"),
+      /admin-token|storage\.invalid|signature|request body/,
+    );
+  });
+
+  await context.test("fails incomplete metadata before cleanup", async () => {
+    const storage = new FakeStorage();
+    const calls: string[] = [];
+    storage.inspectObject = async () => ({});
+    storage.deleteObject = async (key) => {
+      assert.equal(key, asset.objectKey);
+      calls.push("delete");
+    };
+    const app = createBffApp(async () => undefined, {
+      adminApiToken: "admin-token",
+      storage,
+      dataServiceClient: createTestDataServiceClient({
+        async getMediaAsset() {
+          return asset;
+        },
+        async failMediaAsset() {
+          calls.push("fail");
+        },
+      }),
+    });
+
+    assert.equal((await request(app)).status, 422);
+    assert.deepEqual(calls, ["fail", "delete"]);
+  });
+
+  await context.test(
+    "fails metadata mismatches before deleting the exact object",
+    async () => {
+      for (const object of [
+        { contentType: "audio/mpeg", sizeBytes: 2 },
+        { contentType: "audio/ogg", sizeBytes: 1 },
+      ]) {
+        const storage = new FakeStorage();
+        const calls: string[] = [];
+        storage.putObject(asset.objectKey, object);
+        storage.deleteObject = async (key) => {
+          assert.equal(key, asset.objectKey);
+          calls.push("delete");
+        };
+        const app = createBffApp(async () => undefined, {
+          adminApiToken: "admin-token",
+          storage,
+          dataServiceClient: createTestDataServiceClient({
+            async getMediaAsset() {
+              return asset;
+            },
+            async failMediaAsset(id, requestId) {
+              assert.equal(id, asset.id);
+              assert.equal(requestId, "failure-request");
+              calls.push("fail");
+            },
+            async completeMediaAsset() {
+              throw new Error("invalid media must not complete");
+            },
+          }),
+        });
+
+        const response = await request(app);
+        assert.equal(response.status, 422);
+        assert.equal((await response.json()).code, "invalid_uploaded_media");
+        assert.deepEqual(calls, ["fail", "delete"]);
+      }
+    },
+  );
+
+  await context.test(
+    "keeps failed media terminal when cleanup and storage diagnostics fail",
+    async () => {
+      const storage = new FakeStorage();
+      const calls: string[] = [];
+      const logs: unknown[] = [];
+      storage.putObject(asset.objectKey, {
+        contentType: "audio/ogg",
+        sizeBytes: asset.sizeBytes,
+      });
+      storage.deleteObject = async (key) => {
+        assert.equal(key, asset.objectKey);
+        calls.push("delete");
+        throw Object.assign(
+          new Error(
+            "Bearer admin-token https://storage.invalid/audio/private.mp3?signature=secret request body",
+          ),
+          { name: "AccessDenied", $metadata: { requestId: "aws-request" } },
+        );
+      };
+      const app = createBffApp(async () => undefined, {
+        adminApiToken: "admin-token",
+        storage,
+        dataServiceClient: createTestDataServiceClient({
+          async getMediaAsset() {
+            return asset;
+          },
+          async failMediaAsset() {
+            calls.push("fail");
+          },
+        }),
+      });
+      const originalLog = console.log;
+      console.log = (entry: unknown) => logs.push(entry);
+      try {
+        const response = await request(app);
+        assert.equal(response.status, 422);
+        assert.equal((await response.json()).code, "invalid_uploaded_media");
+      } finally {
+        console.log = originalLog;
+      }
+
+      assert.deepEqual(calls, ["fail", "delete"]);
+      const cleanupLog = logs
+        .map((entry) => JSON.parse(String(entry)))
+        .find((entry) => entry.operation === "delete");
+      assert.deepEqual(cleanupLog, {
+        requestId: "failure-request",
+        operation: "delete",
+        mediaAssetId: asset.id,
+        storageErrorCode: "AccessDenied",
+        storageRequestId: "aws-request",
+      });
+      assert.doesNotMatch(
+        logs.join("\n"),
+        /admin-token|storage\.invalid|signature|request body/,
+      );
+    },
+  );
 });
 
 test("BFF preserves completion conflicts from the Data Service", async () => {
