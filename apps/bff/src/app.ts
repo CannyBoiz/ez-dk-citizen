@@ -636,6 +636,7 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
             "lesson_archived",
             "media_asset_not_pending",
             "media_asset_failed",
+            "media_asset_rebind_conflict",
             "source_url_conflict",
           ].includes(error.details.code)
         ? 409

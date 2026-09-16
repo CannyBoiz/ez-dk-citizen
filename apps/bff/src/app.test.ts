@@ -516,6 +516,66 @@ test("BFF preserves completion conflicts from the Data Service", async () => {
   assert.equal((await response.json()).code, "lesson_text_not_found");
 });
 
+test("BFF retries ready media without inspecting storage", async () => {
+  const asset = mediaAssetResponseSchema.parse({
+    id: 9,
+    storageProvider: "s3",
+    storageContainer: "citizenship-audio",
+    objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
+    originalFilename: "lesson.mp3",
+    contentType: "audio/mpeg",
+    sizeBytes: 1,
+    status: "READY",
+    durationMs: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    uploadedAt: "2026-01-01T00:01:00.000Z",
+  });
+  const storage = new FakeStorage();
+  storage.inspectObject = async () => {
+    throw new Error("matching retry must not inspect storage");
+  };
+  const app = createBffApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    storage,
+    dataServiceClient: createTestDataServiceClient({
+      async getMediaAsset() {
+        return asset;
+      },
+      async completeMediaAsset() {
+        return {
+          mediaAsset: {
+            id: asset.id,
+            status: "READY",
+            contentType: asset.contentType,
+            sizeBytes: asset.sizeBytes,
+            durationMs: null,
+            uploadedAt: "2026-01-01T00:01:00.000Z",
+          },
+          lessonAudio: {
+            id: 3,
+            lessonId: 7,
+            languageCode: "th",
+            audioVersion: 1,
+            isCurrent: true,
+            createdAt: "2026-01-01T00:01:00.000Z",
+          },
+        };
+      },
+    }),
+  });
+
+  const response = await app.request("/api/admin/media/9/complete", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ lessonId: 7, languageCode: "th" }),
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).lessonAudio.audioVersion, 1);
+});
+
 test("BFF does not sign when pending Media Asset persistence fails", async () => {
   const storage = new FakeStorage();
   const app = createBffApp(async () => undefined, {

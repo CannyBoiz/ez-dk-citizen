@@ -262,6 +262,22 @@ export function createDataApp(
             .where(eq(mediaAsset.id, mediaAssetId))
             .for("update");
           if (!asset) return "media_asset_not_found" as const;
+          if (asset.status === "READY") {
+            const [audio] = await transaction
+              .select()
+              .from(lessonAudio)
+              .where(eq(lessonAudio.mediaAssetId, asset.id))
+              .for("update");
+            if (!audio)
+              throw new Error("Ready Media Asset has no Lesson Audio.");
+            if (
+              audio.lessonId === input.lessonId &&
+              audio.languageCode === input.languageCode
+            ) {
+              return { readyAsset: asset, audio };
+            }
+            return "media_asset_rebind_conflict" as const;
+          }
           if (asset.status === "FAILED") return "media_asset_failed" as const;
           if (asset.status !== "PENDING")
             return "media_asset_not_pending" as const;
@@ -292,6 +308,27 @@ export function createDataApp(
           if (!text) return "lesson_text_not_found" as const;
 
           const now = new Date();
+          const [latestAudio] = await transaction
+            .select({ audioVersion: lessonAudio.audioVersion })
+            .from(lessonAudio)
+            .where(
+              and(
+                eq(lessonAudio.lessonId, input.lessonId),
+                eq(lessonAudio.languageCode, input.languageCode),
+              ),
+            )
+            .orderBy(desc(lessonAudio.audioVersion))
+            .limit(1);
+          await transaction
+            .update(lessonAudio)
+            .set({ isCurrent: false })
+            .where(
+              and(
+                eq(lessonAudio.lessonId, input.lessonId),
+                eq(lessonAudio.languageCode, input.languageCode),
+                eq(lessonAudio.isCurrent, true),
+              ),
+            );
           const [readyAsset] = await transaction
             .update(mediaAsset)
             .set({ status: "READY", uploadedAt: now })
@@ -305,7 +342,7 @@ export function createDataApp(
               lessonId: input.lessonId,
               languageCode: input.languageCode,
               mediaAssetId: asset.id,
-              audioVersion: 1,
+              audioVersion: (latestAudio?.audioVersion ?? 0) + 1,
               isCurrent: true,
             })
             .returning();
@@ -344,6 +381,14 @@ export function createDataApp(
           409,
           outcome,
           "Media Asset failed validation; create a new Upload Intent.",
+        );
+      }
+      if (outcome === "media_asset_rebind_conflict") {
+        return problem(
+          c,
+          409,
+          outcome,
+          "Media Asset is already bound to a different Lesson or Language.",
         );
       }
       return c.json(
