@@ -859,6 +859,113 @@ test("internal Lesson Source operations replace locators and detach safely", asy
   );
 });
 
+test("Published localized detail returns only the requested current ready audio", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const created = await app.request("/internal/lessons", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ chapter: 74, version: 1 }),
+  });
+  const lesson = await created.json();
+  for (const languageCode of ["th", "da"]) {
+    await app.request(`/internal/lessons/${lesson.id}/texts/${languageCode}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ title: "Title", content: "Content" }),
+    });
+  }
+  const createAsset = (key: string) =>
+    app.request("/internal/media-assets", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        languageCode: "th",
+        storageProvider: "s3",
+        storageContainer: "citizenship-audio",
+        objectKey: key,
+        originalFilename: "lesson.mp3",
+        contentType: "audio/mpeg",
+        sizeBytes: 1,
+      }),
+    });
+  const complete = (id: number) =>
+    app.request(`/internal/media-assets/${id}/complete`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ lessonId: lesson.id, languageCode: "th" }),
+    });
+
+  const first = await (
+    await createAsset("audio/123e4567-e89b-12d3-a456-426614174074.mp3")
+  ).json();
+  assert.equal((await complete(first.id)).status, 200);
+  assert.equal(
+    (
+      await app.request(`/internal/lessons/${lesson.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ status: "PUBLISHED" }),
+      })
+    ).status,
+    200,
+  );
+  const secondKey = "audio/123e4567-e89b-12d3-a456-426614174075.mp3";
+  const second = await (await createAsset(secondKey)).json();
+  const secondCompletion = await complete(second.id);
+  assert.equal(secondCompletion.status, 200);
+  assert.equal((await secondCompletion.json()).lessonAudio.audioVersion, 2);
+  const retry = await complete(second.id);
+  assert.equal(retry.status, 200);
+  assert.equal((await retry.json()).lessonAudio.audioVersion, 2);
+
+  const thai = await app.request(
+    `/internal/lessons/${lesson.id}?status=PUBLISHED&language=th`,
+    { headers },
+  );
+  assert.equal(thai.status, 200);
+  assert.deepEqual((await thai.json()).currentAudio, {
+    mediaAssetId: second.id,
+    audioVersion: 2,
+    objectKey: secondKey,
+    contentType: "audio/mpeg",
+    sizeBytes: 1,
+    durationMs: null,
+  });
+  const danish = await app.request(
+    `/internal/lessons/${lesson.id}?status=PUBLISHED&language=da`,
+    { headers },
+  );
+  assert.equal((await danish.json()).currentAudio, null);
+  const list = await app.request(
+    "/internal/lessons?status=PUBLISHED&language=th",
+    {
+      headers,
+    },
+  );
+  assert.equal(
+    "currentAudio" in
+      (await list.json()).items.find(
+        (item: { id: number }) => item.id === lesson.id,
+      ),
+    false,
+  );
+  const history = await database
+    .select({
+      audioVersion: lessonAudio.audioVersion,
+      isCurrent: lessonAudio.isCurrent,
+    })
+    .from(lessonAudio)
+    .where(eq(lessonAudio.lessonId, lesson.id))
+    .orderBy(lessonAudio.audioVersion);
+  assert.deepEqual(history, [
+    { audioVersion: 1, isCurrent: false },
+    { audioVersion: 2, isCurrent: true },
+  ]);
+});
+
 test("internal localized reads filter by status and return Lesson aggregates", async () => {
   const headers = {
     Authorization: "Bearer data-token",

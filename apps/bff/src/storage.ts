@@ -108,6 +108,7 @@ export class FakeStorage implements Storage {
     contentType: "audio/mpeg";
     sizeBytes: number;
   }> = [];
+  readonly playbackAuthorizations: string[] = [];
   private readonly objects = new Map<
     string,
     { contentType: string; sizeBytes: number }
@@ -142,6 +143,7 @@ export class FakeStorage implements Storage {
   }
 
   async createPlaybackAuthorization(key: string) {
+    this.playbackAuthorizations.push(key);
     return {
       playbackUrl: `https://storage.invalid/${key}?playback=1`,
       expiresAt: expiry(playbackExpirySeconds),

@@ -10,6 +10,7 @@ import {
   mediaAssetResponseSchema,
   mediaAssetLookupResponseSchema,
   patchLessonRequestSchema,
+  publishedLessonDetailSchema,
   problemDetailsSchema,
   sourceListResponseSchema,
   sourceResponseSchema,
@@ -25,6 +26,7 @@ import {
   type LessonListResponse,
   type MediaAssetResponse,
   type PatchLessonRequest,
+  type PublishedLessonDetail,
   type ProblemDetails,
   type SourceListResponse,
   type SourceResponse,
@@ -85,7 +87,7 @@ export interface DataServiceClient {
     id: number,
     languageCode: string,
     requestId: string,
-  ): Promise<LessonDetail>;
+  ): Promise<PublishedLessonDetail>;
 }
 
 export class DataServiceError extends Error {
@@ -240,7 +242,7 @@ export function createDataServiceClient(
         "GET",
         requestId,
         undefined,
-        lessonDetailSchema.parse,
+        publishedLessonDetailSchema.parse,
       ),
   };
 }

@@ -29,3 +29,20 @@ test("S3 upload authorization signs all declared write constraints", async () =>
   });
   assert.ok(Date.parse(authorization.expiresAt) > Date.now() + 14 * 60 * 1_000);
 });
+
+test("S3 playback authorization is a one-hour object read", async () => {
+  const authorization = await createS3Storage({
+    region: "eu-north-1",
+    bucket: "citizenship-audio",
+    accessKeyId: "test-access-key-id",
+    secretAccessKey: "test-secret-access-key",
+  }).createPlaybackAuthorization(
+    "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
+  );
+
+  assert.equal(
+    new URL(authorization.playbackUrl).searchParams.get("X-Amz-Expires"),
+    "3600",
+  );
+  assert.ok(Date.parse(authorization.expiresAt) > Date.now() + 59 * 60 * 1_000);
+});
