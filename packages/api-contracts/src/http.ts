@@ -46,6 +46,7 @@ const problemTitles: Record<number, string> = {
   422: "Unprocessable Content",
   500: "Internal Server Error",
   502: "Bad Gateway",
+  503: "Service Unavailable",
   504: "Gateway Timeout",
 };
 
@@ -99,7 +100,7 @@ export function requireBearerToken(token: string | undefined) {
 
 export function problem(
   context: HttpContext,
-  status: 400 | 401 | 404 | 409 | 422 | 500 | 502 | 504,
+  status: 400 | 401 | 404 | 409 | 422 | 500 | 502 | 503 | 504,
   code: string,
   detail: string,
   errors?: Array<{ path: Array<string | number>; message: string }>,

@@ -38,6 +38,7 @@ export interface DataServiceClient {
     requestId: string,
   ): Promise<MediaAssetResponse>;
   getMediaAsset(id: number, requestId: string): Promise<MediaAssetResponse>;
+  failMediaAsset(id: number, requestId: string): Promise<void>;
   completeMediaAsset(
     id: number,
     input: CompleteMediaAssetRequest,
@@ -136,6 +137,14 @@ export function createDataServiceClient(
         requestId,
         undefined,
         mediaAssetLookupResponseSchema.parse,
+      ),
+    failMediaAsset: (id, requestId) =>
+      call(
+        `/internal/media-assets/${id}/fail`,
+        "POST",
+        requestId,
+        undefined,
+        () => undefined,
       ),
     completeMediaAsset: (id, input, requestId) =>
       call(

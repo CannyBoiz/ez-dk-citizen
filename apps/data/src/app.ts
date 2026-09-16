@@ -193,6 +193,50 @@ export function createDataApp(
   );
 
   app.post(
+    "/internal/media-assets/:mediaAssetId/fail",
+    validateRequest("param", mediaAssetIdParamsSchema),
+    async (c) => {
+      const { mediaAssetId } = c.req.valid("param") as {
+        mediaAssetId: number;
+      };
+      if (!options.database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
+
+      const outcome = await options.database.transaction(
+        async (transaction) => {
+          const [asset] = await transaction
+            .select({ status: mediaAsset.status })
+            .from(mediaAsset)
+            .where(eq(mediaAsset.id, mediaAssetId))
+            .for("update");
+          if (!asset) return "media_asset_not_found" as const;
+          if (asset.status !== "PENDING")
+            return "media_asset_not_pending" as const;
+          await transaction
+            .update(mediaAsset)
+            .set({ status: "FAILED" })
+            .where(eq(mediaAsset.id, mediaAssetId));
+          return "failed" as const;
+        },
+      );
+
+      if (outcome === "media_asset_not_found") {
+        return problem(c, 404, outcome, "Media Asset was not found.");
+      }
+      if (outcome === "media_asset_not_pending") {
+        return problem(c, 409, outcome, "Media Asset is not pending.");
+      }
+      return c.body(null, 204);
+    },
+  );
+
+  app.post(
     "/internal/media-assets/:mediaAssetId/complete",
     validateRequest("param", mediaAssetIdParamsSchema),
     validateJson(completeMediaAssetRequestSchema),
@@ -218,6 +262,7 @@ export function createDataApp(
             .where(eq(mediaAsset.id, mediaAssetId))
             .for("update");
           if (!asset) return "media_asset_not_found" as const;
+          if (asset.status === "FAILED") return "media_asset_failed" as const;
           if (asset.status !== "PENDING")
             return "media_asset_not_pending" as const;
 
@@ -292,6 +337,14 @@ export function createDataApp(
       }
       if (outcome === "media_asset_not_pending") {
         return problem(c, 409, outcome, "Media Asset is not pending.");
+      }
+      if (outcome === "media_asset_failed") {
+        return problem(
+          c,
+          409,
+          outcome,
+          "Media Asset failed validation; create a new Upload Intent.",
+        );
       }
       return c.json(
         completeMediaAssetResponseSchema.parse({
