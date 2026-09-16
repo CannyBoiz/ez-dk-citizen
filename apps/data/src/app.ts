@@ -18,6 +18,7 @@ import {
   mediaAssetResponseSchema,
   livenessResponseSchema,
   patchLessonRequestSchema,
+  publishedLessonDetailSchema,
   problem,
   readinessResponseSchema,
   requireBearerToken,
@@ -925,6 +926,42 @@ export function createDataApp(
             "lesson_text_not_found",
             "Lesson Text was not found.",
           );
+      }
+      if (filteredStatus === "PUBLISHED" && languageCode) {
+        const [currentAudio] = await options.database
+          .select({
+            mediaAssetId: lessonAudio.mediaAssetId,
+            audioVersion: lessonAudio.audioVersion,
+            objectKey: mediaAsset.objectKey,
+            contentType: mediaAsset.contentType,
+            sizeBytes: mediaAsset.sizeBytes,
+            durationMs: mediaAsset.durationMs,
+          })
+          .from(lessonAudio)
+          .innerJoin(mediaAsset, eq(mediaAsset.id, lessonAudio.mediaAssetId))
+          .where(
+            and(
+              eq(lessonAudio.lessonId, id),
+              eq(lessonAudio.languageCode, languageCode),
+              eq(lessonAudio.isCurrent, true),
+              eq(mediaAsset.status, "READY"),
+            ),
+          );
+        return c.json(
+          publishedLessonDetailSchema.parse({
+            ...detail,
+            currentAudio: currentAudio
+              ? {
+                  ...currentAudio,
+                  sizeBytes: Number(currentAudio.sizeBytes),
+                  durationMs:
+                    currentAudio.durationMs === null
+                      ? null
+                      : Number(currentAudio.durationMs),
+                }
+              : null,
+          }),
+        );
       }
       return c.json(lessonDetailSchema.parse(detail));
     },

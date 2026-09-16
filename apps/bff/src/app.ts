@@ -586,6 +586,40 @@ export function createBffApp(
             "lesson_text_not_found",
             "Lesson Text was not found.",
           );
+        let audio = null;
+        if (lesson.currentAudio) {
+          if (!options.storage)
+            return problem(
+              c,
+              502,
+              "storage_unavailable",
+              "Storage is unavailable.",
+            );
+          try {
+            const authorization =
+              await options.storage.createPlaybackAuthorization(
+                lesson.currentAudio.objectKey,
+              );
+            audio = {
+              mediaAssetId: lesson.currentAudio.mediaAssetId,
+              audioVersion: lesson.currentAudio.audioVersion,
+              contentType: lesson.currentAudio.contentType,
+              sizeBytes: lesson.currentAudio.sizeBytes,
+              durationMs: lesson.currentAudio.durationMs,
+              playbackUrl: authorization.playbackUrl,
+              playbackExpiresAt: authorization.expiresAt,
+            };
+          } catch (error) {
+            logStorageFailure(
+              c.get("requestId"),
+              "playback",
+              lesson.currentAudio.mediaAssetId,
+              error,
+            );
+            return storageFailureProblem(c, error, false);
+          }
+        }
+        c.header("Cache-Control", "no-store");
         return c.json(
           mobileLessonDetailSchema.parse({
             id: lesson.id,
@@ -596,6 +630,7 @@ export function createBffApp(
             content: text.content,
             availableLanguageCodes: lesson.availableLanguageCodes,
             lessonSources: lesson.lessonSources,
+            audio,
           }),
         );
       } catch (error) {
@@ -677,9 +712,13 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
 function storageFailureProblem(
   c: Parameters<typeof problem>[0],
   error: unknown,
+  missingObjectIsIncomplete = true,
 ) {
   const name = storageErrorName(error);
-  if (["NoSuchKey", "NotFound", "NoSuchObject"].includes(name)) {
+  if (
+    missingObjectIsIncomplete &&
+    ["NoSuchKey", "NotFound", "NoSuchObject"].includes(name)
+  ) {
     return problem(
       c,
       409,
@@ -695,7 +734,7 @@ function storageFailureProblem(
 
 function logStorageFailure(
   requestId: string,
-  operation: "inspect" | "delete",
+  operation: "inspect" | "delete" | "playback",
   mediaAssetId: number,
   error: unknown,
 ) {

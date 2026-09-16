@@ -201,6 +201,13 @@ const correctionIntent = await call('/api/admin/media/upload-intents', 'POST', {
 storage.putObject(storage.uploads.at(-1).key, { contentType: 'audio/mpeg', sizeBytes: 1 });
 const corrected = await call('/api/admin/media/' + correctionIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (corrected.response.status !== 200 || corrected.body.lessonAudio.audioVersion !== 2 || !corrected.body.lessonAudio.isCurrent) throw new Error('Corrected audio was not promoted.');
+const correctedRetry = await call('/api/admin/media/' + correctionIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
+if (correctedRetry.response.status !== 200 || JSON.stringify(correctedRetry.body) !== JSON.stringify(corrected.body)) throw new Error('Corrected audio retry created a new version.');
+const playbackStart = storage.playbackAuthorizations.length;
+const playback = await call('/api/mobile/lessons/' + lesson.body.id, 'GET');
+if (playback.response.status !== 200 || playback.response.headers.get('cache-control') !== 'no-store' || playback.body.audio?.audioVersion !== 2 || playback.body.audio?.mediaAssetId !== correctionIntent.body.mediaAssetId || Object.keys(playback.body.audio ?? {}).sort().join(',') !== 'audioVersion,contentType,durationMs,mediaAssetId,playbackExpiresAt,playbackUrl,sizeBytes') throw new Error('Mobile playback projection failed.');
+const freshPlayback = await call('/api/mobile/lessons/' + lesson.body.id, 'GET');
+if (freshPlayback.response.status !== 200 || storage.playbackAuthorizations.length !== playbackStart + 2 || storage.playbackAuthorizations.slice(-2).some((key) => key !== storage.uploads[1].key)) throw new Error('Playback authorization was not freshly scoped to current audio.');
 const uploadStart = storage.uploads.length;
 const concurrentIntents = await Promise.all(['concurrent-a.mp3', 'concurrent-b.mp3'].map((originalFilename) => call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename, contentType: 'audio/mpeg', sizeBytes: 1 })));
 for (const upload of storage.uploads.slice(uploadStart)) storage.putObject(upload.key, { contentType: 'audio/mpeg', sizeBytes: 1 });

@@ -16,6 +16,14 @@ const sourceUrl = z
   .trim()
   .url()
   .refine((value) => /^https?:\/\//i.test(value));
+export const maxUploadSizeBytes = 50 * 1024 * 1024;
+const languageCode = z.string().trim().min(1).max(35);
+const mp3Filename = z.string().min(1).endsWith(".mp3");
+const audioObjectKey = z
+  .string()
+  .regex(
+    /^audio\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.mp3$/,
+  );
 
 export const livenessResponseSchema = z.strictObject({
   status: z.literal("ok"),
@@ -144,26 +152,29 @@ export const mobileLessonSummarySchema = z.strictObject({
   title: nonBlankText,
 });
 
+export const mobileLessonAudioSchema = z.strictObject({
+  mediaAssetId: safePositiveInteger,
+  audioVersion: positiveInteger,
+  contentType: z.literal("audio/mpeg"),
+  sizeBytes: safePositiveInteger,
+  durationMs: safePositiveInteger.nullable(),
+  playbackUrl: z.url(),
+  playbackExpiresAt: timestamp,
+});
+
 export const mobileLessonDetailSchema = z.strictObject({
   ...mobileLessonSummarySchema.shape,
   content: nonBlankText,
   availableLanguageCodes: z.array(z.string().min(1)),
   lessonSources: z.array(lessonSourceResponseSchema),
+  audio: mobileLessonAudioSchema.nullable(),
 });
 
 export const mobileLessonListResponseSchema = z.strictObject({
   items: z.array(mobileLessonSummarySchema),
 });
 
-export const maxUploadSizeBytes = 50 * 1024 * 1024;
-const languageCode = z.string().trim().min(1).max(35);
-const mp3Filename = z.string().min(1).endsWith(".mp3");
 const uploadSizeBytes = safePositiveInteger.max(maxUploadSizeBytes);
-const audioObjectKey = z
-  .string()
-  .regex(
-    /^audio\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.mp3$/,
-  );
 
 export const createUploadIntentRequestSchema = z.strictObject({
   lessonId: safePositiveInteger,
@@ -239,6 +250,20 @@ export const lessonAudioResponseSchema = z.strictObject({
   createdAt: timestamp,
 });
 
+export const publishedLessonAudioSchema = z.strictObject({
+  mediaAssetId: safePositiveInteger,
+  audioVersion: positiveInteger,
+  objectKey: audioObjectKey,
+  contentType: z.literal("audio/mpeg"),
+  sizeBytes: safePositiveInteger,
+  durationMs: safePositiveInteger.nullable(),
+});
+
+export const publishedLessonDetailSchema = z.strictObject({
+  ...lessonDetailSchema.shape,
+  currentAudio: publishedLessonAudioSchema.nullable(),
+});
+
 export const completeMediaAssetResponseSchema = z.strictObject({
   mediaAsset: completedMediaAssetResponseSchema,
   lessonAudio: lessonAudioResponseSchema,
@@ -278,11 +303,13 @@ export type SourceListResponse = z.infer<typeof sourceListResponseSchema>;
 export type LessonStatus = z.infer<typeof lessonStatusSchema>;
 export type LessonSummary = z.infer<typeof lessonSummarySchema>;
 export type LessonDetail = z.infer<typeof lessonDetailSchema>;
+export type PublishedLessonDetail = z.infer<typeof publishedLessonDetailSchema>;
 export type LessonListResponse = z.infer<typeof lessonListResponseSchema>;
 export type LessonDetailListResponse = z.infer<
   typeof lessonDetailListResponseSchema
 >;
 export type MobileLessonDetail = z.infer<typeof mobileLessonDetailSchema>;
+export type MobileLessonAudio = z.infer<typeof mobileLessonAudioSchema>;
 export type MobileLessonListResponse = z.infer<
   typeof mobileLessonListResponseSchema
 >;
