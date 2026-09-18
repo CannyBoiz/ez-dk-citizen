@@ -41,12 +41,14 @@ exact key in `finally`.
 ```sh
 LIVE_S3_TRACER_LESSON_ID=123 \
 DATA_SERVICE_URL=http://127.0.0.1:3000 \
+LIVE_S3_TRACER_LOG_FILES=/path/to/data-service.log,/path/to/s3-audit.log \
 pnpm test:live-s3
 ```
 
 Use a disposable Lesson: completing the smoke Media Asset intentionally creates
 its normal Media Asset and Lesson Audio records, while only its S3 object is
-automatically cleaned up.
+automatically cleaned up. The log files must cover this run; the tracer rejects
+tokens, credentials, request bodies, and complete presigned URLs in them.
 
 Stop the stack without deleting its named PostgreSQL volume:
 
