@@ -50,6 +50,7 @@ export interface BffAppOptions {
   adminApiToken?: string;
   adminOrigins?: string[];
   dataServiceClient?: DataServiceClient;
+  objectKeyGenerator?: () => string;
   storage?: Storage;
   storageBucket?: string;
 }
@@ -138,7 +139,8 @@ export function createBffApp(
         );
       }
 
-      const objectKey = `audio/${randomUUID()}.mp3`;
+      const objectKey =
+        options.objectKeyGenerator?.() ?? `audio/${randomUUID()}.mp3`;
       try {
         const mediaAsset =
           await options.dataServiceClient.createPendingMediaAsset(

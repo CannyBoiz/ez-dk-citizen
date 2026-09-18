@@ -22,7 +22,7 @@ const mp3Filename = z.string().min(1).endsWith(".mp3");
 const audioObjectKey = z
   .string()
   .regex(
-    /^audio\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.mp3$/,
+    /^(?:audio|smoke)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.mp3$/,
   );
 
 export const livenessResponseSchema = z.strictObject({
