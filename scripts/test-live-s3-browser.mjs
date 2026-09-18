@@ -57,7 +57,8 @@ const [{ createBffApp }, { createDataServiceClient }, { createS3Storage }] =
 const requireBff = createRequire(
   new URL("../apps/bff/package.json", import.meta.url),
 );
-const { DeleteObjectCommand, S3Client } = requireBff("@aws-sdk/client-s3");
+const { DeleteObjectCommand, GetObjectCommand, S3Client } =
+  requireBff("@aws-sdk/client-s3");
 const smokeKeys = [];
 const cleanupFailures = [];
 const bytes = new Uint8Array([73, 68, 51, 4, 0, 0, 0, 0]);
@@ -74,6 +75,20 @@ const s3 = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 });
+try {
+  await s3.send(
+    new GetObjectCommand({
+      Bucket: process.env.S3_BUCKET,
+      Key: `smoke/${randomUUID()}.mp3`,
+    }),
+  );
+} catch (error) {
+  if (!["NoSuchKey", "NotFound"].includes(error.name)) {
+    throw new Error(
+      "AWS S3 configuration is unavailable; verify AWS_REGION, S3_BUCKET, and the dedicated IAM key.",
+    );
+  }
+}
 const app = createBffApp(
   async () => {
     const response = await fetch(new URL("/ready", dataServiceUrl), {
@@ -104,6 +119,9 @@ let allowedServer;
 let rejectedServer;
 let browserProfile;
 let tracerFailure;
+const applicationLogs = [];
+const originalConsoleLog = console.log;
+console.log = (...values) => applicationLogs.push(values.join(" "));
 try {
   bffServer = await startBff(app);
   const bffUrl = `http://127.0.0.1:${bffServer.address().port}`;
@@ -154,6 +172,7 @@ try {
     browserProfile,
     `${origin}/?mode=upload&uploadUrl=${encodeURIComponent(intent.body.uploadUrl)}`,
     "uploaded",
+    "Allowed Admin origin CORS preflight or direct PUT failed.",
   );
   await expectBrowserResult(
     browser,
@@ -212,6 +231,7 @@ try {
     false,
     "Unsigned public object access succeeded.",
   );
+  assertSafeLogs(applicationLogs, intent.body.uploadUrl);
 } catch (error) {
   tracerFailure = error;
 } finally {
@@ -229,6 +249,7 @@ try {
   );
   if (browserProfile)
     await rm(browserProfile, { force: true, recursive: true });
+  console.log = originalConsoleLog;
 }
 
 if (cleanupFailures.length) {
@@ -308,7 +329,13 @@ async function requestBff(bffUrl, path, method, body) {
   return { response, body: await response.json() };
 }
 
-async function expectBrowserResult(browser, profile, url, expected) {
+async function expectBrowserResult(
+  browser,
+  profile,
+  url,
+  expected,
+  failureMessage,
+) {
   const output = await run(browser, [
     "--headless=new",
     "--disable-gpu",
@@ -318,7 +345,33 @@ async function expectBrowserResult(browser, profile, url, expected) {
     "--dump-dom",
     url,
   ]);
-  assert.match(output, new RegExp(`data-result="${expected}"`));
+  if (!new RegExp(`data-result="${expected}"`).test(output)) {
+    throw new Error(failureMessage ?? "Browser CORS check failed.");
+  }
+}
+
+function assertSafeLogs(logs, uploadUrl) {
+  const output = logs.join("\n");
+  for (const value of [
+    process.env.ADMIN_API_TOKEN,
+    process.env.DATA_SERVICE_TOKEN,
+    process.env.AWS_ACCESS_KEY_ID,
+    process.env.AWS_SECRET_ACCESS_KEY,
+    uploadUrl,
+    JSON.stringify({
+      lessonId,
+      languageCode,
+      originalFilename: "smoke.mp3",
+      contentType: "audio/mpeg",
+      sizeBytes: bytes.byteLength,
+    }),
+  ]) {
+    assert.equal(
+      output.includes(value),
+      false,
+      "Application logs exposed sensitive data.",
+    );
+  }
 }
 
 function run(command, args) {

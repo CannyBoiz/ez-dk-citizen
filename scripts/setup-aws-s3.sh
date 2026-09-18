@@ -117,6 +117,11 @@ finish() {
 TOTAL_STAGES=3
 INFRASTRUCTURE_DIR="${INFRASTRUCTURE_DIR:-../cannyboiz-devops-hub/terraform/ez-dk-citizen}"
 
+if ! git check-ignore -q -- "$ENV_FILE"; then
+  printf 'Refusing to write credentials: %s is not ignored by Git.\n' "$ENV_FILE" >&2
+  exit 1
+fi
+
 banner "AWS S3 setup for ez-dk-citizen"
 
 stage "Apply the reviewed S3 boundary"
