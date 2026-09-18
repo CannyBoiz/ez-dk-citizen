@@ -24,6 +24,30 @@ For direct S3 upload authorization, set `AWS_REGION`, `S3_BUCKET`,
 `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`; the tracked example contains
 placeholders only.
 
+Apply the prepared S3 Terraform, rotate the dedicated IAM key, and write those
+values only to ignored local or deployment secret files with:
+
+```sh
+scripts/setup-aws-s3.sh
+```
+
+The live S3 check is deliberately opt-in. It needs those credentials, a
+reachable Data Service, a disposable localized Lesson ID, and Chromium (or set
+`BROWSER` to a Chromium-family executable). It starts a test-only BFF whose
+injected key generator creates one `smoke/<UUID>.mp3` key, uses a browser at
+the Terraform-approved `http://127.0.0.1:5173` origin, and deletes only that
+exact key in `finally`.
+
+```sh
+LIVE_S3_TRACER_LESSON_ID=123 \
+DATA_SERVICE_URL=http://127.0.0.1:3000 \
+pnpm test:live-s3
+```
+
+Use a disposable Lesson: completing the smoke Media Asset intentionally creates
+its normal Media Asset and Lesson Audio records, while only its S3 object is
+automatically cleaned up.
+
 Stop the stack without deleting its named PostgreSQL volume:
 
 ```sh
@@ -59,6 +83,7 @@ workspaces. Both application containers listen on configurable `PORT=3000`.
 | `pnpm test:dev`         | Smoke-test the isolated merged development Compose topology.              |
 | `pnpm test:integration` | Build, migrate, and fully test an isolated PostgreSQL/Data Service stack. |
 | `pnpm test:e2e`         | Run the isolated BFF-to-PostgreSQL Stage 2 tracer.                        |
+| `pnpm test:live-s3`     | Opt-in real-browser S3/CORS/cleanup tracer; never run by default checks.  |
 
 Both container workflows create a temporary Compose project and volume, then
 remove both. `pnpm test:e2e` proves the admin-to-mobile flow; neither command

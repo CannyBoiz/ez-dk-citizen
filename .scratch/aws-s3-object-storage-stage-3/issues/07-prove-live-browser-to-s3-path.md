@@ -7,7 +7,7 @@ isolated smoke objects and cleans up only what it creates.
 
 **Blocked by:** 01 — Secure the private S3 boundary; 06 — Return mobile Playback URLs.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 - [ ] Provide an interactive human setup wizard for applying the prepared infrastructure change, creating or rotating the dedicated IAM user's access key, and placing required values only in ignored local or deployment secret locations.
 - [ ] Make the wizard show the relevant AWS locations and confirmations without printing, committing, or storing permanent credentials in Terraform state.
@@ -24,3 +24,12 @@ isolated smoke objects and cleans up only what it creates.
 - [ ] Never list, sweep, or delete the `audio/` prefix, and report any exact-object cleanup failure clearly for manual recovery.
 - [ ] Verify storage and application logs remain free of credentials, bearer tokens, request bodies, and complete presigned URLs during the live flow.
 - [ ] Run formatting, workspace typechecking, builds, default tests, PostgreSQL integration, the credential-free Stage 3 tracer, infrastructure validation, and the opt-in live browser tracer as the final Stage 3 verification set.
+
+## Comments
+
+- 2026-09-18: Added the repeatable AWS setup wizard, opt-in real-browser tracer,
+  and test-only smoke-key injection. Workspace typechecking, build, and default
+  tests pass. The live run now needs human-owned credentials, a disposable
+  localized Lesson, a reachable Data Service, and Chromium. Docker-backed
+  verification is waiting for Docker Desktop WSL integration; Terraform provider
+  validation is waiting for a runnable AWS provider plugin.

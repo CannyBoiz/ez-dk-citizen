@@ -13,7 +13,8 @@
     "test": "pnpm --recursive --if-present test",
     "test:dev": "node scripts/test-container-development.mjs",
     "test:integration": "node scripts/test-postgres-integration.mjs",
-    "test:e2e": "node scripts/test-postgres-integration.mjs --end-to-end"
+    "test:e2e": "node scripts/test-postgres-integration.mjs --end-to-end",
+    "test:live-s3": "pnpm build && node scripts/test-live-s3-browser.mjs"
   },
   "devDependencies": {
     "prettier": "^3.9.6"

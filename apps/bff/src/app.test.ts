@@ -141,6 +141,57 @@ test("BFF creates a pending Media Asset before a signed MP3 Upload Intent", asyn
   );
 });
 
+test("BFF accepts a test-only Upload Intent object-key generator", async () => {
+  const storage = new FakeStorage();
+  const app = createBffApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    storage,
+    storageBucket: "citizenship-audio",
+    objectKeyGenerator: () => "smoke/123e4567-e89b-12d3-a456-426614174000.mp3",
+    dataServiceClient: createTestDataServiceClient({
+      async createPendingMediaAsset(input) {
+        assert.equal(
+          input.objectKey,
+          "smoke/123e4567-e89b-12d3-a456-426614174000.mp3",
+        );
+        const { languageCode: _languageCode, ...mediaAsset } = input;
+        return mediaAssetResponseSchema.parse({
+          id: 10,
+          ...mediaAsset,
+          status: "PENDING",
+          durationMs: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          uploadedAt: null,
+        });
+      },
+    }),
+  });
+
+  const response = await app.request("/api/admin/media/upload-intents", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      lessonId: 7,
+      languageCode: "th",
+      originalFilename: "lesson.mp3",
+      contentType: "audio/mpeg",
+      sizeBytes: 1,
+    }),
+  });
+
+  assert.equal(response.status, 201);
+  assert.deepEqual(storage.uploads, [
+    {
+      key: "smoke/123e4567-e89b-12d3-a456-426614174000.mp3",
+      contentType: "audio/mpeg",
+      sizeBytes: 1,
+    },
+  ]);
+});
+
 test("BFF completes matching stored media through the admin route", async () => {
   const storage = new FakeStorage();
   const asset = mediaAssetResponseSchema.parse({
