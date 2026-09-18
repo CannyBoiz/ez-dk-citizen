@@ -3,7 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,6 +17,7 @@ const requiredEnvironment = [
   "DATA_SERVICE_TOKEN",
   "DATA_SERVICE_URL",
   "LIVE_S3_TRACER_LESSON_ID",
+  "LIVE_S3_TRACER_LOG_FILES",
   "S3_BUCKET",
 ];
 const missing = requiredEnvironment.filter((name) => !process.env[name]);
@@ -31,6 +32,13 @@ if (!Number.isSafeInteger(lessonId) || lessonId <= 0) {
   throw new Error("LIVE_S3_TRACER_LESSON_ID must be a positive integer.");
 }
 const languageCode = process.env.LIVE_S3_TRACER_LANGUAGE_CODE ?? "th";
+const logFiles =
+  process.env.LIVE_S3_TRACER_LOG_FILES.split(",").filter(Boolean);
+if (!logFiles.length) {
+  throw new Error(
+    "LIVE_S3_TRACER_LOG_FILES must name the Data Service and storage audit log files.",
+  );
+}
 const browser = findBrowser();
 if (!browser) {
   throw new Error(
@@ -231,7 +239,13 @@ try {
     false,
     "Unsigned public object access succeeded.",
   );
-  assertSafeLogs(applicationLogs, intent.body.uploadUrl);
+  assertSafeLogs(
+    [
+      ...applicationLogs,
+      ...(await Promise.all(logFiles.map((file) => readFile(file, "utf8")))),
+    ],
+    intent.body.uploadUrl,
+  );
 } catch (error) {
   tracerFailure = error;
 } finally {
