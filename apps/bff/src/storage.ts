@@ -39,16 +39,8 @@ export interface Storage {
 export function createS3Storage(input: {
   region: string;
   bucket: string;
-  accessKeyId: string;
-  secretAccessKey: string;
 }): Storage {
-  const client = new S3Client({
-    region: input.region,
-    credentials: {
-      accessKeyId: input.accessKeyId,
-      secretAccessKey: input.secretAccessKey,
-    },
-  });
+  const client = new S3Client({ region: input.region });
   return {
     async createUploadAuthorization({ key, contentType, sizeBytes }) {
       const expiresAt = expiry(uploadExpirySeconds);
