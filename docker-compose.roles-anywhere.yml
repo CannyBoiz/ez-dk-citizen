@@ -1,0 +1,23 @@
+services:
+  bff:
+    environment:
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?set ADMIN_API_TOKEN for the Roles Anywhere smoke test}
+      DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:?set DATA_SERVICE_TOKEN for the Roles Anywhere smoke test}
+      AWS_REGION: ${AWS_REGION:?set AWS_REGION for the Roles Anywhere smoke test}
+      S3_BUCKET: ${S3_BUCKET:?set S3_BUCKET for the Roles Anywhere smoke test}
+      AWS_PROFILE: roles-anywhere
+      AWS_CONFIG_FILE: /run/ez-dk-citizen/aws/config
+      AWS_SDK_LOAD_CONFIG: "1"
+    volumes:
+      - type: bind
+        source: ${AWS_ROLES_ANYWHERE_CONFIG_FILE:-./runtime/aws/config}
+        target: /run/ez-dk-citizen/aws/config
+        read_only: true
+      - type: bind
+        source: ${AWS_ROLES_ANYWHERE_CERTIFICATE_FILE:-./runtime/aws/workload.crt}
+        target: /run/ez-dk-citizen/identity/workload.crt
+        read_only: true
+      - type: bind
+        source: ${AWS_ROLES_ANYWHERE_PRIVATE_KEY_FILE:-./runtime/aws/workload.key}
+        target: /run/ez-dk-citizen/identity/workload.key
+        read_only: true

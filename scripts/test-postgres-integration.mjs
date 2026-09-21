@@ -156,7 +156,7 @@ const mobile = await fetch('http://127.0.0.1:3000/api/mobile/lessons');
 const list = await mobile.json();
 if (list.items[0]?.title !== 'ไทย' || list.items[0]?.languageCode !== 'th' || 'status' in list.items[0]) throw new Error('Mobile list projection failed.');
 const detail = await (await fetch('http://127.0.0.1:3000/api/mobile/lessons/' + lesson.body.id)).json();
-if (detail.content !== 'เนื้อหา' || !detail.availableLanguageCodes.includes('th') || detail.lessonSources[0]?.pageFrom !== 2 || detail.lessonSources[0]?.pageTo !== 3 || 'audio' in detail) throw new Error('Mobile detail projection failed.');
+if (detail.content !== 'เนื้อหา' || !detail.availableLanguageCodes.includes('th') || detail.lessonSources[0]?.pageFrom !== 2 || detail.lessonSources[0]?.pageTo !== 3 || detail.audio !== null) throw new Error('Mobile detail projection failed.');
 `;
 }
 
