@@ -21,8 +21,6 @@ const composeEnvironment = {
   DATA_SERVICE_TOKEN: "integration-only-data-service-token",
   AWS_REGION: "eu-north-1",
   S3_BUCKET: "integration-only-bucket",
-  AWS_ACCESS_KEY_ID: "integration-only-access-key-id",
-  AWS_SECRET_ACCESS_KEY: "integration-only-secret-access-key",
   ...(endToEnd ? { ADMIN_API_TOKEN: "integration-only-admin-token" } : {}),
 };
 const composeArguments = [
@@ -330,6 +328,11 @@ function assertPrivateCompiledTopology(config) {
   assert.equal(config.services.postgres.ports, undefined);
   assert.equal(config.services["hono-data"].ports, undefined);
   assert.equal(config.services.bff.ports, undefined);
+  assert.equal(config.services.bff.environment.AWS_ACCESS_KEY_ID, undefined);
+  assert.equal(
+    config.services.bff.environment.AWS_SECRET_ACCESS_KEY,
+    undefined,
+  );
   assert.equal(
     config.services.bff.depends_on["hono-data"].condition,
     "service_healthy",
