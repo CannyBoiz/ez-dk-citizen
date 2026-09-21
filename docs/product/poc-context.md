@@ -722,14 +722,39 @@ The S3 bucket is private with public access blocked. Its CORS policy allows
 it uses no wildcard origins or unnecessary methods and headers. Its bucket
 policy requires `If-None-Match` for object writes.
 
-The Hetzner-hosted BFF uses the dedicated least-privilege IAM user maintained
-by the infrastructure repository. Its rotatable access key exists only in
-deployment and runtime secrets, is provisioned through the human setup wizard,
-and is never committed or exposed to clients.
+The BFF obtains temporary STS credentials through AWS IAM Roles Anywhere. A
+private CA dedicated to this workload issues the application certificate,
+whose subject CN remains `aws-iam-app` for the PoC cutover. The role trust
+policy is restricted by both the exact Trust Anchor ARN and that certificate
+CN.
 
-The BFF storage configuration consists only of `AWS_REGION`, `S3_BUCKET`,
-`AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`. Provider, endpoint, upload
-limits, and authorization lifetimes are fixed for the PoC.
+The official `aws_signing_helper` runs inside the BFF container through
+`credential_process` in a shared AWS profile. The AWS SDK uses its normal
+credential provider chain and refresh behavior; the application contains no
+custom credential-refresh logic and receives no permanent IAM access key. The
+BFF uses a glibc-compatible Node base image for the helper, while the Data
+Service remains Alpine and receives no AWS identity material. The BFF image
+pins an official helper release and verifies its published checksum during the
+build. BFF startup rejects legacy `AWS_ACCESS_KEY_ID` or
+`AWS_SECRET_ACCESS_KEY` configuration so it cannot silently bypass the shared
+Roles Anywhere profile.
+
+The infrastructure repository commits only the public CA certificate at
+`terraform/ez-dk-citizen/certs/ca.crt`. The workload certificate and private
+key and shared AWS profile are provisioned on the host and bind-mounted
+read-only at stable paths only into the BFF. The workload private key has mode
+`0600` and is readable by the non-root BFF process. No CA private key, workload
+private key, or private-key-bearing P12/PFX bundle is committed, baked into an
+image, or managed by Terraform.
+
+Because no repository-driven production deployment exists yet, the Roles
+Anywhere cutover is verified with the production-like BFF container running
+locally against the live S3 bucket. Verification requires the real signing
+helper and mounted workload identity, rejection of static AWS access-key
+variables, the opt-in live tracer, and identity evidence for the Roles Anywhere
+role. The legacy IAM user may be retired only after that succeeds and the
+agreed rollback window passes; VPS deployment remains a separate Stage 6
+concern.
 
 Storage logs include the request ID, operation, Media Asset ID, and AWS error or
 request code. They never include presigned URLs or credentials. Stage 3 adds no
@@ -1138,6 +1163,13 @@ behavior, publishes the BFF on `127.0.0.1:3001` and PostgreSQL on
 add a `docker-compose.prod.yml` override that keeps PostgreSQL and the Data
 Service private.
 
+A Hetzner VPS already exists but is manually managed and does not yet run a
+repository-driven `ez-dk-citizen` deployment. Terraform for that VPS exists in
+the infrastructure repository but has not been applied and is not authoritative
+for the live server. Stage 6 must reconcile the manual server with that
+configuration before deciding to import or replace anything; Terraform must
+not be run blindly against it.
+
 ```text
 Cloudflare Pages
 └── React + Vite admin
@@ -1226,12 +1258,26 @@ one generated object key.
 Playback authorization expires after one hour and is read-only and scoped to
 one object.
 
-Frontend clients never receive permanent cloud credentials.
+Frontend clients never receive cloud credentials.
 
 The S3 bucket blocks public access. Browser upload CORS uses an explicit origin
-allow-list and permits only the required method and headers. The dedicated BFF
-IAM user's access key is stored only in deployment and runtime secrets and is
-rotated rather than shared with clients.
+allow-list and permits only the required method and headers. The BFF exchanges
+its runtime-provisioned X.509 workload identity for temporary STS credentials
+through IAM Roles Anywhere; no permanent IAM-user access key is deployed.
+
+Only the BFF receives the workload certificate, workload private key, and
+Roles Anywhere profile. The private key is mounted at runtime with restrictive
+filesystem permissions and never enters the image, Terraform state, or source
+control. The dedicated CA private key remains external and is never deployed.
+
+Routine workload-certificate rotation is a manual operator procedure scheduled
+at least 30 days before expiry. If the workload private key is compromised,
+replacing only the mounted certificate and key is insufficient because the old
+certificate remains valid. The operator immediately disables the Roles
+Anywhere profile, issues a key and certificate with a new certificate identity,
+updates the role trust-policy identity constraint, verifies the replacement,
+and only then re-enables the profile. Rotating the dedicated CA is the fallback;
+the PoC does not maintain certificate revocation lists.
 
 The bucket policy requires conditional writes for upload object keys. Presigned
 uploads include `If-None-Match: *`, preventing reuse from overwriting an
