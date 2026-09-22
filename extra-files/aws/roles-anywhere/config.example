@@ -1,5 +1,5 @@
-# Copy this file to runtime/aws/config and keep the copied file untracked.
+# Copy this file to runtime/aws/config, replace the ARN placeholders, and keep the copied file untracked.
 
 [profile roles-anywhere]
 region = eu-north-1
-credential_process = /usr/local/bin/aws_signing_helper credential-process --certificate /run/ez-dk-citizen/identity/workload.crt --private-key /run/ez-dk-citizen/identity/workload.key --trust-anchor-arn arn:aws:rolesanywhere:eu-north-1:412433835507:trust-anchor/f133c1c7-1c50-4786-8352-4dc7c1594393 --profile-arn arn:aws:rolesanywhere:eu-north-1:412433835507:profile/a95bf67d-fdb5-46b9-b7cc-f609acc556d2 --role-arn arn:aws:iam::412433835507:role/ez-dk-citizen-role-anywhere-s3
+credential_process = /usr/local/bin/aws_signing_helper credential-process --certificate /run/ez-dk-citizen/identity/workload.crt --private-key /run/ez-dk-citizen/identity/workload.key --trust-anchor-arn <TRUST_ANCHOR_ARN> --profile-arn <PROFILE_ARN> --role-arn <ROLE_ARN>
