@@ -41,6 +41,9 @@ const composeEnvironment = {
     process.env.ADMIN_API_TOKEN ?? "roles-anywhere-smoke-admin-token",
   DATA_SERVICE_TOKEN:
     process.env.DATA_SERVICE_TOKEN ?? "roles-anywhere-smoke-data-service-token",
+  POSTGRES_DB: "roles_anywhere_smoke",
+  POSTGRES_USER: "roles_anywhere_smoke",
+  POSTGRES_PASSWORD: "roles-anywhere-smoke-password",
   AWS_REGION: awsRegion,
   S3_BUCKET: s3Bucket,
   AWS_ROLES_ANYWHERE_CONFIG_FILE: configFile,
@@ -141,6 +144,10 @@ function assertTopology(composeConfig) {
       true,
       `${target} is not read-only`,
     );
+  }
+
+  for (const name of ["POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"]) {
+    assert.ok(composeConfig.services.postgres.environment[name]);
   }
 
   for (const name of ["postgres", "migrate", "hono-data"]) {
