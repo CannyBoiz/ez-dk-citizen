@@ -15,7 +15,7 @@
     "test:integration": "node scripts/test-postgres-integration.mjs",
     "test:e2e": "node scripts/test-postgres-integration.mjs --end-to-end",
     "test:roles-anywhere": "node scripts/test-roles-anywhere-container.mjs",
-    "test:live-s3": "pnpm build && node scripts/test-live-s3-browser.mjs"
+    "test:live-s3": "node scripts/test-live-s3-browser.mjs --preflight && pnpm typecheck && pnpm test && pnpm test:dev && pnpm test:integration && pnpm test:e2e && pnpm build && node scripts/test-live-s3-browser.mjs"
   },
   "devDependencies": {
     "prettier": "^3.9.6"

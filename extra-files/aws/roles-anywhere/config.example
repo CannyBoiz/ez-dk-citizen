@@ -1,5 +1,5 @@
-# Copy this file to runtime/aws/config, replace the ARN placeholders, and keep the copied file untracked.
+# setup-aws-s3.sh prepares runtime/aws/config from this template. Keep the profile host-only.
 
 [profile roles-anywhere]
-region = eu-north-1
+region = <AWS_REGION>
 credential_process = /usr/local/bin/aws_signing_helper credential-process --certificate /run/ez-dk-citizen/identity/workload.crt --private-key /run/ez-dk-citizen/identity/workload.key --trust-anchor-arn <TRUST_ANCHOR_ARN> --profile-arn <PROFILE_ARN> --role-arn <ROLE_ARN>
