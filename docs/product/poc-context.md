@@ -747,6 +747,16 @@ read-only at stable paths only into the BFF. The workload private key has mode
 private key, or private-key-bearing P12/PFX bundle is committed, baked into an
 image, or managed by Terraform.
 
+The current operator workflow is `scripts/setup-aws-s3.sh`. It checks the
+host-provisioned certificate subject and chain against the public CA
+certificate, verifies private-key mode, prepares or validates the shared
+`roles-anywhere` profile, then builds and inspects the production-like BFF
+image before checking the read-only mounts and non-root key access. Its final
+STS proof reports only the account and assumed-role ARN. `--preflight` runs the
+same image and mount checks without exchanging identity, for validating a
+replacement while the Roles Anywhere profile is disabled. Neither mode creates
+or persists AWS credentials.
+
 Because no repository-driven production deployment exists yet, the Roles
 Anywhere cutover is verified with the production-like BFF container running
 locally against the live S3 bucket. Verification requires the real signing
@@ -1271,13 +1281,26 @@ filesystem permissions and never enters the image, Terraform state, or source
 control. The dedicated CA private key remains external and is never deployed.
 
 Routine workload-certificate rotation is a manual operator procedure scheduled
-at least 30 days before expiry. If the workload private key is compromised,
-replacing only the mounted certificate and key is insufficient because the old
-certificate remains valid. The operator immediately disables the Roles
-Anywhere profile, issues a key and certificate with a new certificate identity,
-updates the role trust-policy identity constraint, verifies the replacement,
-and only then re-enables the profile. Rotating the dedicated CA is the fallback;
-the PoC does not maintain certificate revocation lists.
+at least 30 days before the current certificate expires. Stage the replacement
+certificate and key at alternate host paths, retain CN `aws-iam-app` and the
+current Trust Anchor, Roles Anywhere profile, role, and trust-policy identity,
+then run the full operator check before switching active files. Keep the current
+identity available until the replacement passes.
+
+If the workload private key is compromised, replacing only the mounted
+certificate and key is insufficient because the old certificate remains valid.
+The operator immediately disables the Roles Anywhere profile, issues a key and
+certificate with a new certificate identity, and updates the role trust-policy
+identity constraint. Run the operator `--preflight` against the staged files
+while the profile is disabled, then independently inspect the AWS role trust
+policy to confirm its Trust Anchor and new certificate identity conditions.
+Preflight cannot inspect live IAM policy. Only after both checks pass, re-enable
+the profile and immediately run the full STS identity check. Disable the
+profile again if that proof fails. Rotating the dedicated CA and updating its
+Trust Anchor is the emergency fallback; the PoC does not maintain certificate
+revocation lists.
+Never put private-key contents into shell commands, terminal output, `.env`, or
+temporary credential files.
 
 The bucket policy requires conditional writes for upload object keys. Presigned
 uploads include `If-None-Match: *`, preventing reuse from overwriting an

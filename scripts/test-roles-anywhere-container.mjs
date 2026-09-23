@@ -9,6 +9,7 @@ const repositoryRoot = path.resolve(
   "..",
 );
 const projectName = `ez-dk-citizen-roles-anywhere-${process.pid}-${Date.now().toString(36)}`;
+const preflightOnly = process.argv.includes("--preflight");
 const configFile = runtimeFile("AWS_ROLES_ANYWHERE_CONFIG_FILE", "config");
 const certificateFile = runtimeFile(
   "AWS_ROLES_ANYWHERE_CERTIFICATE_FILE",
@@ -87,11 +88,17 @@ try {
     "120",
     "bff",
   ]);
-  await assertIdentity();
+  await assertImageContents();
   await assertPrivateKeyReadable();
+  if (preflightOnly) {
+    console.log(
+      "Container preflight passed; STS identity exchange was skipped.",
+    );
+  } else {
+    await assertIdentity();
+  }
   await assertLegacyVariableRejected("AWS_ACCESS_KEY_ID");
   await assertLegacyVariableRejected("AWS_SECRET_ACCESS_KEY");
-  await assertImageContents();
 } catch (error) {
   failure = error;
 } finally {
@@ -108,7 +115,11 @@ try {
 }
 
 if (failure) throw failure;
-console.log("Roles Anywhere container smoke test passed.");
+console.log(
+  preflightOnly
+    ? "Roles Anywhere container preflight passed."
+    : "Roles Anywhere container smoke test passed.",
+);
 
 function runtimeFile(name, fallback) {
   return path.resolve(
@@ -172,9 +183,17 @@ async function assertIdentity() {
     { captureOutput: true },
   );
   const identity = JSON.parse(output.output.trim());
-  assert.match(
-    identity.Arn,
-    /^arn:aws:sts::\d+:assumed-role\/ez-dk-citizen-role-anywhere-s3\//,
+  if (
+    !/^arn:aws:sts::\d+:assumed-role\/ez-dk-citizen-role-anywhere-s3\//.test(
+      identity.Arn,
+    )
+  ) {
+    throw new Error(
+      `Expected ez-dk-citizen-role-anywhere-s3, received ${identity.Arn ?? "no ARN"}.`,
+    );
+  }
+  console.log(
+    `AWS identity verified: ${identity.Arn} (account ${identity.Account}).`,
   );
 }
 

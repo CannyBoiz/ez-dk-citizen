@@ -3,6 +3,7 @@ services:
     environment:
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?set ADMIN_API_TOKEN for the Roles Anywhere smoke test}
       DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:?set DATA_SERVICE_TOKEN for the Roles Anywhere smoke test}
+      ADMIN_ORIGINS: ${ADMIN_ORIGINS:-}
       AWS_REGION: ${AWS_REGION:?set AWS_REGION for the Roles Anywhere smoke test}
       S3_BUCKET: ${S3_BUCKET:?set S3_BUCKET for the Roles Anywhere smoke test}
       AWS_PROFILE: roles-anywhere

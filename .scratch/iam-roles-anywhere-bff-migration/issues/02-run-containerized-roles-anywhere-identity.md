@@ -18,11 +18,17 @@ BFF.
 - [x] Select the shared profile through standard AWS configuration variables rather than application-specific credential plumbing.
 - [x] Bind-mount the shared profile, workload certificate, and workload private key read-only at stable container locations used by the profile.
 - [x] Mount the identity files only into the BFF and keep the CA private key off the workload runtime entirely.
-- [ ] Keep the BFF process non-root and verify that a host-provisioned private key with mode `0600` is readable by that process without broadening its permissions.
-- [ ] Start the production-like BFF container without either legacy access-key variable and keep readiness independent of an S3 network call.
-- [ ] Call STS `GetCallerIdentity` from the same container and standard provider chain and prove an assumed-role session for `ez-dk-citizen-role-anywhere-s3`, not an IAM user.
-- [ ] Start the actual container once with only `AWS_ACCESS_KEY_ID` and once with only `AWS_SECRET_ACCESS_KEY`; both runs must fail before serving requests with an actionable refusal.
+- [x] Keep the BFF process non-root and verify that a host-provisioned private key with mode `0600` is readable by that process without broadening its permissions.
+- [x] Start the production-like BFF container without either legacy access-key variable and keep readiness independent of an S3 network call.
+- [x] Call STS `GetCallerIdentity` from the same container and standard provider chain and prove an assumed-role session for `ez-dk-citizen-role-anywhere-s3`, not an IAM user.
+- [x] Start the actual container once with only `AWS_ACCESS_KEY_ID` and once with only `AWS_SECRET_ACCESS_KEY`; both runs must fail before serving requests with an actionable refusal.
 - [x] Inspect the built image and its metadata to confirm that it contains the public helper binary but no workload certificate, private key, shared-profile contents, or AWS credentials.
 - [x] Keep ordinary development and automated tests runnable without mounting the workload identity.
-- [ ] Run the container smoke test and the repository's existing regression checks.
+- [x] Run the container smoke test and the repository's existing regression checks.
 
+## Comments
+
+- 2026-09-22: Verified complete. The operator-run `pnpm test:roles-anywhere`
+  passed with the production-like BFF healthy and all smoke assertions satisfied.
+  Typechecking, builds, default tests, container development, PostgreSQL
+  integration, and BFF-to-Data end-to-end regressions also passed.

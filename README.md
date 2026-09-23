@@ -20,35 +20,71 @@ not published to the host.
 
 The defaults are development-only. Copy `.env.example` to `.env` to override
 credentials, origins, or ports locally. Real `.env` files are ignored by Git.
-For direct S3 upload authorization, set `AWS_REGION`, `S3_BUCKET`,
-`AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`; the tracked example contains
-placeholders only.
 
-Apply the prepared S3 Terraform, rotate the dedicated IAM key, and write those
-values only to ignored local or deployment secret files with:
+## Roles Anywhere operator setup
+
+Provision the workload certificate and private key at `runtime/aws/workload.crt`
+and `runtime/aws/workload.key`. The dedicated CA's public certificate is read
+from `../cannyboiz-devops-hub/terraform/ez-dk-citizen/certs/ca.crt`. Keep the
+private key host-only, owned so container UID `1000` can read it, and mode
+`0600`; the setup command checks these conditions without displaying its
+contents. The certificate must have subject CN `aws-iam-app` and chain to that
+public CA certificate.
+
+Run:
 
 ```sh
 scripts/setup-aws-s3.sh
 ```
 
-The live S3 check is deliberately opt-in. It needs those credentials, a
-reachable Data Service, a disposable localized Lesson ID, and Chromium (or set
-`BROWSER` to a Chromium-family executable). It starts a test-only BFF whose
-injected key generator creates one `smoke/<UUID>.mp3` key, uses a browser at
-the Terraform-approved `http://127.0.0.1:5173` origin, and deletes only that
-exact key in `finally`.
+On first run, it asks for the Trust Anchor, Roles Anywhere profile, and role
+ARNs, then prepares the shared profile at `runtime/aws/config`. It stores only
+the non-secret `AWS_REGION` and `S3_BUCKET` settings in ignored `.env`. It
+validates the certificate subject and chain, checks key mode, builds and
+inspects the production-like BFF image, validates the read-only mounts and
+non-root key access, and proves the assumed-role identity through STS in that
+container. It never asks for or stores IAM access keys or temporary credentials.
 
-```sh
-LIVE_S3_TRACER_LESSON_ID=123 \
-DATA_SERVICE_URL=http://127.0.0.1:3000 \
-LIVE_S3_TRACER_LOG_FILES=/path/to/data-service.log,/path/to/s3-audit.log \
-pnpm test:live-s3
-```
+For an identity staged at other host paths, set
+`AWS_ROLES_ANYWHERE_CERTIFICATE_FILE`, `AWS_ROLES_ANYWHERE_PRIVATE_KEY_FILE`,
+and optionally `AWS_ROLES_ANYWHERE_CONFIG_FILE` and
+`AWS_ROLES_ANYWHERE_CA_CERTIFICATE_FILE` when running the same command. Use
+`scripts/setup-aws-s3.sh --preflight` to validate the image, mounts, and
+certificate while a Roles Anywhere profile is disabled; it deliberately skips
+the STS exchange. Re-enable the profile only after that succeeds, then rerun the
+command without `--preflight` to prove the identity.
 
-Use a disposable Lesson: completing the smoke Media Asset intentionally creates
-its normal Media Asset and Lesson Audio records, while only its S3 object is
-automatically cleaned up. The log files must cover this run; the tracer rejects
-tokens, credentials, request bodies, and complete presigned URLs in them.
+Schedule routine certificate rotation at least 30 days before expiry. Issue a
+replacement with the same `aws-iam-app` identity, stage it at alternate paths,
+and run the full setup check before switching the active host files. Keep the
+Trust Anchor, profile, role, and trust-policy identity unchanged.
+
+For a private-key compromise, disable the Roles Anywhere profile immediately.
+Issue a new key and certificate with a new certificate identity, update the
+role trust-policy identity constraint, and run `--preflight` against the staged
+files. Before re-enabling, independently inspect the AWS role trust policy and
+confirm its Trust Anchor and new certificate identity conditions; preflight
+cannot inspect live IAM policy. Re-enable the profile only after those checks
+pass, then immediately rerun the full setup command to prove STS identity. If
+that proof fails, disable the profile again. Dedicated-CA rotation is the
+emergency fallback. Replacing only the certificate while retaining the trusted
+identity does not revoke the compromised certificate. Hetzner VPS
+reconciliation remains deferred to Stage 6.
+
+`pnpm test:live-s3` requires exported `ADMIN_API_TOKEN`, `DATA_SERVICE_TOKEN`,
+`AWS_REGION`, and `S3_BUCKET`, plus the configured Roles Anywhere profile and a
+Chromium-family browser. The tracer scans both containers' logs. If additional
+file-based audit logs are configured, set `LIVE_S3_TRACER_LOG_FILES` to their
+comma-separated absolute paths; keep those files outside the repo or Git-ignored.
+It runs typecheck, unit, container-development, integration, end-to-end, and
+build checks before starting the live portion. That portion uses the
+production BFF image and its read-only workload-identity mounts, creates a
+temporary Lesson in an isolated Data Service, and drives the BFF over its
+published HTTP port. It uploads one unique `smoke/` object to the configured
+bucket and deletes only recorded exact keys through the same container's Roles
+Anywhere credentials. Run it only when live S3 writes and deletes are intended.
+It does not use the host development database or pass static AWS keys to the
+container.
 
 Stop the stack without deleting its named PostgreSQL volume:
 
@@ -72,20 +108,21 @@ migration execution, and verification consume container-injected configuration.
 The root package coordinates the Data Service, BFF, and shared contracts
 workspaces. Both application containers listen on configurable `PORT=3000`.
 
-| Command                 | Purpose                                                                   |
-| ----------------------- | ------------------------------------------------------------------------- |
-| `pnpm dev`              | Run the complete local stack through Docker Compose Watch.                |
-| `pnpm typecheck`        | Type-check every workspace without emitting files.                        |
-| `pnpm build`            | Compile every workspace to JavaScript.                                    |
-| `pnpm db:generate`      | Generate a Drizzle migration from the schema.                             |
-| `pnpm db:migrate`       | Apply committed migrations inside the running development Data container. |
-| `pnpm db:up`            | Start local PostgreSQL and wait until it is healthy.                      |
-| `pnpm db:down`          | Stop local Compose containers without deleting development data.          |
-| `pnpm test`             | Run Docker-free contract and service-boundary tests.                      |
-| `pnpm test:dev`         | Smoke-test the isolated merged development Compose topology.              |
-| `pnpm test:integration` | Build, migrate, and fully test an isolated PostgreSQL/Data Service stack. |
-| `pnpm test:e2e`         | Run the isolated BFF-to-PostgreSQL Stage 2 tracer.                        |
-| `pnpm test:live-s3`     | Opt-in real-browser S3/CORS/cleanup tracer; never run by default checks.  |
+| Command                    | Purpose                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| `pnpm dev`                 | Run the complete local stack through Docker Compose Watch.                   |
+| `pnpm typecheck`           | Type-check every workspace without emitting files.                           |
+| `pnpm build`               | Compile every workspace to JavaScript.                                       |
+| `pnpm db:generate`         | Generate a Drizzle migration from the schema.                                |
+| `pnpm db:migrate`          | Apply committed migrations inside the running development Data container.    |
+| `pnpm db:up`               | Start local PostgreSQL and wait until it is healthy.                         |
+| `pnpm db:down`             | Stop local Compose containers without deleting development data.             |
+| `pnpm test`                | Run Docker-free contract and service-boundary tests.                         |
+| `pnpm test:dev`            | Smoke-test the isolated merged development Compose topology.                 |
+| `pnpm test:integration`    | Build, migrate, and fully test an isolated PostgreSQL/Data Service stack.    |
+| `pnpm test:e2e`            | Run the isolated BFF-to-PostgreSQL Stage 2 tracer.                           |
+| `pnpm test:roles-anywhere` | Build the production-like BFF and prove its mounted Roles Anywhere identity. |
+| `pnpm test:live-s3`        | Run credential-free regressions, then the opt-in browser-to-S3 tracer.       |
 
 Both container workflows create a temporary Compose project and volume, then
 remove both. `pnpm test:e2e` proves the admin-to-mobile flow; neither command
