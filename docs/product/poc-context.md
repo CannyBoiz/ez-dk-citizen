@@ -762,9 +762,16 @@ Anywhere cutover is verified with the production-like BFF container running
 locally against the live S3 bucket. Verification requires the real signing
 helper and mounted workload identity, rejection of static AWS access-key
 variables, the opt-in live tracer, and identity evidence for the Roles Anywhere
-role. The legacy IAM user may be retired only after that succeeds and the
-agreed rollback window passes; VPS deployment remains a separate Stage 6
-concern.
+role. Live IAM inspection found no access keys on the legacy workload user, so
+the cutover does not create one for rollback. The user may be retired after
+fresh successful keyless identity and live S3 proof plus explicit approval of
+the destroy plan. A 24-hour delay would not observe a running workload because
+the local acceptance BFF is stopped after testing; VPS deployment remains a
+separate Stage 6 concern.
+If Roles Anywhere fails, S3-dependent requests fail until the operator repairs
+the certificate, helper, profile, or trust configuration and repeats the
+identity and live S3 proof. Creating a legacy IAM-user key is not a planned
+fallback.
 
 Storage logs include the request ID, operation, Media Asset ID, and AWS error or
 request code. They never include presigned URLs or credentials. Stage 3 adds no
@@ -1518,6 +1525,10 @@ live S3 tracer runs; the credentials wizard follows that infrastructure work.
 6. SSH deployment.
 7. Drizzle migrations.
 8. health checks.
+9. Alert the developer by email when the deployed BFF's storage-credential path
+   fails. Use a failure signal and notification path independent of the BFF's
+   AWS credentials; evaluate Amazon SNS email delivery during Stage 6. This
+   alert does not gate the earlier local IAM-user retirement.
 
 ---
 
