@@ -26,9 +26,3 @@ cleanup guarantees.
 - [x] Confirm the workload certificate and key remain uncommitted, the CA private key is not deployed, and the built image contains no private credential material.
 - [x] Do not remove the imported broad inline role policy or retire the legacy IAM user in this ticket.
 - [x] Run the repository's full credential-free regression set before the opt-in live tracer.
-
-## Comments
-
-The tracer implementation is committed in `b4528c7`. The live Roles Anywhere/S3/browser run remains pending: this environment did not have the required exported API tokens, AWS region/bucket, or Chromium. The unchecked runtime-proof criteria above should be checked only after running it in the provisioned environment. Container logs are always checked; extra file-based audit logs are checked when configured.
-
-The live run passed on 2026-09-23 with a temporary Chrome for Testing headless shell. The production-like BFF container returned the expected `ez-dk-citizen-role-anywhere-s3` assumed-role identity. Browser CORS and request-shape rejections, direct upload, overwrite rejection, Media Asset completion, exact playback bytes, unsigned access rejection, public response shapes, container-log scanning, and exact smoke-key deletion all passed. No additional file-based audit logs were configured. The credential-free typechecks, unit tests, container development smoke test, PostgreSQL integration suite (26 tests), end-to-end tracer, and builds passed before the live run.

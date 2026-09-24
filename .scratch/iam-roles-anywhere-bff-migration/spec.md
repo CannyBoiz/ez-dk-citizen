@@ -24,9 +24,8 @@ intended Roles Anywhere role.
 The manually managed Hetzner VPS is not yet governed by a repository-driven
 deployment workflow. Treating it as the cutover target now would mix workload
 identity migration with an unresolved infrastructure-reconciliation problem.
-The migration therefore needs a local production-like acceptance path, a
-reversible IAM-user rollback window, and a separately reviewed retirement
-stage.
+The migration therefore needs a local production-like acceptance path and a
+separately reviewed, keyless retirement stage.
 
 ## Solution
 
@@ -60,14 +59,19 @@ S3 tracer proves the complete upload and playback path and cleans up only its
 own `smoke/` object. An STS identity check from the same container and standard
 credential-provider path proves that the BFF is using the intended assumed
 role. Negative runs prove that either legacy access-key variable causes the BFF
-to reject startup. After the live path succeeds, disable the legacy IAM-user
-access key, repeat the live verification, and retain the disabled path for a
-24-hour rollback window.
+to reject startup. Live IAM inspection found that the legacy workload user has
+no access keys. Do not create one merely to stage a rollback: verify the zero-key
+state around the successful live path. If a key appears, stop and review that
+change before proceeding. An idle delay would not observe a running workload:
+the local acceptance containers stop after the tracer, and VPS deployment is
+separate Stage 6 work.
 
-Stage D retires the legacy IAM user only after the rollback window passes
-without regression. Remove its policy attachment and user from Terraform in a
-dedicated, explicitly reviewed destroy plan. Deployment to the existing
-Hetzner VPS remains part of Stage 6 and begins with reconciliation of the
+Stage D retires the legacy IAM user only after a fresh successful keyless
+same-container identity and live S3 proof. Remove its policy attachment and
+user from Terraform in a dedicated, explicitly reviewed destroy plan that
+requires explicit approval. Repeat the identity and live S3 proof after
+retirement. Deployment to the existing Hetzner VPS remains part of Stage 6
+and begins with reconciliation of the
 manually created server rather than an unreviewed Terraform apply.
 
 ## User Stories
@@ -84,9 +88,9 @@ manually created server rather than an unreviewed Terraform apply.
 10. As a security reviewer, I want the role limited to object reads, writes, and deletes under `audio/` and `smoke/`, so that the BFF has only the permissions its current behavior needs.
 11. As a security reviewer, I want no bucket-list permission on the role, so that the workload cannot enumerate unrelated objects.
 12. As a security reviewer, I want the broad imported inline role policy removed before final live verification, so that the tracer proves the least-privilege policy rather than a temporary compatibility policy.
-13. As the application operator, I want the legacy IAM-user path retained during application cutover, so that a failed Roles Anywhere transition has a controlled rollback.
-14. As the application operator, I want the legacy key disabled only after a successful production-like verification, so that cutover does not remove the last working path prematurely.
-15. As the application operator, I want a 24-hour disabled-key rollback window, so that delayed regressions can be handled without recreating credentials or infrastructure.
+13. As the application operator, I want to inspect the legacy workload user's access keys at cutover, so that the plan does not assume a rollback credential exists.
+14. As a security reviewer, I want no long-lived key created merely to stage a rollback, so that the migration remains keyless.
+15. As the application operator, I want fresh keyless identity and S3 proof before retiring the legacy user, so that retirement depends on evidence rather than an idle delay or an unavailable key-based rollback.
 16. As a Terraform operator, I want IAM-user retirement isolated in its own reviewed plan, so that intentional destroys cannot hide among imports or application changes.
 17. As a Terraform operator, I want the existing local state to remain canonical for this solo PoC, so that the migration does not introduce an unnecessary backend project.
 18. As a Terraform operator, I want manually created Roles Anywhere resources imported rather than recreated, so that working cloud identities are not duplicated or replaced.
@@ -133,7 +137,7 @@ manually created server rather than an unreviewed Terraform apply.
 - The Roles Anywhere role remains `ez-dk-citizen-role-anywhere-s3`, and the Roles Anywhere profile remains `ez-dk-citizen-prod`. Its one-hour maximum session duration remains unchanged.
 - The effective S3 permission boundary is `GetObject`, `PutObject`, and `DeleteObject` on only the `audio/` and `smoke/` prefixes. `ListBucket`, wildcard S3 actions, and bucket-wide object access are not required.
 - The imported broad inline role policy is temporary migration state. Remove it through a separate reviewed Terraform plan after confirming the managed attachment and before Stage C acceptance, so the live proof exercises only the prefix-scoped policy.
-- The old IAM user and its managed-policy attachment remain through Stage B and the first successful Stage C run. Access keys are disabled after that run, the same acceptance flow is repeated, and the disabled path remains available for 24 hours before Stage D.
+- The old IAM user and its managed-policy attachment remain through Stage B and the successful Stage C run. Live IAM inspection found zero access keys on that user. Do not create a key to manufacture a rollback path or repeat the live tracer solely for a nonexistent disablement. An idle 24-hour wait provides no workload observation or rollback while the local BFF is stopped. If a key appears, stop and obtain operator direction.
 - Terraform continues to use the local ignored state. Do not introduce a remote backend, modules, workspaces, or extra deployment environments for this PoC.
 - Terraform manages only public trust material. It never generates, imports, stores, or provisions the CA private key, workload private key, or private-key-bearing bundles.
 - The committed CA certificate is public trust material and is not encrypted. The workload certificate is not secret but remains host-provisioned runtime material rather than Terraform configuration. No private-key material is committed.
@@ -152,8 +156,9 @@ manually created server rather than an unreviewed Terraform apply.
 - Stage B/C acceptance runs the tracer against the production-like BFF container rather than creating an in-process BFF with explicit credentials. Any direct tracer operation that needs AWS authorization uses the same shared profile/provider mechanism and least-privilege role.
 - The BFF runtime identity is proven by calling STS `GetCallerIdentity` from the same container and provider chain used by the BFF. The result must be an assumed-role session for `ez-dk-citizen-role-anywhere-s3`, not an IAM user.
 - Negative acceptance starts the actual BFF container once with only the legacy access-key ID variable and once with only the legacy secret-key variable; each run must fail before serving requests with an actionable refusal.
-- After successful Stage C verification, disable every access key belonging to the legacy workload IAM user and repeat identity plus live S3 verification. Do not disable or alter the separate operator identity used to administer AWS.
-- Stage D removes the legacy workload user's managed-policy attachment and user from Terraform only after the 24-hour rollback window. Review the exact destroy plan and require explicit approval before applying it.
+- Confirm the legacy workload user has zero access keys before and after Stage C verification. Do not create or alter a workload key, and do not disable or alter the separate operator identity used to administer AWS.
+- Stage D removes the legacy workload user's managed-policy attachment and user from Terraform only after a fresh keyless same-container identity and live S3 proof. Review the exact destroy plan and require explicit approval before applying it; stop if any workload access key appears. Repeat the proof after retirement.
+- If the Roles Anywhere path fails, S3-dependent requests fail until the operator repairs the certificate, signing helper, profile, or trust configuration and repeats the identity and live S3 proof. Do not create an IAM-user access key as a planned fallback.
 - Routine certificate rotation is manual and scheduled at least 30 days before the current certificate expires. Routine rotation may retain the current identity while the existing certificate remains uncompromised.
 - Emergency private-key compromise handling is different from routine rotation: disable the Roles Anywhere profile immediately, issue a new key and certificate with a new certificate identity, update the trust-policy identity constraint, verify the replacement, and only then re-enable the profile. Rotating the dedicated CA is the fallback. Merely replacing a certificate while retaining the trusted identity is not revocation.
 - No CRL infrastructure is added for the PoC.
@@ -168,7 +173,7 @@ manually created server rather than an unreviewed Terraform apply.
 - Stage B/C uses one primary application acceptance seam: the production-like BFF container with the real signing helper, read-only identity mounts, shared profile, normal AWS SDK provider chain, real S3 bucket, and existing browser tracer.
 - The acceptance run obtains STS identity evidence from the same container and credential path as the BFF, then exercises authenticated Upload Intent creation, browser CORS preflight, conditional direct upload, overwrite rejection, S3 metadata inspection, Media Asset completion, Playback URL generation, direct playback, unsigned-access rejection, and exact `smoke/` cleanup.
 - The same container harness has two negative startup cases. Defining only the legacy access-key ID must fail, and defining only the legacy secret key must fail. This proves each variable is independently forbidden.
-- Repeat the Stage B/C acceptance run after legacy workload access keys are disabled. A passing identity check and live tracer prove that success cannot fall back to the IAM user.
+- Verify zero legacy workload access keys before and after the Stage B/C acceptance run. The assumed-role identity and live tracer then prove success without an IAM-user access key; no duplicate run is needed for a nonexistent disablement.
 - Inspect runtime logs and configured audit logs after the live run. They must not contain access keys, temporary credentials, private-key material, bearer tokens, request bodies, or complete presigned URLs.
 - Inspect the built BFF image and its metadata for workload certificates, private keys, shared profile contents, and credentials. Public helper binaries and ordinary non-secret application configuration are expected.
 - Keep existing Storage and BFF route tests on FakeStorage. They continue to prove authorization shape, object validation, cleanup behavior, and application errors without AWS credentials.
@@ -190,7 +195,7 @@ manually created server rather than an unreviewed Terraform apply.
 - Granting `ListBucket`, wildcard S3 actions, bucket-wide object access, or permissions for prefixes other than `audio/` and `smoke/`.
 - Changes to the Data Service image, PostgreSQL, frontend clients, Media Asset domain rules, or direct browser-to-S3 architecture.
 - Making live AWS access a prerequisite for ordinary development, unit tests, integration tests, builds, or health/readiness checks.
-- New dashboards, alarms, log-shipping infrastructure, or CloudTrail infrastructure. Existing AWS identity evidence may be inspected when available.
+- New dashboards, alarms, log-shipping infrastructure, or CloudTrail infrastructure in this migration. Stage 6 will address a developer email alert for deployed BFF storage-credential failures using a failure signal independent of the BFF's AWS credentials. Existing AWS identity evidence may be inspected when available.
 - Automatic deletion of historical audio or abandoned Media Assets. Tracer cleanup remains limited to exact smoke objects created by the run.
 
 ## Further Notes
