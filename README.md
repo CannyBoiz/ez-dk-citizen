@@ -28,8 +28,8 @@ and `runtime/aws/workload.key`. The dedicated CA's public certificate is read
 from `../cannyboiz-devops-hub/terraform/ez-dk-citizen/certs/ca.crt`. Keep the
 private key host-only, owned so container UID `1000` can read it, and mode
 `0600`; the setup command checks these conditions without displaying its
-contents. The certificate must have subject CN `aws-iam-app` and chain to that
-public CA certificate.
+contents. For normal operation, the certificate must have subject CN
+`aws-iam-app` and chain to that public CA certificate.
 
 Run:
 
@@ -66,16 +66,23 @@ and run the full setup check before switching the active host files. Keep the
 Trust Anchor, profile, role, and trust-policy identity unchanged.
 
 For a private-key compromise, disable the Roles Anywhere profile immediately.
-Issue a new key and certificate with a new certificate identity, update the
-role trust-policy identity constraint, and run `--preflight` against the staged
-files. Before re-enabling, independently inspect the AWS role trust policy and
-confirm its Trust Anchor and new certificate identity conditions; preflight
-cannot inspect live IAM policy. Re-enable the profile only after those checks
-pass, then immediately rerun the full setup command to prove STS identity. If
-that proof fails, disable the profile again. Dedicated-CA rotation is the
-emergency fallback. Replacing only the certificate while retaining the trusted
-identity does not revoke the compromised certificate. Hetzner VPS
-reconciliation remains deferred to Stage 6.
+Issue a new key and certificate with a **new CN**. In the infrastructure repo,
+update `terraform/ez-dk-citizen/roles-anywhere.tf` so the role trust policy's
+`aws:PrincipalTag/x509Subject/CN` condition names that exact CN; review and
+apply the Terraform plan while the profile remains disabled. Stage the new
+files at alternate host paths, then set
+`AWS_ROLES_ANYWHERE_EXPECTED_CERTIFICATE_CN` to the new CN when running the
+setup command with `--preflight`. Use the same setting for the full setup
+command after re-enabling the profile, and keep setting it for later checks
+while that CN is active. Without it, commands still require CN `aws-iam-app`.
+Before re-enabling, independently inspect the live AWS role trust policy and
+confirm its exact Trust Anchor and new CN conditions; preflight verifies the
+certificate CN and CA chain but cannot inspect live IAM policy. Re-enable the
+profile only after those checks pass, then immediately run the full setup
+command to prove STS identity. If that proof fails, disable the profile again.
+Dedicated-CA rotation is the emergency fallback. Replacing only the certificate
+while retaining the trusted identity does not revoke the compromised certificate.
+Hetzner VPS reconciliation remains deferred to Stage 6.
 
 `pnpm test:live-s3` requires exported `ADMIN_API_TOKEN`, `DATA_SERVICE_TOKEN`,
 `AWS_REGION`, and `S3_BUCKET`, plus the configured Roles Anywhere profile and a
