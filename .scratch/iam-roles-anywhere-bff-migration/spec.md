@@ -2,6 +2,9 @@
 
 Status: ready-for-agent
 
+Current migration state: Local keyless cutover and legacy IAM-user retirement
+are complete. Hetzner deployment remains Stage 6 work.
+
 ## Problem Statement
 
 The BFF is an external workload that accesses the private S3 bucket, but its

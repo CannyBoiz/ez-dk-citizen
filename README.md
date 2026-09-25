@@ -45,6 +45,12 @@ inspects the production-like BFF image, validates the read-only mounts and
 non-root key access, and proves the assumed-role identity through STS in that
 container. It never asks for or stores IAM access keys or temporary credentials.
 
+The local keyless cutover is complete: the legacy workload IAM user
+`ez-dk-citizen-app` and its policy attachment have been retired. Remove stale
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` entries from local `.env` files
+before running the setup command; it refuses those variables. Hetzner deployment
+and server reconciliation remain Stage 6 work.
+
 For an identity staged at other host paths, set
 `AWS_ROLES_ANYWHERE_CERTIFICATE_FILE`, `AWS_ROLES_ANYWHERE_PRIVATE_KEY_FILE`,
 and optionally `AWS_ROLES_ANYWHERE_CONFIG_FILE` and

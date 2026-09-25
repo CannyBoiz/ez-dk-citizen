@@ -762,12 +762,12 @@ Anywhere cutover is verified with the production-like BFF container running
 locally against the live S3 bucket. Verification requires the real signing
 helper and mounted workload identity, rejection of static AWS access-key
 variables, the opt-in live tracer, and identity evidence for the Roles Anywhere
-role. Live IAM inspection found no access keys on the legacy workload user, so
-the cutover does not create one for rollback. The user may be retired after
-fresh successful keyless identity and live S3 proof plus explicit approval of
-the destroy plan. A 24-hour delay would not observe a running workload because
-the local acceptance BFF is stopped after testing; VPS deployment remains a
-separate Stage 6 concern.
+role. Live IAM inspection found zero access keys on the legacy workload user.
+After fresh keyless identity and live S3 proof, an explicitly approved Terraform
+plan retired the user and its policy attachment. Live IAM inspection confirmed
+their absence, and the same identity and S3 proof passed after retirement.
+Terraform converged with no changes. The local acceptance BFF is stopped after
+testing; VPS deployment remains a separate Stage 6 concern.
 If Roles Anywhere fails, S3-dependent requests fail until the operator repairs
 the certificate, helper, profile, or trust configuration and repeats the
 identity and live S3 proof. Creating a legacy IAM-user key is not a planned
