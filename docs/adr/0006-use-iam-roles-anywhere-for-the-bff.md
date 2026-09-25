@@ -30,10 +30,10 @@ the full identity exchange runs immediately after the profile is re-enabled.
 The cutover is first proven with the production-like BFF container running
 locally against live S3 because no repository-driven VPS deployment exists yet.
 The manually managed Hetzner server is reconciled separately during Stage 6.
-The legacy workload IAM user has no access keys, so retaining it cannot provide
-credential rollback. Retire it after fresh keyless identity and S3 proof plus
-approval of the exact destroy plan, without an idle observation delay. If the
-Roles Anywhere path fails, S3-dependent requests fail until that path is
-repaired and reverified; creating an IAM-user key is not a planned fallback.
+The legacy workload IAM user had no access keys and was retired after fresh
+keyless identity and S3 proof plus approval of the exact destroy plan, without
+an idle observation delay. If the Roles Anywhere path fails, S3-dependent
+requests fail until that path is repaired and reverified; creating an IAM-user
+key is not a planned fallback.
 For this PoC, that temporary loss of S3 availability is preferable to
 reintroducing a long-lived workload credential.
