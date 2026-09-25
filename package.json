@@ -10,7 +10,7 @@
     "db:migrate": "docker compose exec hono-data pnpm --filter @ez-dk-citizen/data db:migrate",
     "db:up": "docker compose up --detach --wait postgres",
     "db:down": "docker compose down",
-    "test": "pnpm --recursive --if-present test",
+    "test": "pnpm --recursive --if-present test && bash scripts/test-setup-aws-s3-certificate.sh",
     "test:dev": "node scripts/test-container-development.mjs",
     "test:integration": "node scripts/test-postgres-integration.mjs",
     "test:e2e": "node scripts/test-postgres-integration.mjs --end-to-end",

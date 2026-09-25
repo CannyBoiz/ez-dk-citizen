@@ -1296,16 +1296,21 @@ identity available until the replacement passes.
 
 If the workload private key is compromised, replacing only the mounted
 certificate and key is insufficient because the old certificate remains valid.
-The operator immediately disables the Roles Anywhere profile, issues a key and
-certificate with a new certificate identity, and updates the role trust-policy
-identity constraint. Run the operator `--preflight` against the staged files
-while the profile is disabled, then independently inspect the AWS role trust
-policy to confirm its Trust Anchor and new certificate identity conditions.
-Preflight cannot inspect live IAM policy. Only after both checks pass, re-enable
-the profile and immediately run the full STS identity check. Disable the
-profile again if that proof fails. Rotating the dedicated CA and updating its
-Trust Anchor is the emergency fallback; the PoC does not maintain certificate
-revocation lists.
+The operator immediately disables the Roles Anywhere profile and issues a key
+and certificate with a new CN. Update the canonical
+`terraform/ez-dk-citizen/roles-anywhere.tf` trust policy's
+`aws:PrincipalTag/x509Subject/CN` condition to that exact CN through a reviewed
+Terraform plan while the profile is disabled. Run the operator `--preflight`
+against the staged files with
+`AWS_ROLES_ANYWHERE_EXPECTED_CERTIFICATE_CN` set to the new CN while the profile
+is disabled, then independently inspect the live AWS role trust policy to
+confirm its Trust Anchor and new CN conditions. Preflight checks the certificate
+CN and CA chain but cannot inspect live IAM policy. Only after both checks pass,
+re-enable the profile and immediately run the full setup command with the same
+expected CN to prove STS identity; keep using it for later checks while that CN
+is active. Disable the profile again if that proof fails. Rotating the dedicated
+CA and updating its Trust Anchor is the emergency fallback; the PoC does not
+maintain certificate revocation lists.
 Never put private-key contents into shell commands, terminal output, `.env`, or
 temporary credential files.
 

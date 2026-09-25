@@ -21,11 +21,5 @@ node_modules/
 # build
 dist/
 
-
-# personal dir and files
-cannyboizs-files/
-mattpocock-skills/
-learning-notes/
-
 # Roles Anywhere runtime identity and profile
 runtime/

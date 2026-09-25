@@ -48,7 +48,10 @@ key_mode=$(stat -c '%a' -- "$AWS_ROLES_ANYWHERE_PRIVATE_KEY_FILE" 2>/dev/null ||
 
 subject=$(openssl x509 -in "$AWS_ROLES_ANYWHERE_CERTIFICATE_FILE" -noout -subject -nameopt RFC2253) || fail "Could not read the workload certificate: $AWS_ROLES_ANYWHERE_CERTIFICATE_FILE"
 subject=${subject#subject=}
-[[ "$subject" =~ (^|,)CN=aws-iam-app(,|$) ]] || fail "Workload certificate subject must contain CN=aws-iam-app; found $subject"
+expected_cn=${AWS_ROLES_ANYWHERE_EXPECTED_CERTIFICATE_CN:-aws-iam-app}
+[[ "$expected_cn" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || fail "Expected certificate CN contains unsupported characters."
+[[ "$subject" =~ (^|,)CN=([^,]+)(,|$) ]] || fail "Workload certificate subject has no CN: $subject"
+[[ "${BASH_REMATCH[2]}" == "$expected_cn" ]] || fail "Workload certificate CN must be $expected_cn; found $subject"
 openssl verify -CAfile "$AWS_ROLES_ANYWHERE_CA_CERTIFICATE_FILE" "$AWS_ROLES_ANYWHERE_CERTIFICATE_FILE" >/dev/null || fail "Workload certificate does not chain to the dedicated CA certificate: $AWS_ROLES_ANYWHERE_CA_CERTIFICATE_FILE"
 expires=$(openssl x509 -in "$AWS_ROLES_ANYWHERE_CERTIFICATE_FILE" -noout -enddate | cut -d= -f2-) || fail "Could not read workload certificate expiry."
 printf 'Certificate subject: %s\nCertificate expires: %s\nPrivate-key mode: 0600\n' "$subject" "$expires"
