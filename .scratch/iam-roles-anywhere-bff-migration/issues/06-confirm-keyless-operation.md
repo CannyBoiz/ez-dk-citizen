@@ -7,7 +7,7 @@ do not create a key merely to disable it.
 
 **Blocked by:** 03 — Replace IAM-key setup with the workload-identity operator flow; 05 — Tighten the role and prove the least-privilege cutover.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Resolve the legacy workload IAM user and require zero access keys through read-only inspection.
 - [x] Distinguish the legacy workload user from the separate administrative operator behind the `default` profile; do not alter the operator identity.

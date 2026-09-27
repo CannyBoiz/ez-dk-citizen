@@ -8,7 +8,7 @@ BFF.
 
 **Blocked by:** 01 — Move the BFF to the standard AWS credential chain.
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [x] Keep Node 26 while changing only the BFF development and runtime image stages to a glibc-compatible base.
 - [x] Leave the Data Service image on Alpine and give the Data Service, PostgreSQL, and frontend clients no AWS identity configuration or files.

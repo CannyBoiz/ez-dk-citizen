@@ -4,7 +4,7 @@
 
 **Blocked by:** 04 — Prove Lesson localization and publication rules; 06 — Prove the Media Asset metadata lifecycle.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Integration tests create Lesson Audio only after creating the matching Lesson Text and use a validated READY Media Asset for the successful fixture.
 - [x] PostgreSQL rejects Lesson Audio when the corresponding Lesson and Language pair has no Lesson Text, satisfying ADR 0001.

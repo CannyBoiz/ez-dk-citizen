@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] One root pnpm workspace declares the application packages and owns the authoritative lockfile.
 - [x] Redundant nested workspace and lockfile ownership is removed without collapsing the Data Service package boundary.

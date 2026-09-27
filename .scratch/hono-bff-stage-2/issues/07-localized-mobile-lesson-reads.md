@@ -7,7 +7,7 @@ Archived, admin-only, or speculative audio data.
 
 **Blocked by:** 06 — Lesson publication and immutable history.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] `GET /api/mobile/lessons` and `GET /api/mobile/lessons/:lessonId` are public and do not require the admin bearer token.
 - [x] Both routes accept an optional `language` query parameter defaulting to `th`; unsupported or malformed Language values receive the agreed validation response.

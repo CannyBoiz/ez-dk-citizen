@@ -8,7 +8,7 @@ entire implementation without risking development data.
 
 **Blocked by:** 07 — Localized mobile Lesson reads; 08 — Predictable gateway failures and request tracing.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] One automated end-to-end test starts an isolated compiled PostgreSQL, migration, Data Service, and BFF stack and traverses their real HTTP boundaries.
 - [x] The tracer authenticates an admin, creates a Draft Lesson, adds Thai Lesson Text, creates and attaches a Source with locators, publishes the Lesson, and reads it through mobile list and detail.

@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 — Migrate the complete PoC schema and seed Languages.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Integration tests store a canonical Source once and associate it with multiple Lessons.
 - [x] One Lesson can be associated with multiple Sources without duplicating either parent.

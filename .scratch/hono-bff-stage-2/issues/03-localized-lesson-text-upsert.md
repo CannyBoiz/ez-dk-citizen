@@ -7,7 +7,7 @@ aggregate timestamp, and returns the refreshed detail representation.
 
 **Blocked by:** 02 — Authenticated Draft Lesson creation and reads.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] `PUT /api/admin/lessons/:lessonId/texts/:languageCode` accepts a strict `{ title, content }` request with non-blank values.
 - [x] The BFF calls one authenticated internal Lesson Text upsert operation and never imports or invokes the database layer.

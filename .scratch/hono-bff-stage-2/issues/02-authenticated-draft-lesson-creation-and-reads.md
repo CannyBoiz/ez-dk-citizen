@@ -8,7 +8,7 @@ the base Lesson aggregate representations used by later slices.
 
 **Blocked by:** 01 — Bootable container-first service spine.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Protect every `/api/admin/*` route with `ADMIN_API_TOKEN` and every `/internal/*` resource route with the distinct `DATA_SERVICE_TOKEN`; never forward the admin credential internally.
 - [x] Application startup fails clearly when a required token is absent, and missing or invalid request credentials return safe `401` Problem Details.

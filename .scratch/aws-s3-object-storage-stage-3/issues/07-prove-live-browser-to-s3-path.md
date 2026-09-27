@@ -42,25 +42,3 @@ this ticket reconciliation.
 | Local regression suite before live verification                                                                                                                        | Migration ticket 04 records the full credential-free regression set. `pnpm test:live-s3` runs typechecking, default tests, development-container checks, PostgreSQL integration, the fake-storage end-to-end tracer, and build before its live portion.                                                                                                                            |
 | Infrastructure validation and least-privilege live proof                                                                                                               | [Migration ticket 05](../../iam-roles-anywhere-bff-migration/issues/05-prove-least-privilege-cutover.md) records Terraform formatting/validation, approved removal of the broad inline policy, live identity/S3 verification, and a converged plan. [Ticket 06](../../iam-roles-anywhere-bff-migration/issues/06-confirm-keyless-operation.md) records the keyless baseline.       |
 | Final verification after IAM-user retirement                                                                                                                           | [Migration ticket 07](../../iam-roles-anywhere-bff-migration/issues/07-retire-legacy-iam-user.md) and [current migration state](../../iam-roles-anywhere-bff-migration/spec.md) record successful identity and live S3 checks before and after retirement, plus Terraform convergence. Commit `d38ed75` records that completed cutover.                                            |
-
-## Comments
-
-- 2026-09-18: Added the repeatable AWS setup wizard, opt-in real-browser tracer,
-  and test-only smoke-key injection. Workspace typechecking, build, and default
-  tests pass. The live run now needs human-owned credentials, a disposable
-  localized Lesson, a reachable Data Service, and Chromium. Docker-backed
-  verification is waiting for Docker Desktop WSL integration; Terraform provider
-  validation is waiting for a runnable AWS provider plugin.
-- 2026-09-26: Reconciled the original checklist with the completed Roles Anywhere
-  migration and current scripts. The September 18 credential and environment
-  blockers above are historical; subsequent migration records supply the
-  completion evidence. Permanent IAM-key setup is superseded, the legacy user
-  is retired, and no remaining implementation gap was identified for this
-  ticket. Live AWS and Terraform proof is reused from the linked records.
-  Admin UI and Hetzner deployment remain Stages 4 and 6 respectively.
-  Reconciliation checks passed: ticket formatting, all 12 local evidence links,
-  `git diff --check`, workspace typechecking, and the full default test suite
-  including certificate setup checks. The package scripts ran with installed
-  pnpm 12.3.4 and `npm_config_manage_package_manager_versions=false` because
-  automatic selection of the pinned pnpm version stalled. Container, live AWS,
-  and Terraform checks were not rerun for this documentation-only change.

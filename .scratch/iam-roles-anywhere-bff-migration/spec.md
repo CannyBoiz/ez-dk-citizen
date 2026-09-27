@@ -1,6 +1,6 @@
 # IAM Roles Anywhere BFF Migration
 
-Status: ready-for-agent
+Status: resolved
 
 Current migration state: Local keyless cutover and legacy IAM-user retirement
 are complete. Hetzner deployment remains Stage 6 work.

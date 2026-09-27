@@ -7,7 +7,7 @@ while stale production access-key configuration is rejected explicitly.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [x] Construct the S3 client with the configured AWS region and no explicit access-key ID, secret key, temporary credentials, or application-owned refresh code.
 - [x] Keep the S3 bucket and AWS region as required, non-secret BFF configuration.

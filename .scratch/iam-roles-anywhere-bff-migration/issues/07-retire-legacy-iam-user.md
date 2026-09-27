@@ -6,7 +6,7 @@ Terraform destroy.
 
 **Blocked by:** 06 — Confirm keyless Roles Anywhere-only operation.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Confirm the issue 06 keyless baseline has no unresolved reported regression or newly created workload access key; elapsed time is not a gate.
 - [x] Before editing Terraform, run the same-container STS identity proof and the complete browser-to-BFF-to-S3 tracer successfully with zero legacy workload access keys.

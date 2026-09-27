@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — Establish the isolated PostgreSQL integration loop.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Drizzle defines Lesson, Language, Lesson Text, Source, Lesson Source, Media Asset, and Lesson Audio using the confirmed domain names.
 - [x] PostgreSQL enum types use the distinct Lesson Status and Media Asset Status names and approved values.

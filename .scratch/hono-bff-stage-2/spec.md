@@ -1,6 +1,6 @@
 # Hono BFF Stage 2 Lesson Slice
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 

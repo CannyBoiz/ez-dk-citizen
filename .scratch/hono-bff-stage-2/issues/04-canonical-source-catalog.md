@@ -7,7 +7,7 @@ without coupling the client to persistence details.
 
 **Blocked by:** 02 — Authenticated Draft Lesson creation and reads.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] `POST /api/admin/sources` accepts only a Source URL and nullable publication timestamp through a strict shared schema.
 - [x] Source URLs are trimmed, must be absolute HTTP or HTTPS URLs, and otherwise retain their exact textual identity.

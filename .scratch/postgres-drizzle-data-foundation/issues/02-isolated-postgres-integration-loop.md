@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — Make the Data Service a reproducible workspace package.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] The local Compose definition is valid and starts PostgreSQL 18 successfully.
 - [x] PostgreSQL uses the canonical database name, user, and password variables supported by the official image.

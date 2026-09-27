@@ -7,7 +7,7 @@ cleanup guarantees.
 
 **Blocked by:** 02 — Run the BFF with a containerized Roles Anywhere identity.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Run the BFF in the production-like container with the real signing helper, shared profile, and read-only workload-identity mounts, with both legacy access-key variables absent.
 - [x] Obtain STS identity evidence through the same container and provider path and require an assumed-role session for `ez-dk-citizen-role-anywhere-s3`.

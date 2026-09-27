@@ -8,7 +8,7 @@ future feature routes retain testable application and contract seams.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Add the public BFF as an ESM, strict-TypeScript Hono workspace application with separate application-construction and process-startup boundaries.
 - [x] Refactor the Data Service to expose the same testable application-construction seam without changing its database ownership or established schema behavior.

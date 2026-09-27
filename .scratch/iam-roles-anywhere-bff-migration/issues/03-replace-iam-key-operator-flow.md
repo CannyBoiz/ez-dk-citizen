@@ -7,7 +7,7 @@ contents.
 
 **Blocked by:** 02 — Run the BFF with a containerized Roles Anywhere identity.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Remove wizard instructions and prompts for creating, rotating, entering, or storing IAM-user access keys.
 - [x] Verify that the workload certificate, private key, and shared AWS profile exist at the expected host locations without printing their contents.

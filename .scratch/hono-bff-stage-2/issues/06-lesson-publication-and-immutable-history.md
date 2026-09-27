@@ -7,7 +7,7 @@ across Lesson structure, Lesson Texts, and Lesson Source associations.
 
 **Blocked by:** 03 — Localized Lesson Text upsert; 05 — Draft Lesson Source associations.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] `PATCH /api/admin/lessons/:lessonId` accepts a strict non-empty subset of chapter, version, and status.
 - [x] Draft chapter and version changes are allowed and advance the aggregate timestamp; duplicate chapter/version identity returns a stable `409` conflict.

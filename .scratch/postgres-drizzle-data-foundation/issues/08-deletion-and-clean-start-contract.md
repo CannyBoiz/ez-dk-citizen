@@ -4,7 +4,7 @@
 
 **Blocked by:** 05 — Prove reusable Source citations; 07 — Prove localized Lesson Audio versioning.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] The root integration command starts isolated PostgreSQL, applies the committed migration through the one-shot service, runs the complete suite, and removes only test-specific state.
 - [x] A representative graph loads bidirectionally through Drizzle: a Lesson with localized Lesson Texts, reusable Sources, historical and current Lesson Audio, associated Media Assets, and an unattached pending Media Asset.

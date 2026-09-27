@@ -1,6 +1,6 @@
 # PostgreSQL and Drizzle Data Foundation
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 

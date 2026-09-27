@@ -7,7 +7,7 @@ downstream latency and never duplicates requests through hidden retries.
 
 **Blocked by:** 02 — Authenticated Draft Lesson creation and reads.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Every public and internal error response uses `application/problem+json` with RFC 9457 `type`, `title`, `status`, `detail`, and `instance`, plus stable `code` and `requestId` extensions.
 - [x] Validation failures include a structured `errors` collection without exposing schema-library or stack-trace internals.

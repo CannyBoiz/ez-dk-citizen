@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 — Migrate the complete PoC schema and seed Languages.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Integration tests create valid draft, published, and archived Lessons through the exported Drizzle layer.
 - [x] PostgreSQL rejects non-positive chapters and versions and duplicate chapter/version pairs.

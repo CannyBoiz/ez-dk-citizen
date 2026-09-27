@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 — Migrate the complete PoC schema and seed Languages.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Integration tests persist a pending Media Asset without any Lesson Audio association.
 - [x] New Media Assets default to PENDING, receive a database-clock creation timestamp, and may have no upload timestamp or duration.

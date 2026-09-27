@@ -7,7 +7,7 @@ prefix-scoped managed policy.
 
 **Blocked by:** 04 — Exercise live S3 through the production-like BFF runtime.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Back up and inspect the canonical local Terraform state before changing the imported inline policy.
 - [x] Remove only the temporary broad inline role policy from configuration; preserve the Trust Anchor, role, Roles Anywhere profile, managed role attachment, legacy IAM user, and legacy user attachment.

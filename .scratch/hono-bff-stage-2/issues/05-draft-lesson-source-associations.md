@@ -8,7 +8,7 @@ duplicating the Source.
 
 **Blocked by:** 04 — Canonical Source catalog.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] `PUT /api/admin/lessons/:lessonId/sources/:sourceId` creates or completely replaces one Lesson Source association.
 - [x] The association request supports nullable or omitted `pageFrom`, `pageTo`, and `sectionReference`; omitted locator values are persisted as absent rather than retaining stale values.
