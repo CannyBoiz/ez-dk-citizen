@@ -2,4 +2,4 @@
 
 [profile roles-anywhere]
 region = <AWS_REGION>
-credential_process = /usr/local/bin/aws_signing_helper credential-process --certificate /run/ez-dk-citizen/identity/workload.crt --private-key /run/ez-dk-citizen/identity/workload.key --trust-anchor-arn <TRUST_ANCHOR_ARN> --profile-arn <PROFILE_ARN> --role-arn <ROLE_ARN>
+credential_process = /usr/local/bin/aws_signing_helper credential-process --certificate /run/ez-dk-citizen/identity/workload.crt --private-key /run/ez-dk-citizen/identity/workload.key --trust-anchor-arn <TRUST_ANCHOR_ARN> --profile-arn <PROFILE_ARN> --role-arn <ROLE_ARN> --session-duration 7200

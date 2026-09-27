@@ -115,7 +115,7 @@ validate_profile_arns() {
 }
 
 expected_process() {
-  printf '/usr/local/bin/aws_signing_helper credential-process --certificate /run/ez-dk-citizen/identity/workload.crt --private-key /run/ez-dk-citizen/identity/workload.key --trust-anchor-arn %s --profile-arn %s --role-arn %s' "$1" "$2" "$3"
+  printf '/usr/local/bin/aws_signing_helper credential-process --certificate /run/ez-dk-citizen/identity/workload.crt --private-key /run/ez-dk-citizen/identity/workload.key --trust-anchor-arn %s --profile-arn %s --role-arn %s --session-duration 7200' "$1" "$2" "$3"
 }
 
 mkdir -p "$(dirname "$AWS_ROLES_ANYWHERE_CONFIG_FILE")"
@@ -132,7 +132,7 @@ if [[ -f "$AWS_ROLES_ANYWHERE_CONFIG_FILE" ]]; then
   [[ "$credential_process" =~ --role-arn[[:space:]]+([^[:space:]]+) ]] || fail "Shared profile is missing its IAM role ARN."
   role_arn=${BASH_REMATCH[1]}
   validate_profile_arns "$trust_anchor_arn" "$profile_arn" "$role_arn"
-  [[ "$credential_process" == "$(expected_process "$trust_anchor_arn" "$profile_arn" "$role_arn")" ]] || fail "Shared profile must use the pinned helper and configured read-only identity mount paths."
+  [[ "$credential_process" == "$(expected_process "$trust_anchor_arn" "$profile_arn" "$role_arn")" ]] || fail "Shared profile must use the pinned helper, configured read-only identity mount paths, and --session-duration 7200. After applying the two-hour Terraform session settings, append that flag to an existing profile and rerun setup."
   printf 'Shared AWS profile validated.\n'
 else
   TRUST_ANCHOR_ARN=${ROLES_ANYWHERE_TRUST_ANCHOR_ARN:-}

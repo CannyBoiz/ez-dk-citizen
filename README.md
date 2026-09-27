@@ -45,6 +45,15 @@ inspects the production-like BFF image, validates the read-only mounts and
 non-root key access, and proves the assumed-role identity through STS in that
 container. It never asks for or stores IAM access keys or temporary credentials.
 
+Presigning needs fresh credentials valid beyond the whole URL lifetime. The
+Roles Anywhere role maximum and profile session duration must both be `7200`
+seconds, and the helper command requests `--session-duration 7200`. Apply the
+reviewed Terraform duration change before rolling out this signing change.
+For an existing `runtime/aws/config`, append that flag to its `credential_process`
+command and rerun setup after the apply. The BFF uses a fresh SDK signing client
+for each URL and refuses to issue one if the credentials expire too soon;
+upload and playback URLs retain their 15-minute and one-hour lifetimes.
+
 The local keyless cutover is complete: the legacy workload IAM user
 `ez-dk-citizen-app` and its policy attachment have been retired. Remove stale
 `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` entries from local `.env` files

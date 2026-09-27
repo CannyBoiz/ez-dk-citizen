@@ -41,30 +41,60 @@ export function createS3Storage(input: {
   bucket: string;
 }): Storage {
   const client = new S3Client({ region: input.region });
+  async function authorize(
+    command: PutObjectCommand | GetObjectCommand,
+    seconds: number,
+  ) {
+    // ponytail: one credential-process call per URL; revisit caching if signing volume grows.
+    const signer = new S3Client({ region: input.region });
+    try {
+      const credentials = await signer.config.credentials();
+      const signingDate = new Date(Math.floor(Date.now() / 1_000) * 1_000);
+      const expiresAt = new Date(signingDate.getTime() + seconds * 1_000);
+      if (
+        (credentials.sessionToken && !credentials.expiration) ||
+        (credentials.expiration &&
+          !(credentials.expiration.getTime() >= expiresAt.getTime()))
+      ) {
+        throw Object.assign(
+          new Error(
+            "AWS credentials cannot cover the requested URL lifetime; check the Roles Anywhere session duration.",
+          ),
+          { name: "CredentialLifetimeError" },
+        );
+      }
+      return {
+        url: await getSignedUrl(signer, command, {
+          signingDate,
+          expiresIn: seconds,
+          signableHeaders: new Set([
+            "content-length",
+            "content-type",
+            "if-none-match",
+          ]),
+        }),
+        expiresAt: expiresAt.toISOString(),
+      };
+    } finally {
+      signer.destroy();
+    }
+  }
   return {
     async createUploadAuthorization({ key, contentType, sizeBytes }) {
-      const expiresAt = expiry(uploadExpirySeconds);
+      const authorization = await authorize(
+        new PutObjectCommand({
+          Bucket: input.bucket,
+          Key: key,
+          ContentType: contentType,
+          ContentLength: sizeBytes,
+          IfNoneMatch: "*",
+        }),
+        uploadExpirySeconds,
+      );
       return {
-        uploadUrl: await getSignedUrl(
-          client,
-          new PutObjectCommand({
-            Bucket: input.bucket,
-            Key: key,
-            ContentType: contentType,
-            ContentLength: sizeBytes,
-            IfNoneMatch: "*",
-          }),
-          {
-            expiresIn: uploadExpirySeconds,
-            signableHeaders: new Set([
-              "content-length",
-              "content-type",
-              "if-none-match",
-            ]),
-          },
-        ),
+        uploadUrl: authorization.url,
         uploadHeaders: uploadHeaders(contentType, sizeBytes),
-        expiresAt,
+        expiresAt: authorization.expiresAt,
       };
     },
     async inspectObject(key) {
@@ -77,13 +107,13 @@ export function createS3Storage(input: {
       };
     },
     async createPlaybackAuthorization(key) {
+      const authorization = await authorize(
+        new GetObjectCommand({ Bucket: input.bucket, Key: key }),
+        playbackExpirySeconds,
+      );
       return {
-        playbackUrl: await getSignedUrl(
-          client,
-          new GetObjectCommand({ Bucket: input.bucket, Key: key }),
-          { expiresIn: playbackExpirySeconds },
-        ),
-        expiresAt: expiry(playbackExpirySeconds),
+        playbackUrl: authorization.url,
+        expiresAt: authorization.expiresAt,
       };
     },
     async deleteObject(key) {

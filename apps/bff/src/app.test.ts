@@ -670,10 +670,17 @@ test("BFF does not sign when pending Media Asset persistence fails", async () =>
   assert.equal(storage.uploads.length, 0);
 });
 
-test("BFF leaves a pending Media Asset when storage signing fails", async () => {
+test("BFF leaves a pending Media Asset and logs safely when storage signing fails", async (context) => {
+  const log = context.mock.method(console, "log", () => undefined);
   const storage = new FakeStorage();
   storage.createUploadAuthorization = async () => {
-    throw new Error("S3 is unavailable");
+    throw Object.assign(
+      new Error("secret-token https://s3.invalid/?X-Amz-Signature=secret"),
+      {
+        name: "CredentialsProviderError",
+        $metadata: { requestId: "aws-signing-request" },
+      },
+    );
   };
   const app = createBffApp(async () => undefined, {
     adminApiToken: "admin-token",
@@ -717,6 +724,28 @@ test("BFF leaves a pending Media Asset when storage signing fails", async () => 
   const failure = problemDetailsSchema.parse(await response.json());
   assert.equal(failure.code, "storage_unavailable");
   assert.equal(failure.requestId, "signing-request");
+  const events = log.mock.calls.map((call) =>
+    JSON.parse(String(call.arguments[0])),
+  );
+  assert.deepEqual(
+    events.find((event) => event.operation === "upload"),
+    {
+      requestId: "signing-request",
+      operation: "upload",
+      mediaAssetId: 10,
+      storageErrorCode: "CredentialsProviderError",
+      storageRequestId: "aws-signing-request",
+    },
+  );
+  const output = JSON.stringify({ events, failure });
+  for (const secret of [
+    "secret-token",
+    "X-Amz-Signature",
+    "admin-token",
+    "lesson.mp3",
+  ]) {
+    assert.equal(output.includes(secret), false);
+  }
 });
 
 test("BFF health is independent of the Data Service", async () => {

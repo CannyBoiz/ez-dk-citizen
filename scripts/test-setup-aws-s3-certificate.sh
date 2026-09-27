@@ -41,6 +41,15 @@ run_setup() {
 }
 
 run_setup aws-iam-app > "$test_root/output" 2>&1 || { cat "$test_root/output"; exit 1; }
+grep -q -- '--session-duration 7200$' "$test_root/repo/runtime/aws/config"
+sed -i 's/ --session-duration 7200$//' "$test_root/repo/runtime/aws/config"
+if run_setup aws-iam-app > "$test_root/output" 2>&1; then
+  printf 'Legacy one-hour credential profile unexpectedly passed.\n' >&2
+  exit 1
+fi
+[[ "$(<"$test_root/output")" == *"--session-duration 7200"* ]] || { cat "$test_root/output"; exit 1; }
+sed -i '/^credential_process =/s/$/ --session-duration 7200/' "$test_root/repo/runtime/aws/config"
+run_setup aws-iam-app > "$test_root/output" 2>&1 || { cat "$test_root/output"; exit 1; }
 if run_setup aws-iam-app-replacement > "$test_root/output" 2>&1; then
   printf 'Replacement CN unexpectedly passed the routine check.\n' >&2
   exit 1

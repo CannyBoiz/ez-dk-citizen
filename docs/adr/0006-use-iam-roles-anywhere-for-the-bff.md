@@ -9,6 +9,12 @@ through its normal provider chain. A credential sidecar and custom refresh code
 were rejected as unnecessary for this single-workload PoC, and only the public
 CA certificate is committed while all private keys remain external to
 Terraform and the images.
+Presigning uses a fresh SDK client and its standard credential chain for each
+URL, so a previous request's cached credentials cannot shorten the URL lifetime.
+The role maximum, profile duration, and helper request are two hours, leaving
+room for the one-hour Playback URL. Signing checks credential expiration and
+fails safely if the requested URL lifetime cannot be covered. Metadata and
+deletion requests retain the shared SDK client and normal refresh behavior.
 The helper is pinned and checksum-verified, runtime identity files are mounted
 read-only only into the BFF, and legacy access-key environment variables are
 rejected at startup. The PoC has no CRL: compromise response disables the

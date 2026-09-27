@@ -155,11 +155,21 @@ export function createBffApp(
             },
             c.get("requestId"),
           );
-        const authorization = await options.storage.createUploadAuthorization({
-          key: objectKey,
-          contentType: input.contentType,
-          sizeBytes: input.sizeBytes,
-        });
+        const authorization = await options.storage
+          .createUploadAuthorization({
+            key: objectKey,
+            contentType: input.contentType,
+            sizeBytes: input.sizeBytes,
+          })
+          .catch((error: unknown) => {
+            logStorageFailure(
+              c.get("requestId"),
+              "upload",
+              mediaAsset.id,
+              error,
+            );
+            throw error;
+          });
         return c.json(
           uploadIntentResponseSchema.parse({
             mediaAssetId: mediaAsset.id,
@@ -736,7 +746,7 @@ function storageFailureProblem(
 
 function logStorageFailure(
   requestId: string,
-  operation: "inspect" | "delete" | "playback",
+  operation: "upload" | "inspect" | "delete" | "playback",
   mediaAssetId: number,
   error: unknown,
 ) {

@@ -732,7 +732,11 @@ The official `aws_signing_helper` runs inside the BFF container through
 `credential_process` in a shared AWS profile. The AWS SDK uses its normal
 credential provider chain and refresh behavior; the application contains no
 custom credential-refresh logic and receives no permanent IAM access key. The
-BFF uses a glibc-compatible Node base image for the helper, while the Data
+role maximum, profile duration, and helper request use two-hour sessions.
+Each presigned URL uses a fresh SDK signing client and verifies that credential
+expiration covers its full 15-minute upload or one-hour playback lifetime.
+Metadata and deletion operations retain the shared client's normal SDK refresh.
+The BFF uses a glibc-compatible Node base image for the helper, while the Data
 Service remains Alpine and receives no AWS identity material. The BFF image
 pins an official helper release and verifies its published checksum during the
 build. BFF startup rejects legacy `AWS_ACCESS_KEY_ID` or
