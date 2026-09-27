@@ -93,9 +93,12 @@ Dedicated-CA rotation is the emergency fallback. Replacing only the certificate
 while retaining the trusted identity does not revoke the compromised certificate.
 Hetzner VPS reconciliation remains deferred to Stage 6.
 
-`pnpm test:live-s3` requires exported `ADMIN_API_TOKEN`, `DATA_SERVICE_TOKEN`,
-`AWS_REGION`, and `S3_BUCKET`, plus the configured Roles Anywhere profile and a
-Chromium-family browser. The tracer scans both containers' logs. If additional
+`pnpm test:roles-anywhere` and `pnpm test:live-s3` load the optional root `.env`;
+exported shell variables take precedence. The identity smoke test requires
+`AWS_REGION` and `S3_BUCKET`. The live S3 tracer additionally requires distinct
+`ADMIN_API_TOKEN` and `DATA_SERVICE_TOKEN` values, plus the configured Roles
+Anywhere profile and a Chromium-family browser. The tracer scans both containers'
+logs. If additional
 file-based audit logs are configured, set `LIVE_S3_TRACER_LOG_FILES` to their
 comma-separated absolute paths; keep those files outside the repo or Git-ignored.
 It runs typecheck, unit, container-development, integration, end-to-end, and
