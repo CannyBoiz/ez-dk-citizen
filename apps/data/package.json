@@ -1,5 +1,6 @@
 {
   "name": "@ez-dk-citizen/data",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "files": [
     "dist",

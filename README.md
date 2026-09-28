@@ -172,3 +172,14 @@ Compose project and is not removed.
 If a migration fails, Compose leaves the Data Service stopped. Fix or replace
 the committed migration, rebuild with `pnpm dev`, and verify with
 `pnpm test:integration`; do not delete the development volume as recovery.
+
+## License
+
+Copyright (C) 2026 Phongsathorn Sreewilai <https://github.com/CannyBoiz>
+
+- The backend in `apps/bff` and `apps/data` is licensed under AGPL-3.0-only.
+- The shared API contracts in `packages/api-contracts` are licensed under
+  GPL-3.0-only, so both the AGPL-3.0-only backend and the planned GPL-3.0-only
+  mobile frontend can use them.
+
+The full license texts are in `LICENSES/`.
