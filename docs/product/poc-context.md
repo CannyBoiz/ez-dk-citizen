@@ -668,19 +668,24 @@ Stage 3 is complete. The PoC does not enable S3 bucket versioning.
 ## 8.8 Upload completion semantics
 
 Completion is idempotent per Media Asset. Repeating completion returns its
-existing Lesson Audio and never creates another audio version. When distinct
-uploads for the same Lesson and Language complete, each receives the next
-audio version atomically and the last successful completion becomes current.
+original Lesson Audio and never creates another audio version or promotes the
+original version again. The response reports its actual `isCurrent` value,
+including `false` after another rendition supersedes it; Stage 4 must correct
+the existing response contract that requires `true`. When distinct uploads for
+the same Lesson and Language first complete, each receives the next audio
+version atomically and the last successful first completion becomes current.
 
 For the PoC, the authenticated admin resubmits `lessonId` and `languageCode` at
 completion. The BFF revalidates them, and the first successful completion binds
 the Media Asset. The Upload Intent target is not persisted separately; add
 durable intent binding if multiple or untrusted admins make resubmission unsafe.
 
-Completion requires a matching Lesson Text and a Lesson in `DRAFT` or
+First completion requires a matching Lesson Text and a Lesson in `DRAFT` or
 `PUBLISHED`. A missing target returns `404`; a missing Lesson Text or an
 `ARCHIVED` Lesson returns `409`. These target failures leave the Media Asset
 `PENDING` so the admin can correct and retry.
+An idempotent retry for an already-`READY` Media Asset and its original target
+returns the existing Lesson Audio even after archival, without mutating it.
 
 After the BFF validates S3 metadata, one internal Data Service command uses one
 PostgreSQL transaction to mark the Media Asset `READY`, allocate the next audio
@@ -1131,7 +1136,8 @@ upload headers, and `expiresAt`.
 
 Completion accepts `lessonId` and `languageCode`. Both the first successful
 completion and idempotent retries return `200` with the `READY` Media Asset and
-its current Lesson Audio metadata.
+the Lesson Audio originally created for it, including its actual `isCurrent`
+value. An idempotent response need not describe the currently active rendition.
 
 ## BFF mobile routes
 
@@ -1507,13 +1513,139 @@ live S3 tracer runs; the credentials wizard follows that infrastructure work.
 
 ## Stage 4 — Admin UI
 
-1. Lesson editor.
-2. localized text editor.
-3. Source editor.
-4. Lesson ↔ Source association UI.
-5. MP3 picker.
-6. upload progress.
-7. current audio display.
+Design confirmed through the Stage 4 interview. The requirements below describe
+agreed implementation scope, not completed functionality.
+
+Stage 4 serves one trusted admin (the developer) and retains the existing
+single-admin authentication model. Multiple administrators, invitations,
+roles, permissions management, and approval workflows are out of scope.
+
+Acceptance requires the normal content-authoring workflow entirely through the
+browser, without curl or direct database access:
+
+1. Find and list existing Lessons.
+2. Create a `DRAFT` Lesson and edit its chapter/version while `DRAFT`.
+3. Create and edit localized Lesson Text.
+4. Find and create reusable Sources.
+5. Attach and detach Sources and edit Lesson Source references.
+6. Select and upload an MP3, with visible upload progress.
+7. Display current Lesson Audio.
+8. Publish the Lesson.
+
+Archiving may also be exposed using the existing lifecycle behavior, but is
+not a major Stage 4 workflow.
+
+Admin controls use English. Lesson Text editing supports `da`, `en`, and `th`,
+with Thai selected initially. Titles use plain-text inputs and content uses
+plain-text textareas; the admin prepares text externally and pastes it into
+the editor. Rich-text, Markdown, and WYSIWYG editing are out of scope.
+
+Local browser acceptance against the containerized backend and real AWS S3 is
+sufficient. Hosted Admin deployment, Cloudflare Pages, production CORS
+configuration, and other production deployment work remain in Stage 6.
+
+### Authentication and editing
+
+The admin enters `ADMIN_API_TOKEN` into a password field at runtime. Keep it
+only in memory, never in the Vite build or persistent browser storage.
+Refreshing requires token re-entry; Disconnect clears it. A `401` prompts for
+re-entry without discarding unsaved editor state, after which the admin may
+retry the operation.
+
+Save Lesson structure, each localized Lesson Text, and each Lesson Source
+association explicitly and separately. Show saved/unsaved state, retain edits
+on failure, and warn before navigating away with dirty content. Do not autosave
+or offer an overall Save or "Save everything and publish" action. Publishing
+requires all currently dirty edits to be saved first. Uploading audio requires
+the selected Language's Lesson Text changes to be saved first.
+
+Saving a localized Lesson Text that already has current audio in that Language
+shows a warning that the narration may no longer match and may need replacing.
+The audio stays current; verifying correspondence is the admin's responsibility.
+Do not add text revisions, audio-to-text revision linkage, checksums, automatic
+stale-audio tracking, or automatic invalidation/detachment/replacement.
+
+### Publication and replacement
+
+Stage 4 adds publication prerequisites to the Data Service: `DRAFT -> PUBLISHED`
+requires a Thai (`th`) Lesson Text and at least one Lesson Source. Missing either
+must produce a domain-level conflict; the Admin publication checklist reflects
+the same requirements. Thai audio and Danish/English Lesson Text remain
+optional. Published Lessons may still receive their first audio later.
+
+Published text corrections use a new Draft with explicitly entered
+chapter/version, manually pasted Lesson Texts, and manually attached Sources.
+Do not add cloning or automatic version allocation. Replacing a published
+version requires two explicit actions: archive the current version, then publish
+the new Draft. The admin accepts a temporary absence of a published version if
+the second action fails. Do not disguise these calls as an atomic Replace
+action; a future atomic replacement must be a backend transaction.
+
+Archived Lessons remain readable in the Admin, including their Lesson Texts,
+Sources, and current audio playback. Disable every mutation, including editing,
+Source association changes, uploads, and publication. Confirm archiving with
+an explanation that it is terminal, makes the Lesson read-only, and removes a
+Published Lesson from the learner catalogue.
+
+### Sources
+
+Canonical Sources support find/create/reuse only; Stage 4 adds no canonical
+Source update or delete capability. Edit only a Draft's Lesson Source page and
+section references. Correct a wrong URL by creating/selecting the correct
+Source, attaching it, and removing the incorrect association from the Draft.
+Use a native date input for `published_at`; blank means unknown and a chosen
+date is encoded as midnight UTC for the existing timestamp API.
+
+### Audio display and upload recovery
+
+Add an authenticated Admin audio-read capability for the selected Language,
+including on Draft and Archived Lessons. Show current audio version, original filename,
+file size, and a native browser audio player. Read current state from the
+backend after reload. Return temporary playback authorization so the browser
+plays directly from S3; do not reuse the public mobile route. A successful
+replacement upload becomes current. Audio history browsing, rollback, selection
+of historical replacements, and deletion remain outside Stage 4.
+
+Playback expiry, storage authorization failures, and audio loading errors must
+not prevent ordinary Lesson editing or discard dirty form state. Show an
+audio-specific error and a **Reload audio** action that obtains fresh playback
+authorization for current audio independently of the editor's local state.
+Do not continuously refresh Playback URLs in the background. Manual renewal
+and restarting playback are acceptable.
+
+Allow one active upload at a time and distinguish Uploading, Finalizing,
+Failed / Retry finalization, and Complete states. Keep the Media Asset ID in
+memory together with the original Lesson and Language target. If S3 upload
+succeeded but completion failed, permit completion retry without uploading
+again. An uncertain PUT outcome offers **Check upload / Retry finalization**
+using the same Media Asset ID and existing object-validation flow. Never report
+success until completion succeeds or silently create a second Upload Intent.
+Offer a separate explicit **Start new upload** action when recovery cannot
+succeed. Terminal failures such as metadata validation failure explain that
+a new upload is required instead of offering repeated finalization retries.
+
+During Uploading and Finalizing, lock the selected Lesson and Language and
+disable publishing or archiving that Lesson until Complete or a settled Failed
+state. Preserve the original target and Media Asset ID after retryable failure.
+Warn before leaving during upload/finalization; navigating to another Lesson or
+otherwise leaving with recoverable upload state requires confirmation that
+page-local recovery state will be discarded. These are UI workflow restrictions,
+not durable upload sessions. Recovery is page-local: refresh recovery, resumable uploads, and
+discovery of abandoned `PENDING` Media Assets are out of scope. Retain Stage 3's
+abandoned-upload behavior.
+
+Stage 4 must preserve completion idempotency for superseded audio: return the
+original version with its actual `isCurrent` value, without creating a version,
+promoting the historical rendition, or demoting the actual current audio.
+
+### Catalogue and layout
+
+Use existing unpaginated APIs with client-side filtering. List Lessons with
+chapter, version, status, and available Languages; filter by chapter and
+status. Filter Sources by URL text. Pagination, title/full-text search, and
+server-side filtering are outside Stage 4. Authoring is desktop-first with a
+basically responsive layout; dedicated phone authoring is not an acceptance
+requirement.
 
 ## Stage 5 — Mobile
 
