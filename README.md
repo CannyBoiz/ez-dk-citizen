@@ -177,9 +177,4 @@ the committed migration, rebuild with `pnpm dev`, and verify with
 
 Copyright (C) 2026 Phongsathorn Sreewilai <https://github.com/CannyBoiz>
 
-- The backend in `apps/bff` and `apps/data` is licensed under [AGPL-3.0-only](LICENSES/AGPL-3.0-only.txt).
-- The shared API contracts in `packages/api-contracts` are licensed under
-  [GPL-3.0-only](LICENSES/GPL-3.0-only.txt), so both the AGPL-3.0-only backend and the planned GPL-3.0-only
-  mobile frontend can use them.
-
-The full license texts are in `LICENSES/`.
+This project is licensed under [AGPL-3.0-only](LICENSE).

@@ -1,5 +1,6 @@
 {
   "name": "ez-dk-citizen",
+  "license": "AGPL-3.0-only",
   "private": true,
   "packageManager": "pnpm@11.24.0",
   "scripts": {
