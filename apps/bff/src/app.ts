@@ -680,6 +680,7 @@ function mapDataServiceError(c: Parameters<typeof problem>[0], error: unknown) {
             "lesson_text_not_found",
             "lesson_version_conflict",
             "published_lesson_conflict",
+            "lesson_publication_incomplete",
             "lesson_archived",
             "media_asset_not_pending",
             "media_asset_failed",

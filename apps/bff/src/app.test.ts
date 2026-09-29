@@ -278,6 +278,64 @@ test("BFF completes matching stored media through the admin route", async () => 
   assert.equal(unauthorized.status, 401);
 });
 
+test("BFF returns a completion retry for superseded audio as not current", async () => {
+  const storage = new FakeStorage();
+  const completion = {
+    mediaAsset: {
+      id: 9,
+      status: "READY" as const,
+      contentType: "audio/mpeg" as const,
+      sizeBytes: 1,
+      durationMs: null,
+      uploadedAt: "2026-01-01T00:01:00.000Z",
+    },
+    lessonAudio: {
+      id: 3,
+      lessonId: 7,
+      languageCode: "th",
+      audioVersion: 1,
+      isCurrent: false,
+      createdAt: "2026-01-01T00:01:00.000Z",
+    },
+  };
+  const app = createBffApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    storage,
+    dataServiceClient: createTestDataServiceClient({
+      async getMediaAsset() {
+        return mediaAssetResponseSchema.parse({
+          id: 9,
+          storageProvider: "s3",
+          storageContainer: "citizenship-audio",
+          objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
+          originalFilename: "lesson.mp3",
+          contentType: "audio/mpeg",
+          sizeBytes: 1,
+          status: "READY",
+          durationMs: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          uploadedAt: "2026-01-01T00:01:00.000Z",
+        });
+      },
+      async completeMediaAsset() {
+        return completion;
+      },
+    }),
+  });
+
+  const response = await app.request("/api/admin/media/9/complete", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ lessonId: 7, languageCode: "th" }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), completion);
+});
+
 test("BFF keeps incomplete uploads pending and fails invalid uploads before exact cleanup", async (context) => {
   const asset = mediaAssetResponseSchema.parse({
     id: 9,
@@ -1285,10 +1343,30 @@ test("BFF patches Lessons through its client seam", async () => {
       requestId: "downstream",
     }),
   );
+  const incompleteErrors = [
+    { path: ["lessonTexts", "th"], message: "A Thai Lesson Text is required." },
+    {
+      path: ["lessonSources"],
+      message: "At least one Lesson Source is required.",
+    },
+  ];
+  const incomplete = new DataServiceError(
+    problemDetailsSchema.parse({
+      type: "https://ez-dk-citizen.invalid/problems/lesson_publication_incomplete",
+      title: "Conflict",
+      status: 409,
+      detail: "Lesson is missing publication prerequisites.",
+      instance: "/internal/lessons/7",
+      code: "lesson_publication_incomplete",
+      requestId: "downstream",
+      errors: incompleteErrors,
+    }),
+  );
   const calls: string[] = [];
   const client = createTestDataServiceClient({
     async patchLesson(id, input, requestId) {
       if (input.chapter === 99) throw conflict;
+      if (input.chapter === 98) throw incomplete;
       calls.push(`${id}:${input.chapter}:${input.status}:${requestId}`);
       return detail;
     },
@@ -1334,6 +1412,21 @@ test("BFF patches Lessons through its client seam", async () => {
     (await publishedConflict.json()).code,
     "published_lesson_conflict",
   );
+
+  const incompletePublication = await app.request("/api/admin/lessons/7", {
+    method: "PATCH",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ chapter: 98, status: "PUBLISHED" }),
+  });
+  assert.equal(incompletePublication.status, 409);
+  const incompleteBody = problemDetailsSchema.parse(
+    await incompletePublication.json(),
+  );
+  assert.equal(incompleteBody.code, "lesson_publication_incomplete");
+  assert.deepEqual(incompleteBody.errors, incompleteErrors);
 });
 
 test("BFF composes localized mobile responses from Lesson aggregates", async () => {

@@ -548,6 +548,40 @@ export function createDataApp(
                   ),
                 );
               if (published) return "published_lesson_conflict" as const;
+
+              const [thaiText] = await transaction
+                .select({ lessonId: lessonText.lessonId })
+                .from(lessonText)
+                .where(
+                  and(
+                    eq(lessonText.lessonId, id),
+                    eq(lessonText.languageCode, "th"),
+                  ),
+                );
+              const [attachedSource] = await transaction
+                .select({ lessonId: lessonSource.lessonId })
+                .from(lessonSource)
+                .where(eq(lessonSource.lessonId, id))
+                .limit(1);
+              const missing = [
+                ...(thaiText
+                  ? []
+                  : [
+                      {
+                        path: ["lessonTexts", "th"],
+                        message: "A Thai Lesson Text is required.",
+                      },
+                    ]),
+                ...(attachedSource
+                  ? []
+                  : [
+                      {
+                        path: ["lessonSources"],
+                        message: "At least one Lesson Source is required.",
+                      },
+                    ]),
+              ];
+              if (missing.length) return { missing };
             }
 
             await transaction
@@ -591,6 +625,15 @@ export function createDataApp(
             409,
             outcome,
             "This chapter already has a Published Lesson.",
+          );
+        }
+        if (typeof outcome === "object") {
+          return problem(
+            c,
+            409,
+            "lesson_publication_incomplete",
+            "Lesson is missing publication prerequisites.",
+            outcome.missing,
           );
         }
 
