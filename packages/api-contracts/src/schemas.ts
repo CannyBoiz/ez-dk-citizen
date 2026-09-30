@@ -244,7 +244,7 @@ export const lessonAudioResponseSchema = z.strictObject({
   lessonId: safePositiveInteger,
   languageCode,
   audioVersion: positiveInteger,
-  isCurrent: z.literal(true),
+  isCurrent: z.boolean(),
   createdAt: timestamp,
 });
 
