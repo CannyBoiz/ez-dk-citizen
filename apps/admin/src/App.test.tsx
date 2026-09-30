@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import type { LessonSummary } from "@ez-dk-citizen/api-contracts/schemas";
 import { afterEach, expect, test } from "vitest";
 
 import { App } from "./App";
@@ -165,7 +166,7 @@ test("an unreachable BFF is reported", async () => {
   expect((await screen.findByRole("alert")).textContent).toContain("Could not reach the BFF.");
 });
 
-function lessonSummary(id: number) {
+function lessonSummary(id: number, overrides: Partial<LessonSummary> = {}): LessonSummary {
   return {
     id,
     chapter: id,
@@ -174,5 +175,188 @@ function lessonSummary(id: number) {
     createdAt: "2026-09-30T00:00:00.000Z",
     updatedAt: "2026-09-30T00:00:00.000Z",
     availableLanguageCodes: [],
+    ...overrides,
   };
 }
+
+const catalogue = [
+  lessonSummary(1, { status: "PUBLISHED", availableLanguageCodes: ["da", "th"] }),
+  lessonSummary(2, { chapter: 1, version: 2, availableLanguageCodes: ["th"] }),
+  lessonSummary(3, { chapter: 2, version: 1 }),
+  lessonSummary(4, { chapter: 2, version: 2, status: "ARCHIVED", availableLanguageCodes: ["en"] }),
+];
+
+function rows() {
+  return screen
+    .getAllByRole("row")
+    .slice(1)
+    .map((row) => within(row).getAllByRole("cell").slice(0, 4).map((cell) => cell.textContent));
+}
+
+function chapterVersions() {
+  return rows().map(([chapter, version]) => `${chapter}.${version}`);
+}
+
+test("the catalogue lists every Lesson with chapter, version, status, and Languages", async () => {
+  render(<App network={fakeNetwork(() => ({ status: 200, body: { items: catalogue } })).network} />);
+  await connect(validToken);
+
+  await screen.findByRole("table");
+  expect(rows()).toEqual([
+    ["1", "1", "Published", "da, th"],
+    ["1", "2", "Draft", "th"],
+    ["2", "1", "Draft", "None"],
+    ["2", "2", "Archived", "en"],
+  ]);
+});
+
+test("chapter and status filters combine in the browser", async () => {
+  const { network, requests } = fakeNetwork(() => ({ status: 200, body: { items: catalogue } }));
+  render(<App network={network} />);
+  await connect(validToken);
+  await screen.findByRole("table");
+  const sent = requests.length;
+
+  fireEvent.change(screen.getByLabelText("Chapter"), { target: { value: "1" } });
+  expect(chapterVersions()).toEqual(["1.1", "1.2"]);
+
+  fireEvent.change(screen.getByLabelText("Status"), { target: { value: "DRAFT" } });
+  expect(chapterVersions()).toEqual(["1.2"]);
+
+  fireEvent.change(screen.getByLabelText("Chapter"), { target: { value: "" } });
+  expect(chapterVersions()).toEqual(["1.2", "2.1"]);
+
+  fireEvent.change(screen.getByLabelText("Chapter"), { target: { value: "2" } });
+  fireEvent.change(screen.getByLabelText("Status"), { target: { value: "PUBLISHED" } });
+  expect(screen.queryByRole("table")).toBeNull();
+  expect(screen.getByText("No Lessons match these filters.")).toBeTruthy();
+
+  expect(requests.length).toBe(sent);
+});
+
+test("a chapter filter whose chapter disappears on Refresh falls back to all chapters", async () => {
+  let items = catalogue;
+  render(<App network={fakeNetwork(() => ({ status: 200, body: { items } })).network} />);
+  await connect(validToken);
+  await screen.findByRole("table");
+  fireEvent.change(screen.getByLabelText("Chapter"), { target: { value: "2" } });
+
+  items = catalogue.filter((lesson) => lesson.chapter === 1);
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+  await screen.findByText(/2 Lessons/);
+  expect(screen.getByLabelText("Chapter")).toHaveProperty("value", "");
+  expect(chapterVersions()).toEqual(["1.1", "1.2"]);
+});
+
+test("filters are kept when returning from a Lesson", async () => {
+  const detail = { ...catalogue[1]!, lessonTexts: [], lessonSources: [] };
+  render(
+    <App
+      network={
+        fakeNetwork((request) =>
+          request.path === "/api/admin/lessons/2"
+            ? { status: 200, body: detail }
+            : { status: 200, body: { items: catalogue } },
+        ).network
+      }
+    />,
+  );
+  await connect(validToken);
+  await screen.findByRole("table");
+  fireEvent.change(screen.getByLabelText("Chapter"), { target: { value: "1" } });
+  fireEvent.change(screen.getByLabelText("Status"), { target: { value: "DRAFT" } });
+
+  fireEvent.click(screen.getByRole("button", { name: "Open chapter 1, version 2" }));
+  await screen.findByRole("heading", { name: "Chapter 1, version 2" });
+  fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+
+  await screen.findByRole("table");
+  expect(screen.getByLabelText("Chapter")).toHaveProperty("value", "1");
+  expect(screen.getByLabelText("Status")).toHaveProperty("value", "DRAFT");
+  expect(chapterVersions()).toEqual(["1.2"]);
+});
+
+test("an empty catalogue says so", async () => {
+  render(<App network={fakeNetwork().network} />);
+  await connect(validToken);
+
+  await screen.findByText("No Lessons yet.");
+  expect(screen.queryByRole("table")).toBeNull();
+});
+
+test("opening a Lesson shows its structure, Lesson Texts, and Lesson Sources, and returning reloads the catalogue", async () => {
+  let items = catalogue;
+  const detail = {
+    ...catalogue[0],
+    lessonTexts: [
+      { languageCode: "th", title: "บทที่ 1", content: "เนื้อหาภาษาไทย" },
+      { languageCode: "da", title: "Kapitel 1", content: "Dansk indhold" },
+    ],
+    lessonSources: [
+      {
+        id: 7,
+        url: "https://example.dk/laerebog",
+        publishedAt: "2024-01-01T00:00:00.000Z",
+        pageFrom: 12,
+        pageTo: 14,
+        sectionReference: "Afsnit 2",
+      },
+    ],
+  };
+  const { network, requests } = fakeNetwork((request) =>
+    request.path === "/api/admin/lessons/1"
+      ? { status: 200, body: detail }
+      : { status: 200, body: { items } },
+  );
+  render(<App network={network} />);
+  await connect(validToken);
+  await screen.findByRole("table");
+
+  fireEvent.click(screen.getByRole("button", { name: "Open chapter 1, version 1" }));
+
+  await screen.findByRole("heading", { name: "Chapter 1, version 1" });
+  expect(requests.at(-1)).toMatchObject({ method: "GET", path: "/api/admin/lessons/1" });
+  expect(screen.queryByRole("table")).toBeNull();
+  expect(screen.getByText("Published")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "th: บทที่ 1" })).toBeTruthy();
+  expect(screen.getByText("เนื้อหาภาษาไทย")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "da: Kapitel 1" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "https://example.dk/laerebog" })).toBeTruthy();
+  expect(screen.getByText(/p\. 12–14/)).toBeTruthy();
+  expect(screen.getByText(/Afsnit 2/)).toBeTruthy();
+
+  items = [{ ...catalogue[0]!, status: "ARCHIVED" }];
+  fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+
+  await screen.findByRole("table");
+  expect(requests.at(-1)).toMatchObject({ method: "GET", path: "/api/admin/lessons" });
+  expect(rows()).toEqual([["1", "1", "Archived", "da, th"]]);
+});
+
+test("a Data Service outage shows the error with its request ID and can be retried", async () => {
+  let listCalls = 0;
+  let outage = true;
+  render(
+    <App
+      network={
+        fakeNetwork(() =>
+          ++listCalls > 1 && outage
+            ? problem(502, "data_service_unavailable", "The Data Service is unavailable.", "req-502")
+            : { status: 200, body: { items: catalogue } },
+        ).network
+      }
+    />,
+  );
+  await connect(validToken);
+
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("The Data Service is unavailable.");
+  expect(alert.textContent).toContain("req-502");
+
+  outage = false;
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+  await screen.findByRole("table");
+  expect(screen.queryByRole("alert")).toBeNull();
+});
