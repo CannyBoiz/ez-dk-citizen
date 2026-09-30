@@ -15,7 +15,8 @@ See the spec sections "Admin application", "Authentication behavior", and "Local
 **Status:** ready-for-agent
 
 - [ ] `pnpm dev` starts the Admin under Compose Watch on `127.0.0.1:5173`, with source sync and rebuilds on manifest, contract, and lockfile changes, matching the other services
-- [ ] The BFF base URL is a non-secret setting defaulting to the local BFF; `ADMIN_API_TOKEN` never appears in Vite configuration or the build output
+- [ ] The BFF base URL is the non-secret `VITE_BFF_BASE_URL`, set explicitly to the local BFF in development; when unset the Admin calls its own page origin (ADR-0007). No hostname is hardcoded, and `ADMIN_API_TOKEN` never appears in Vite configuration, any `VITE_` variable, or the build output
+- [ ] The Admin's host port setting is `ADMIN_UI_PORT`, leaving `BFF_ADMIN_PORT` free for the Stage 6 admin listener
 - [ ] Entering a valid token connects; an invalid token is rejected with a clear message
 - [ ] The token is never written to local storage, session storage, IndexedDB, cookies, or the URL; a refresh requires re-entry
 - [ ] Disconnect clears the token and returns to the token prompt

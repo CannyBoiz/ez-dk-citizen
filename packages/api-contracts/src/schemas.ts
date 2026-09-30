@@ -1,5 +1,4 @@
-export * from "./schemas.js";
-export * from "./http.js";
+import { z } from "zod";
 
 const positiveInteger = z.number().int().positive();
 const safePositiveInteger = positiveInteger.refine(Number.isSafeInteger);
@@ -245,7 +244,7 @@ export const lessonAudioResponseSchema = z.strictObject({
   lessonId: safePositiveInteger,
   languageCode,
   audioVersion: positiveInteger,
-  isCurrent: z.boolean(),
+  isCurrent: z.literal(true),
   createdAt: timestamp,
 });
 

@@ -11,6 +11,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./schemas": {
+      "types": "./src/schemas.ts",
+      "default": "./dist/schemas.js"
     }
   },
   "scripts": {

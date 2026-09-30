@@ -3,7 +3,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { Input, MiddlewareHandler } from "hono";
 import type { ZodType } from "zod";
 
-import { problemDetailsSchema } from "./index.js";
+import { problemDetailsSchema } from "./schemas.js";
 
 export type RequestIdEnvironment = {
   Variables: { requestId: string };
