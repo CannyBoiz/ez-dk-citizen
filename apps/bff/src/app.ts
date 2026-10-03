@@ -15,12 +15,12 @@ import {
   requestId,
   type RequestIdEnvironment,
 } from "./middleware/request-id.js";
-import { registerAdminLessonSourceRoutes } from "./routes/admin/lesson-sources.js";
-import { registerAdminLessonRoutes } from "./routes/admin/lessons.js";
-import { registerAdminMediaRoutes } from "./routes/admin/media.js";
-import { registerAdminSourceRoutes } from "./routes/admin/sources.js";
-import { registerHealthRoutes } from "./routes/health.js";
-import { registerMobileLessonRoutes } from "./routes/mobile/lessons.js";
+import { createAdminLessonSourceRoutes } from "./routes/admin/lesson-sources.js";
+import { createAdminLessonRoutes } from "./routes/admin/lessons.js";
+import { createAdminMediaRoutes } from "./routes/admin/media.js";
+import { createAdminSourceRoutes } from "./routes/admin/sources.js";
+import { createHealthRoutes } from "./routes/health.js";
+import { createMobileLessonRoutes } from "./routes/mobile/lessons.js";
 import { createS3Storage, type Storage } from "./storage.js";
 
 export interface BffAppOptions {
@@ -76,7 +76,6 @@ export function createBffApp(
   app.use("*", requestId);
   app.use("*", logging);
   installProblemDetails(app);
-  registerHealthRoutes(app, checkDataServiceReadiness);
 
   app.use("/api/admin/*", adminCors(options.adminOrigins));
   app.use("/api/admin/*", adminAuth(options.adminApiToken));
@@ -89,11 +88,11 @@ export function createBffApp(
     }),
   );
 
-  registerAdminMediaRoutes(app, options);
-  registerAdminLessonRoutes(app, options);
-  registerAdminSourceRoutes(app, options);
-  registerAdminLessonSourceRoutes(app, options);
-  registerMobileLessonRoutes(app, options);
-
-  return app;
+  return app
+    .route("/", createHealthRoutes(checkDataServiceReadiness))
+    .route("/api/admin/media", createAdminMediaRoutes(options))
+    .route("/api/admin/lessons", createAdminLessonRoutes(options))
+    .route("/api/admin/sources", createAdminSourceRoutes(options))
+    .route("/api/admin/lessons", createAdminLessonSourceRoutes(options))
+    .route("/api/mobile/lessons", createMobileLessonRoutes(options));
 }

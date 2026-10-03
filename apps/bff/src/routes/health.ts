@@ -3,24 +3,24 @@ import {
   readinessResponseSchema,
   type RequestIdEnvironment,
 } from "@ez-dk-citizen/api-contracts";
-import type { Hono } from "hono";
+import { Hono } from "hono";
 
-export function registerHealthRoutes(
-  app: Hono<RequestIdEnvironment>,
+export function createHealthRoutes(
   checkDataServiceReadiness: () => Promise<void>,
 ) {
-  app.get("/health", (c) =>
-    c.json(livenessResponseSchema.parse({ status: "ok" })),
-  );
-  app.get("/ready", async (c) => {
-    try {
-      await checkDataServiceReadiness();
-      return c.json(readinessResponseSchema.parse({ status: "ok" }));
-    } catch {
-      return c.json(
-        readinessResponseSchema.parse({ status: "unavailable" }),
-        503,
-      );
-    }
-  });
+  return new Hono<RequestIdEnvironment>()
+    .get("/health", (c) =>
+      c.json(livenessResponseSchema.parse({ status: "ok" })),
+    )
+    .get("/ready", async (c) => {
+      try {
+        await checkDataServiceReadiness();
+        return c.json(readinessResponseSchema.parse({ status: "ok" }));
+      } catch {
+        return c.json(
+          readinessResponseSchema.parse({ status: "unavailable" }),
+          503,
+        );
+      }
+    });
 }

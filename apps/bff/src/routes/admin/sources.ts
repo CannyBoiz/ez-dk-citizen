@@ -6,20 +6,17 @@ import {
   type RequestIdEnvironment,
   type CreateSourceRequest,
 } from "@ez-dk-citizen/api-contracts";
-import type { Hono } from "hono";
+import { Hono } from "hono";
 
 import type { BffAppOptions } from "../../app.js";
 import { mapDataServiceError } from "../../errors/downstream.js";
 import { problem } from "../../errors/problem-details.js";
 
-export function registerAdminSourceRoutes(
-  app: Hono<RequestIdEnvironment>,
+export function createAdminSourceRoutes(
   options: Pick<BffAppOptions, "dataServiceClient">,
 ) {
-  app.post(
-    "/api/admin/sources",
-    validateJson(createSourceRequestSchema),
-    async (c) => {
+  return new Hono<RequestIdEnvironment>()
+    .post("/", validateJson(createSourceRequestSchema), async (c) => {
       const input = c.req.valid("json") as CreateSourceRequest;
       if (!options.dataServiceClient) {
         return problem(
@@ -39,26 +36,24 @@ export function registerAdminSourceRoutes(
       } catch (error) {
         return mapDataServiceError(c, error);
       }
-    },
-  );
-
-  app.get("/api/admin/sources", async (c) => {
-    if (!options.dataServiceClient) {
-      return problem(
-        c,
-        502,
-        "data_service_unavailable",
-        "The Data Service is unavailable.",
-      );
-    }
-    try {
-      return c.json(
-        sourceListResponseSchema.parse(
-          await options.dataServiceClient.listSources(c.get("requestId")),
-        ),
-      );
-    } catch (error) {
-      return mapDataServiceError(c, error);
-    }
-  });
+    })
+    .get("/", async (c) => {
+      if (!options.dataServiceClient) {
+        return problem(
+          c,
+          502,
+          "data_service_unavailable",
+          "The Data Service is unavailable.",
+        );
+      }
+      try {
+        return c.json(
+          sourceListResponseSchema.parse(
+            await options.dataServiceClient.listSources(c.get("requestId")),
+          ),
+        );
+      } catch (error) {
+        return mapDataServiceError(c, error);
+      }
+    });
 }

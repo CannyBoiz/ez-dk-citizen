@@ -9,7 +9,8 @@ import { createBffApp } from "../../app.js";
 import { DataServiceError } from "../../data-service/client.js";
 import { createTestDataServiceClient } from "../../testing/data-service-client.js";
 
-test("BFF replaces and detaches Draft Lesson Sources through its client seam", async () => {
+test("BFF replaces and detaches Draft Lesson Sources through its client seam", async (context) => {
+  const log = context.mock.method(console, "log", () => undefined);
   const detail = lessonDetailSchema.parse({
     id: 7,
     chapter: 2,
@@ -97,6 +98,14 @@ test("BFF replaces and detaches Draft Lesson Sources through its client seam", a
   });
   assert.equal(attached.status, 200);
   assert.deepEqual(await attached.json(), detail);
+  const attachedLog = JSON.parse(String(log.mock.calls.at(-1)?.arguments[0]));
+  assert.equal(
+    attachedLog.path,
+    "/api/admin/lessons/:lessonId/sources/:sourceId",
+  );
+  assert.equal(attachedLog.requestId, "request-4");
+  assert.equal(attachedLog.method, "PUT");
+  assert.equal(attachedLog.status, 200);
 
   const missingSource = await app.request("/api/admin/lessons/7/sources/99", {
     method: "PUT",
@@ -117,5 +126,13 @@ test("BFF replaces and detaches Draft Lesson Sources through its client seam", a
     },
   });
   assert.equal(detached.status, 204);
+  const detachedLog = JSON.parse(String(log.mock.calls.at(-1)?.arguments[0]));
+  assert.equal(
+    detachedLog.path,
+    "/api/admin/lessons/:lessonId/sources/:sourceId",
+  );
+  assert.equal(detachedLog.requestId, "request-5");
+  assert.equal(detachedLog.method, "DELETE");
+  assert.equal(detachedLog.status, 204);
   assert.deepEqual(calls, ["7:3:2:request-4", "delete:7:3:request-5"]);
 });

@@ -77,10 +77,20 @@ test("BFF creates and lists canonical Sources through its client seam", async ()
     headers: {
       Authorization: "Bearer admin-token",
       "Content-Type": "application/json",
+      "X-Request-ID": "malformed-request",
     },
     body: "{",
   });
   assert.equal(malformed.status, 400);
+  assert.equal(
+    malformed.headers.get("content-type"),
+    "application/problem+json",
+  );
+  assert.equal(malformed.headers.get("x-request-id"), "malformed-request");
+  const malformedProblem = problemDetailsSchema.parse(await malformed.json());
+  assert.equal(malformedProblem.code, "malformed_json");
+  assert.equal(malformedProblem.requestId, "malformed-request");
+  assert.equal(malformedProblem.instance, "/api/admin/sources");
 
   const nonJson = await app.request("/api/admin/sources", {
     method: "POST",
