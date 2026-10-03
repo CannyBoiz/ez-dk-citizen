@@ -163,7 +163,7 @@ if (detail.content !== 'เนื้อหา' || !detail.availableLanguageCodes
 function completionTracer() {
   return String.raw`
 import { createBffApp } from './dist/app.js';
-import { createDataServiceClient } from './dist/data-service-client.js';
+import { createDataServiceClient } from './dist/data-service/client.js';
 import { FakeStorage } from './dist/storage.js';
 
 const requestId = 'stage-3-completion-tracer';

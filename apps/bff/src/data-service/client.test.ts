@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import {
-  createDataServiceClient,
-  DataServiceError,
-} from "./data-service-client.js";
+import { createDataServiceClient, DataServiceError } from "./client.js";
 
 test("Data Service client preserves boundary failures and correlation", async (context) => {
   const originalFetch = globalThis.fetch;

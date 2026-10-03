@@ -51,30 +51,43 @@ const problemTitles: Record<number, string> = {
 };
 
 export function installRequestLifecycle(app: HttpApp): void {
-  app.use("*", async (context, next) => {
-    const supplied = context.req.header("X-Request-ID");
-    const requestId =
-      supplied && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(supplied)
-        ? supplied
-        : randomUUID();
+  app.use("*", assignRequestId);
+  app.use("*", logRequest);
+}
 
-    context.set("requestId", requestId);
-    context.header("X-Request-ID", requestId);
-    const startedAt = performance.now();
-    try {
-      await next();
-    } finally {
-      console.log(
-        JSON.stringify({
-          requestId,
-          method: context.req.method,
-          path: context.req.routePath || context.req.path,
-          status: context.res.status,
-          durationMs: Math.round(performance.now() - startedAt),
-        }),
-      );
-    }
-  });
+export async function assignRequestId(
+  context: HttpContext,
+  next: () => Promise<void>,
+): Promise<void> {
+  const supplied = context.req.header("X-Request-ID");
+  const requestId =
+    supplied && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(supplied)
+      ? supplied
+      : randomUUID();
+
+  context.set("requestId", requestId);
+  context.header("X-Request-ID", requestId);
+  await next();
+}
+
+export async function logRequest(
+  context: HttpContext,
+  next: () => Promise<void>,
+): Promise<void> {
+  const startedAt = performance.now();
+  try {
+    await next();
+  } finally {
+    console.log(
+      JSON.stringify({
+        requestId: context.get("requestId"),
+        method: context.req.method,
+        path: context.req.routePath || context.req.path,
+        status: context.res.status,
+        durationMs: Math.round(performance.now() - startedAt),
+      }),
+    );
+  }
 }
 
 export function requireBearerToken(token: string | undefined) {
