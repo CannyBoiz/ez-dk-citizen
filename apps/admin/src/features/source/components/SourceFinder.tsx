@@ -33,7 +33,8 @@ export function SourceFinder({
   const [search, setSearch] = useState("");
   const [newSource, setNewSource] = useState<Values>({});
   const attaching = useAction<number>();
-  const dirty = Object.values(newSource).some((value) => value.trim());
+  // A read-only finder holds no New Source draft, so nothing can be left unsaved.
+  const dirty = !readOnly && Object.values(newSource).some((value) => value.trim());
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -134,7 +135,7 @@ export function SourceFinder({
           { name: "url", label: "Source URL", kind: "url" },
           { name: "publishedAt", label: "Publication date", kind: "date", optional: true },
         ]}
-        value={newSource}
+        value={readOnly ? {} : newSource}
         onChange={setNewSource}
         readOnly={readOnly}
         submitLabel="Create Source"

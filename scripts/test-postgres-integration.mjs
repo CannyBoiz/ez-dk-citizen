@@ -194,6 +194,11 @@ const completed = await call('/api/admin/media/' + intent.body.mediaAssetId + '/
 if (completed.response.status !== 200 || completed.body.mediaAsset.status !== 'READY' || completed.body.lessonAudio.audioVersion !== 1 || completed.body.lessonAudio.isCurrent !== true || 'objectKey' in completed.body.mediaAsset) throw new Error('Completion tracer did not promote safe current audio.');
 const retry = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (retry.response.status !== 200 || JSON.stringify(retry.body) !== JSON.stringify(completed.body)) throw new Error('Completion retry was not idempotent.');
+const adminAudioKeys = 'audioVersion,contentType,durationMs,mediaAssetId,originalFilename,playbackExpiresAt,playbackUrl,sizeBytes';
+const readAdminAudio = () => call('/api/admin/lessons/' + lesson.body.id + '/audio/th', 'GET');
+const draftAudio = await readAdminAudio();
+if (draftAudio.response.status !== 200 || draftAudio.response.headers.get('cache-control') !== 'no-store' || draftAudio.body.audio?.audioVersion !== 1 || draftAudio.body.audio?.originalFilename !== 'lesson.mp3' || Object.keys(draftAudio.body.audio ?? {}).sort().join(',') !== adminAudioKeys || storage.playbackAuthorizations.at(-1) !== storage.uploads[0].key) throw new Error('Admin audio read failed on a Draft.');
+if (JSON.stringify((await call('/api/admin/lessons/' + lesson.body.id + '/audio/da', 'GET')).body) !== JSON.stringify({ audio: null })) throw new Error('Admin audio read returned audio for a Language without any.');
 await call('/api/admin/lessons/' + lesson.body.id + '/texts/da', 'PUT', { title: 'Dansk', content: 'Indhold' });
 const rebind = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'da' });
 if (rebind.response.status !== 409 || rebind.body.code !== 'media_asset_rebind_conflict') throw new Error('Completed media was rebound.');
@@ -209,6 +214,8 @@ const correctedRetry = await call('/api/admin/media/' + correctionIntent.body.me
 if (correctedRetry.response.status !== 200 || JSON.stringify(correctedRetry.body) !== JSON.stringify(corrected.body)) throw new Error('Corrected audio retry created a new version.');
 const supersededRetry = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (supersededRetry.response.status !== 200 || supersededRetry.body.mediaAsset.id !== intent.body.mediaAssetId || supersededRetry.body.lessonAudio.audioVersion !== 1 || supersededRetry.body.lessonAudio.isCurrent !== false) throw new Error('Superseded audio retry did not report its original version as not current.');
+const supersedingAudio = await readAdminAudio();
+if (supersedingAudio.body.audio?.audioVersion !== 2 || supersedingAudio.body.audio?.originalFilename !== 'correction.mp3') throw new Error('Admin audio read did not follow the superseding upload.');
 const playbackStart = storage.playbackAuthorizations.length;
 const playback = await call('/api/mobile/lessons/' + lesson.body.id, 'GET');
 if (playback.response.status !== 200 || playback.response.headers.get('cache-control') !== 'no-store' || playback.body.audio?.audioVersion !== 2 || playback.body.audio?.mediaAssetId !== correctionIntent.body.mediaAssetId || Object.keys(playback.body.audio ?? {}).sort().join(',') !== 'audioVersion,contentType,durationMs,mediaAssetId,playbackExpiresAt,playbackUrl,sizeBytes') throw new Error('Mobile playback projection failed.');
@@ -248,6 +255,10 @@ storage.putObject(cleanupKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
 storage.deleteObject = async (key) => key === cleanupKey ? Promise.reject(Object.assign(new Error('cleanup failed'), { name: 'AccessDenied' })) : deleteObject(key);
 const cleanup = await call('/api/admin/media/' + cleanupIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (cleanup.response.status !== 422 || (await dataServiceClient.getMediaAsset(cleanupIntent.body.mediaAssetId, requestId)).status !== 'FAILED') throw new Error('Cleanup failure restored invalid media.');
+const archived = await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'ARCHIVED' });
+if (archived.response.status !== 200 || archived.body.status !== 'ARCHIVED') throw new Error('Completion tracer archive failed.');
+const archivedAudio = await readAdminAudio();
+if (archivedAudio.response.status !== 200 || archivedAudio.body.audio?.audioVersion !== 4 || Object.keys(archivedAudio.body.audio ?? {}).sort().join(',') !== adminAudioKeys) throw new Error('Admin audio read failed after archiving.');
 `;
 }
 

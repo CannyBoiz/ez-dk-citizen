@@ -3,6 +3,7 @@ import {
   completeMediaAssetResponseSchema,
   createSourceRequestSchema,
   createPendingMediaAssetRequestSchema,
+  currentLessonAudioResponseSchema,
   createLessonRequestSchema,
   lessonDetailSchema,
   lessonDetailListResponseSchema,
@@ -21,6 +22,7 @@ import {
   type CompleteMediaAssetResponse,
   type CreateSourceRequest,
   type CreatePendingMediaAssetRequest,
+  type CurrentLessonAudioResponse,
   type LessonDetail,
   type LessonDetailListResponse,
   type LessonListResponse,
@@ -88,6 +90,11 @@ export interface DataServiceClient {
     languageCode: string,
     requestId: string,
   ): Promise<PublishedLessonDetail>;
+  getCurrentLessonAudio(
+    lessonId: number,
+    languageCode: string,
+    requestId: string,
+  ): Promise<CurrentLessonAudioResponse>;
 }
 
 export class DataServiceError extends Error {
@@ -243,6 +250,14 @@ export function createDataServiceClient(
         requestId,
         undefined,
         publishedLessonDetailSchema.parse,
+      ),
+    getCurrentLessonAudio: (lessonId, languageCode, requestId) =>
+      call(
+        `/internal/lessons/${lessonId}/audio/${encodeURIComponent(languageCode)}`,
+        "GET",
+        requestId,
+        undefined,
+        currentLessonAudioResponseSchema.parse,
       ),
   };
 }

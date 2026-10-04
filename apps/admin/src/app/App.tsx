@@ -85,6 +85,7 @@ export function App({ network }: { network: Network }) {
       ) : (
         <LessonView
           call={call}
+          putObject={network.putObject}
           lessonId={screen.lessonId}
           onBack={() => confirmLeave() && setScreen("catalogue")}
           onDirtyChange={setDirty}

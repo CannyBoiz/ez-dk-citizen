@@ -76,40 +76,70 @@ export async function readLesson(
     if (!text) return "lesson_text_not_found" as const;
   }
   if (filteredStatus === "PUBLISHED" && languageCode) {
-    const [currentAudio] = await database
-      .select({
-        mediaAssetId: lessonAudio.mediaAssetId,
-        audioVersion: lessonAudio.audioVersion,
-        objectKey: mediaAsset.objectKey,
-        contentType: mediaAsset.contentType,
-        sizeBytes: mediaAsset.sizeBytes,
-        durationMs: mediaAsset.durationMs,
-      })
-      .from(lessonAudio)
-      .innerJoin(mediaAsset, eq(mediaAsset.id, lessonAudio.mediaAssetId))
-      .where(
-        and(
-          eq(lessonAudio.lessonId, id),
-          eq(lessonAudio.languageCode, languageCode),
-          eq(lessonAudio.isCurrent, true),
-          eq(mediaAsset.status, "READY"),
-        ),
-      );
-    return {
-      ...detail,
-      currentAudio: currentAudio
-        ? {
-            ...currentAudio,
-            sizeBytes: Number(currentAudio.sizeBytes),
-            durationMs:
-              currentAudio.durationMs === null
-                ? null
-                : Number(currentAudio.durationMs),
-          }
-        : null,
-    };
+    const currentAudio = await selectCurrentAudio(database, id, languageCode);
+    if (!currentAudio) return { ...detail, currentAudio: null };
+    const { originalFilename: _originalFilename, ...published } = currentAudio;
+    return { ...detail, currentAudio: published };
   }
   return detail;
+}
+
+// The current READY Lesson Audio for one Lesson and Language, whatever the Lesson's status.
+export async function readCurrentLessonAudio(
+  database: DataDatabase,
+  id: number,
+  languageCode: string,
+) {
+  const [supported] = await database
+    .select({ code: language.code })
+    .from(language)
+    .where(eq(language.code, languageCode));
+  if (!supported) return "unsupported_language" as const;
+  const [existing] = await database
+    .select({ id: lesson.id })
+    .from(lesson)
+    .where(eq(lesson.id, id));
+  if (!existing) return "lesson_not_found" as const;
+  return {
+    audio: (await selectCurrentAudio(database, id, languageCode)) ?? null,
+  };
+}
+
+async function selectCurrentAudio(
+  database: DataDatabase,
+  id: number,
+  languageCode: string,
+) {
+  const [currentAudio] = await database
+    .select({
+      mediaAssetId: lessonAudio.mediaAssetId,
+      audioVersion: lessonAudio.audioVersion,
+      originalFilename: mediaAsset.originalFilename,
+      objectKey: mediaAsset.objectKey,
+      contentType: mediaAsset.contentType,
+      sizeBytes: mediaAsset.sizeBytes,
+      durationMs: mediaAsset.durationMs,
+    })
+    .from(lessonAudio)
+    .innerJoin(mediaAsset, eq(mediaAsset.id, lessonAudio.mediaAssetId))
+    .where(
+      and(
+        eq(lessonAudio.lessonId, id),
+        eq(lessonAudio.languageCode, languageCode),
+        eq(lessonAudio.isCurrent, true),
+        eq(mediaAsset.status, "READY"),
+      ),
+    );
+  return (
+    currentAudio && {
+      ...currentAudio,
+      sizeBytes: Number(currentAudio.sizeBytes),
+      durationMs:
+        currentAudio.durationMs === null
+          ? null
+          : Number(currentAudio.durationMs),
+    }
+  );
 }
 
 export async function loadLessonDetail(database: DataDatabase, id: number) {

@@ -59,6 +59,7 @@ test("an unreachable BFF is reported", async () => {
     <App
       network={{
         bff: () => Promise.reject(new TypeError("Failed to fetch")),
+        putObject: () => Promise.reject(new Error("Not used")),
       }}
     />,
   );

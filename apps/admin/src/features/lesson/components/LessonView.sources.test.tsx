@@ -19,6 +19,7 @@ import {
   finder,
   newSourceForm,
   canonicalEditControls,
+  holdRequests,
 } from "../../../shared/test/support";
 
 const cited = (source: SourceResponse, overrides = {}) => ({
@@ -47,7 +48,6 @@ async function openDraft(backend: ReturnType<typeof fakeBackend>) {
   render(<App network={backend.network} />);
   await connect(validToken);
   await openLesson(1, 1);
-  await waitFor(() => expect(within(finder()).queryByText("Loading Sources…")).toBeNull());
 }
 
 async function createSource(url: string) {
@@ -77,21 +77,11 @@ test("a duplicate URL of an attached Source says it is already attached", async 
 
 test("a duplicate URL is reported at once, without waiting for the Source list to reload", async () => {
   const backend = fakeBackend([lessonDetail(1, { lessonSources: [cited(guide)] })]);
-  let releaseReload!: () => void;
-  const reloadHeld = new Promise<void>((resolve) => (releaseReload = resolve));
-  let conflicted = false;
-  await openDraft({
-    ...backend,
-    network: {
-      async bff(request) {
-        const response = await backend.network.bff(request);
-        if (request.path !== "/api/admin/sources") return response;
-        if (request.method === "POST") conflicted = true;
-        else if (conflicted) await reloadHeld;
-        return response;
-      },
-    },
-  });
+  await openDraft(backend);
+  const releaseReload = holdRequests(
+    backend.network,
+    (request) => request.method === "GET" && request.path === "/api/admin/sources",
+  );
 
   const alert = await createSource(guide.url);
   expect(alert.textContent).toContain("A Source with this URL already exists.");

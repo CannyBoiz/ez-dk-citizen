@@ -22,6 +22,7 @@ export function createTestDataServiceClient(
     deleteLessonSource: unused,
     listPublishedLessons: unused,
     getPublishedLesson: unused,
+    getCurrentLessonAudio: unused,
     ...overrides,
   };
 }

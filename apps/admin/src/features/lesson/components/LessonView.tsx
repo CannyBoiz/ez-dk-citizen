@@ -1,7 +1,8 @@
 // The Lesson editor: the structure form, per-Language Lesson Text tabs, and per-Source
 // Lesson Source references, each saved separately, with their unsaved edits reported up
-// for the navigation guards.
+// for the navigation guards; the selected Language's audio; and publication.
 import {
+  adminLessonAudioResponseSchema,
   lessonDetailSchema,
   type LessonDetail,
   type PatchLessonRequest,
@@ -12,8 +13,9 @@ import { useEffect, useId, useState } from "react";
 import { EditForm, type Values } from "../../../shared/components/EditForm";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
 import type { Call } from "../../../shared/lib/bff";
-import type { BffRequest } from "../../../shared/lib/network";
+import type { BffRequest, Network } from "../../../shared/lib/network";
 import { useAction } from "../../../shared/lib/useAction";
+import { AudioUpload, CurrentAudio } from "../../audio";
 import { SourceFinder, SourceLabel } from "../../source";
 import {
   noReferences,
@@ -22,7 +24,9 @@ import {
   toReferenceValues,
   validateReferences,
 } from "../utils/references";
+import { hasLessonText } from "../utils/lessonTexts";
 import { statusLabels } from "../utils/statusLabels";
+import { Publication } from "./Publication";
 
 // Tab order follows the spec; Thai, the learner's Language, is selected first.
 const languageCodes = ["da", "en", "th"] as const;
@@ -33,11 +37,13 @@ const sourceForm = (sourceId: number): Form => `source:${sourceId}`;
 
 export function LessonView({
   call,
+  putObject,
   lessonId,
   onBack,
   onDirtyChange,
 }: {
   call: Call;
+  putObject: Network["putObject"];
   lessonId: number;
   onBack: () => void;
   onDirtyChange: (dirty: boolean) => void;
@@ -50,6 +56,17 @@ export function LessonView({
   // The Source finder's New Source form counts towards unsaved edits too.
   const [finderDirty, setFinderDirty] = useState(false);
   const detaching = useAction<number>();
+  // While an upload is Uploading or Finalizing, its Lesson and Language stay locked.
+  const [uploading, setUploading] = useState(false);
+  // Bumped after a completed upload, so the audio panel reads the new current rendition.
+  const [audioReads, setAudioReads] = useState(0);
+  // Whether each Language shown so far has current audio; drives the narration warning.
+  const [hasAudio, setHasAudio] = useState<Partial<Record<LanguageCode, boolean>>>({});
+  // Shown after saving a Lesson Text whose Language has, or may have, current audio.
+  const [narrationWarning, setNarrationWarning] = useState<{
+    languageCode: LanguageCode;
+    audioKnown: boolean;
+  } | null>(null);
   const tabsId = useId();
 
   async function load() {
@@ -137,9 +154,32 @@ export function LessonView({
     });
   }
 
+  // What the audio panel already read, or else a fresh read; undefined when it cannot be told.
+  async function currentAudioExists(code: LanguageCode) {
+    if (hasAudio[code] !== undefined) return hasAudio[code];
+    try {
+      const { audio } = await call(
+        { method: "GET", path: `/api/admin/lessons/${lesson!.id}/audio/${code}` },
+        adminLessonAudioResponseSchema,
+      );
+      return audio !== null;
+    } catch {
+      return undefined;
+    }
+  }
+
+  const uploadUnavailable =
+    lesson.status === "ARCHIVED"
+      ? "Uploads are unavailable for Archived Lessons."
+      : !hasLessonText(lesson, languageCode)
+        ? `Save the ${languageCode} Lesson Text before uploading audio.`
+        : isDirty(languageCode)
+          ? `Save the ${languageCode} Lesson Text changes before uploading audio.`
+          : undefined;
+
   return (
     <section>
-      <button type="button" onClick={onBack}>
+      <button type="button" disabled={uploading} onClick={onBack}>
         Back to catalogue
       </button>
       {error !== null && <ErrorMessage error={error} onRetry={load} />}
@@ -176,13 +216,10 @@ export function LessonView({
             id={`${tabsId}-${code}`}
             aria-selected={code === languageCode}
             aria-controls={`${tabsId}-${code}-panel`}
+            disabled={uploading}
             onClick={() => setLanguageCode(code)}
           >
-            {code}:{" "}
-            {formState(
-              code,
-              lesson.lessonTexts.some((text) => text.languageCode === code),
-            )}
+            {code}: {formState(code, hasLessonText(lesson, code))}
           </button>
         ))}
       </div>
@@ -202,17 +239,46 @@ export function LessonView({
               { name: "title", label: "Title", kind: "text" },
               { name: "content", label: "Content", kind: "textarea" },
             ]}
-            onSave={(submitted) =>
-              save(code, submitted, {
+            onSave={async (submitted) => {
+              await save(code, submitted, {
                 method: "PUT",
                 path: `/api/admin/lessons/${lesson.id}/texts/${code}`,
                 body: submitted as UpsertLessonTextRequest,
-              })
-            }
+              });
+              // The audio stays current; the admin decides whether to replace it.
+              const exists = await currentAudioExists(code);
+              setNarrationWarning(
+                exists === false ? null : { languageCode: code, audioKnown: exists === true },
+              );
+            }}
             {...formProps(code)}
           />
+          {narrationWarning?.languageCode === code && (
+            <p role="status">
+              Lesson Text saved.{" "}
+              {narrationWarning.audioKnown
+                ? `The current ${code} audio may no longer match it;`
+                : `Could not check for ${code} audio; if there is any, it may no longer match;`}{" "}
+              upload a new rendition if the narration needs replacing.
+            </p>
+          )}
         </div>
       ))}
+      <CurrentAudio
+        key={`${languageCode}:${audioReads}`}
+        call={call}
+        target={{ lessonId: lesson.id, languageCode }}
+        onLoaded={(audio) => setHasAudio((current) => ({ ...current, [languageCode]: !!audio }))}
+      />
+      {/* Not keyed by Language: a failed attempt stays visible after switching tabs. */}
+      <AudioUpload
+        call={call}
+        putObject={putObject}
+        target={{ lessonId: lesson.id, languageCode }}
+        unavailable={uploadUnavailable}
+        onActiveChange={setUploading}
+        onComplete={() => setAudioReads((count) => count + 1)}
+      />
       <h3>Lesson Sources</h3>
       {lesson.lessonSources.length === 0 && <p>No Lesson Sources.</p>}
       <ul>
@@ -266,6 +332,17 @@ export function LessonView({
               ),
             );
           },
+        }}
+      />
+      <Publication
+        call={call}
+        lesson={lesson}
+        dirty={dirty}
+        uploading={uploading}
+        onChange={(next) => {
+          setLesson(next);
+          // Archiving makes every form read-only, so unsaved edits can no longer be saved.
+          if (next.status === "ARCHIVED") setEdits({});
         }}
       />
     </section>
