@@ -12,15 +12,15 @@ See the spec sections "Admin application", "Authentication behavior", and "Local
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `pnpm dev` starts the Admin under Compose Watch on `127.0.0.1:5173`, with source sync and rebuilds on manifest, contract, and lockfile changes, matching the other services
-- [ ] The BFF base URL is the non-secret `VITE_BFF_BASE_URL`, set explicitly to the local BFF in development; when unset the Admin calls its own page origin (ADR-0007). No hostname is hardcoded, and `ADMIN_API_TOKEN` never appears in Vite configuration, any `VITE_` variable, or the build output
-- [ ] The Admin's host port setting is `ADMIN_UI_PORT`, leaving `BFF_ADMIN_PORT` free for the Stage 6 admin listener
-- [ ] Entering a valid token connects; an invalid token is rejected with a clear message
-- [ ] The token is never written to local storage, session storage, IndexedDB, cookies, or the URL; a refresh requires re-entry
-- [ ] Disconnect clears the token and returns to the token prompt
-- [ ] A `401` on any request opens a re-entry prompt without navigating away or resetting the screen, and the failed operation can then be retried
-- [ ] BFF errors show their message and request ID
-- [ ] Whole-app tests render the Admin with a fake network module and drive it only through visible, accessible controls
-- [ ] Root `pnpm test`, `pnpm typecheck`, and `pnpm build` include the Admin and need no Docker, AWS credentials, or real browser
+- [x] `pnpm dev` starts the Admin under Compose Watch on `127.0.0.1:5173`, with source sync and rebuilds on manifest, contract, and lockfile changes, matching the other services
+- [x] The BFF base URL is the non-secret `VITE_BFF_BASE_URL`, set explicitly to the local BFF in development; when unset the Admin calls its own page origin (ADR-0007). No hostname is hardcoded, and `ADMIN_API_TOKEN` never appears in Vite configuration, any `VITE_` variable, or the build output
+- [x] The Admin's host port setting is `ADMIN_UI_PORT`, leaving `BFF_ADMIN_PORT` free for the Stage 6 admin listener
+- [x] Entering a valid token connects; an invalid token is rejected with a clear message
+- [x] The token is never written to local storage, session storage, IndexedDB, cookies, or the URL; a refresh requires re-entry
+- [x] Disconnect clears the token and returns to the token prompt
+- [x] A `401` on any request opens a re-entry prompt without navigating away or resetting the screen, and the failed operation can then be retried
+- [x] BFF errors show their message and request ID
+- [x] Whole-app tests render the Admin with a fake network module and drive it only through visible, accessible controls
+- [x] Root `pnpm test`, `pnpm typecheck`, and `pnpm build` include the Admin and need no Docker, AWS credentials, or real browser

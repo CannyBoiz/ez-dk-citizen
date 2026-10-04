@@ -8,14 +8,14 @@ See the spec section "Editing and dirty state" and user stories 14–17 and 64�
 
 **Blocked by:** 03 — Browse and filter the Lesson catalogue
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Creating a Draft with chapter and version opens its editor and the Lesson appears in the catalogue
-- [ ] Editing chapter or version marks the structure form unsaved; saving marks it saved
-- [ ] A chapter/version conflict shows a clear message and keeps the edits
-- [ ] A failed save keeps the edits and shows the error with request ID
-- [ ] Closing or reloading the tab with a dirty form triggers the before-unload warning
-- [ ] Navigating back to the catalogue with a dirty form asks for confirmation
-- [ ] A `401` during save prompts for the token, keeps the edits, and allows retrying the save
-- [ ] Structure fields are read-only for Published and Archived Lessons
-- [ ] Whole-app tests cover creation, saving, conflict, failure retention, both navigation warnings, `401` retention, and read-only states
+- [x] Creating a Draft with chapter and version opens its editor and the Lesson appears in the catalogue
+- [x] Editing chapter or version marks the structure form unsaved; saving marks it saved
+- [x] A chapter/version conflict shows a clear message and keeps the edits
+- [x] A failed save keeps the edits and shows the error with request ID
+- [x] Closing or reloading the tab with a dirty form triggers the before-unload warning
+- [x] Navigating back to the catalogue with a dirty form asks for confirmation
+- [x] A `401` during save prompts for the token, keeps the edits, and allows retrying the save
+- [x] Structure fields are read-only for Published and Archived Lessons
+- [x] Whole-app tests cover creation, saving, conflict, failure retention, both navigation warnings, `401` retention, and read-only states

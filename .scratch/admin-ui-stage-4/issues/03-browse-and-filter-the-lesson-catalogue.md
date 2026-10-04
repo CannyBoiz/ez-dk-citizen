@@ -6,12 +6,12 @@ See the spec section "Admin application" (screens) and user stories 8–13.
 
 **Blocked by:** 02 — Run the Admin and connect with the admin token
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The catalogue lists every Lesson with chapter, version, status, and available Languages
-- [ ] Filtering by chapter and by status happens client-side, and the two filters can be combined
-- [ ] An empty catalogue and an empty filter result show clear empty states
-- [ ] Opening a Lesson shows its structure, Lesson Texts, and Lesson Sources read from the BFF
-- [ ] Returning to the catalogue reloads it from the backend
-- [ ] A Data Service outage shows an error with request ID and allows a retry
-- [ ] Whole-app tests cover listing, both filters, opening a Lesson, and the error state
+- [x] The catalogue lists every Lesson with chapter, version, status, and available Languages
+- [x] Filtering by chapter and by status happens client-side, and the two filters can be combined
+- [x] An empty catalogue and an empty filter result show clear empty states
+- [x] Opening a Lesson shows its structure, Lesson Texts, and Lesson Sources read from the BFF
+- [x] Returning to the catalogue reloads it from the backend
+- [x] A Data Service outage shows an error with request ID and allows a retry
+- [x] Whole-app tests cover listing, both filters, opening a Lesson, and the error state
