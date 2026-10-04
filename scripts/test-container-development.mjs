@@ -15,8 +15,14 @@ let postgresPort = await findAvailablePort();
 while (postgresPort === bffPort) {
   postgresPort = await findAvailablePort();
 }
+let adminPort = await findAvailablePort();
+
+while (adminPort === bffPort || adminPort === postgresPort) {
+  adminPort = await findAvailablePort();
+}
 const composeEnvironment = {
   ...process.env,
+  ADMIN_UI_PORT: String(adminPort),
   BFF_PORT: String(bffPort),
   POSTGRES_PORT: String(postgresPort),
 };
@@ -27,6 +33,7 @@ for (const name of [
   "AWS_REGION",
   "S3_BUCKET",
   "DATABASE_URL",
+  "VITE_BFF_BASE_URL",
   "DATA_SERVICE_TOKEN",
   "POSTGRES_DB",
   "POSTGRES_PASSWORD",
@@ -54,6 +61,10 @@ const config = JSON.parse(configOutput);
 
 assertPublishedPort(config.services.bff, bffPort, 3000);
 assertPublishedPort(config.services.postgres, postgresPort, 5432);
+assertPublishedPort(config.services.admin, adminPort, 5173);
+assert.deepEqual(config.services.admin.environment, {
+  VITE_BFF_BASE_URL: `http://127.0.0.1:${bffPort}`,
+});
 assert.equal(config.services["hono-data"].ports, undefined);
 assertWatch(
   config.services.bff,
@@ -83,6 +94,21 @@ assertWatch(
   ],
 );
 
+assertWatch(
+  config.services.admin,
+  [["apps/admin/src", "/workspace/apps/admin/src"]],
+  [
+    "apps/admin/Dockerfile",
+    "apps/admin/index.html",
+    "apps/admin/package.json",
+    "apps/admin/vite.config.ts",
+    "package.json",
+    "packages/api-contracts",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+  ],
+);
+
 let smokeFailure;
 
 try {
@@ -95,12 +121,15 @@ try {
     "--wait-timeout",
     "120",
     "bff",
+    "admin",
   ]);
 
   const response = await fetch(`http://127.0.0.1:${bffPort}/ready`);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { status: "ok" });
   await connectTo(postgresPort);
+  const admin = await waitForAdmin(`http://127.0.0.1:${adminPort}/`);
+  assert.match(admin, /<div id="root">/);
 } catch (error) {
   smokeFailure = error;
 } finally {
@@ -202,6 +231,21 @@ function findAvailablePort() {
       server.close((error) => (error ? reject(error) : resolve(address.port)));
     });
   });
+}
+
+async function waitForAdmin(url) {
+  const deadline = Date.now() + 30_000;
+
+  for (;;) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return await response.text();
+    } catch (error) {
+      if (Date.now() > deadline) throw error;
+    }
+    if (Date.now() > deadline) throw new Error(`Admin did not serve ${url}.`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
 }
 
 function connectTo(port) {

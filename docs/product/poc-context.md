@@ -723,7 +723,7 @@ automatically in the PoC; add cleanup when leakage becomes measurable.
 ## 8.11 S3 access boundary
 
 The S3 bucket is private with public access blocked. Its CORS policy allows
-`PUT` from the local Admin origin and, once known, the production Admin origin;
+`PUT` from the local Admin origin and, once known, the private admin site origin (ADR-0007);
 it uses no wildcard origins or unnecessary methods and headers. Its bucket
 policy requires `If-None-Match` for object writes.
 
@@ -807,7 +807,8 @@ flowchart LR
 
     Eleven[ElevenLabs Web App] -. manual MP3 generation .-> Admin
 
-    Caddy[Caddy] --> BFF
+    Caddy[Caddy public site] -->|/api/mobile/*| BFF
+    AdminSite[Caddy admin site on private network] -->|Admin UI + /api/admin/*| BFF
 ```
 
 ---
@@ -816,7 +817,12 @@ flowchart LR
 
 ## Hono BFF
 
-Public/client-facing backend.
+Client-facing backend. One service with two listeners (ADR-0007): a public
+listener serving `/api/mobile/*` through the public Caddy site, and an admin
+listener serving `/api/admin/*`, never published to the host and reached only
+through the private admin site. The public listener does not register admin
+routes. `ADMIN_API_TOKEN` bearer auth remains the admin authorization; network
+location is never an auth input.
 
 Responsibilities:
 
@@ -967,7 +973,7 @@ Never persist the temporary playback URL.
 | Hosting           | Hetzner CX23 VPS                 |
 | Containers        | Docker + Docker Compose          |
 | Reverse proxy     | Caddy                            |
-| Admin hosting     | Cloudflare Pages                 |
+| Admin hosting     | Caddy admin site on Tailscale (ADR-0007) |
 | DNS               | Cloudflare                       |
 | CI/CD             | GitHub Actions                   |
 | Registry          | GHCR                             |
@@ -1198,11 +1204,12 @@ configuration before deciding to import or replace anything; Terraform must
 not be run blindly against it.
 
 ```text
-Cloudflare Pages
-└── React + Vite admin
-
 Hetzner CX23
 ├── Caddy
+│   ├── public site  → hono-bff public listener (/api/mobile/*)
+│   └── admin site   → React + Vite admin static build
+│                      + hono-bff admin listener (/api/admin/*), same origin,
+│                      reachable only over Tailscale
 ├── hono-bff
 ├── hono-data
 └── postgres
@@ -1227,7 +1234,12 @@ PostgreSQL
 
 Rules:
 
-- only Caddy needs public HTTP/HTTPS,
+- only Caddy needs public HTTP/HTTPS, and only for the mobile API,
+- the Admin UI and `/api/admin/*` are same-origin on one private admin site
+  (ADR-0007); the BFF admin listener is never published to the host,
+- no tailnet hostname or address appears in code, tests, or tracers; origins
+  and URLs come only from configuration,
+- the Admin build receives no secrets; `ADMIN_API_TOKEN` is entered at runtime,
 - PostgreSQL is private,
 - Data Service is private,
 - object storage is external,
@@ -1541,8 +1553,8 @@ plain-text textareas; the admin prepares text externally and pastes it into
 the editor. Rich-text, Markdown, and WYSIWYG editing are out of scope.
 
 Local browser acceptance against the containerized backend and real AWS S3 is
-sufficient. Hosted Admin deployment, Cloudflare Pages, production CORS
-configuration, and other production deployment work remain in Stage 6.
+sufficient. The BFF listener split, the private admin site (ADR-0007), and
+other production deployment work remain in Stage 6.
 
 ### Authentication and editing
 
@@ -1658,11 +1670,17 @@ requirement.
 
 ## Stage 6 — Deployment
 
+0. Split the BFF into a public listener (`/api/mobile/*`) and an unpublished
+   admin listener (`/api/admin/*`, port from `BFF_ADMIN_PORT`); the public
+   listener registers no admin routes (ADR-0007).
 1. Dockerfiles.
 2. Compose.
-3. Caddy.
+3. Caddy: a public site for the mobile API and a same-origin admin site
+   (Admin static build + `/api/admin/*`) bound to the tailnet; set the S3 CORS
+   `admin_production_origin` to the admin site origin.
 4. GHCR.
-5. GitHub Actions.
+5. GitHub Actions. The Admin build job receives no secrets and leaves
+   `VITE_BFF_BASE_URL` unset so the Admin calls its page origin.
 6. SSH deployment.
 7. Drizzle migrations.
 8. health checks.
@@ -1681,7 +1699,7 @@ Preserve these unless a deliberate decision changes them:
 2. **PostgreSQL owns structured relational data and media metadata.**
 3. **Hono Data Service is the only application service with direct PostgreSQL access.**
 4. **Drizzle is the schema/query layer.**
-5. **Hono BFF is the public orchestration boundary.**
+5. **Hono BFF is the orchestration boundary: public for mobile, private for admin (ADR-0007).**
 6. **Clients transfer MP3 bytes directly to/from object storage.**
 7. **Permanent cloud credentials never reach frontend clients.**
 8. **Temporary presigned URLs are not persisted.**

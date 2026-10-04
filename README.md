@@ -16,7 +16,8 @@ Docker Compose Watch builds the shared contracts, applies migrations, starts
 PostgreSQL, the private Data Service, and then the BFF, and synchronizes source
 updates into the writable application containers. The BFF is available at
 `http://127.0.0.1:3001` and PostgreSQL at `127.0.0.1:5432`; the Data Service is
-not published to the host.
+not published to the host. The Admin runs at `http://127.0.0.1:5173`; enter
+`ADMIN_API_TOKEN` there to connect. The token is held only in memory.
 
 The defaults are development-only. Copy `.env.example` to `.env` to override
 credentials, origins, or ports locally. Real `.env` files are ignored by Git.

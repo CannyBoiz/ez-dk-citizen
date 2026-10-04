@@ -137,6 +137,20 @@ test("Media Asset completion contracts keep storage locators internal", () => {
     completeMediaAssetResponseSchema.parse(completion),
     completion,
   );
+  const superseded = {
+    ...completion,
+    lessonAudio: { ...completion.lessonAudio, isCurrent: false },
+  };
+  assert.deepEqual(
+    completeMediaAssetResponseSchema.parse(superseded),
+    superseded,
+  );
+  assert.throws(() =>
+    completeMediaAssetResponseSchema.parse({
+      ...completion,
+      lessonAudio: { ...completion.lessonAudio, isCurrent: "false" },
+    }),
+  );
   assert.throws(() =>
     completeMediaAssetRequestSchema.parse({
       lessonId: 7,

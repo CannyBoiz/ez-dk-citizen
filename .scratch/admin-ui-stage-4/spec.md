@@ -55,7 +55,8 @@ read with a fresh Playback URL for Lessons in any status, and the completion
 contract reports the actual `isCurrent` value. The Admin runs locally under
 Compose Watch at the origin already allowed by the BFF and the S3 CORS policy.
 Acceptance is a manual browser walkthrough against the containerized backend
-and real AWS S3. Hosted Admin deployment remains Stage 6 work.
+and real AWS S3. Deploying the Admin to its private admin site (ADR-0007)
+remains Stage 6 work.
 
 ## User Stories
 
@@ -175,7 +176,7 @@ and real AWS S3. Hosted Admin deployment remains Stage 6 work.
 ### Development
 
 81. As the developer, I want `pnpm dev` to start the Admin under Compose Watch at `http://127.0.0.1:5173`, so that the local runtime stays container-first like every other service.
-82. As the developer, I want the Admin to reach the BFF through a configurable non-secret base URL, so that the same code can later point at the production BFF.
+82. As the developer, I want the Admin to reach the BFF through a configurable non-secret base URL that defaults to the page origin, so that the same build works cross-origin in development and same-origin behind the private admin site (ADR-0007).
 83. As the developer, I want the Admin to reuse the shared API contracts, so that request and response shapes cannot drift between the Admin and the BFF.
 84. As the developer, I want whole-app tests that exercise the Admin the way I use it, so that refactoring components never breaks tests while behavior stays the same.
 85. As the developer, I want a manual acceptance checklist against the containerized backend and real S3, so that Stage 4 is signed off on the real path and not only against fakes.
@@ -196,7 +197,7 @@ and real AWS S3. Hosted Admin deployment remains Stage 6 work.
 - BFF requests send `Authorization: Bearer <token>` from in-memory state and parse Problem Details on failure, surfacing `code`, `detail`, `requestId`, and field `errors`.
 - The S3 PUT uses `XMLHttpRequest` so the browser reports upload progress, which `fetch` cannot. It sends the File as the body with only the signed `Content-Type: audio/mpeg` and `If-None-Match: *` headers. The browser derives `Content-Length` from the File, because scripts cannot set that header; the Stage 3 live tracer already proves this signing arrangement.
 - The Admin always declares `audio/mpeg` for a chosen `.mp3`, regardless of the operating system's reported file type, and checks the `.mp3` suffix and the 1-byte–50-MiB size before requesting an Upload Intent.
-- The BFF base URL is a non-secret Vite build/runtime setting defaulting to the local BFF at `http://127.0.0.1:3001`. `ADMIN_API_TOKEN` is never a Vite variable.
+- The BFF base URL is a non-secret Vite setting, `VITE_BFF_BASE_URL`. Development sets it explicitly to the local BFF; when unset, the Admin calls its own page origin, as it will when served same-origin from the private admin site (ADR-0007). No hostname is hardcoded. `ADMIN_API_TOKEN` is never a Vite variable, and no `VITE_`-prefixed variable may hold it.
 - Screens: a Lesson catalogue (unpaginated list from the existing admin list API, filtered client-side by chapter and status, showing chapter, version, status, and available Languages); a Lesson editor (structure form, Language tabs with Lesson Text form, Lesson Source panel, current-audio panel with upload, publication checklist, lifecycle actions); and a Source finder (unpaginated list filtered client-side by URL text, plus Source creation). No router-level features are needed beyond moving between the catalogue and one Lesson.
 
 ### Authentication behavior
@@ -265,7 +266,7 @@ The upload panel is a small state machine owned by the Admin page. It is not a d
 
 - The Admin runs as a Compose Watch development service started by `pnpm dev`, serving Vite on `127.0.0.1:5173`. That origin is already in the local `ADMIN_ORIGINS` default and the S3 CORS local origin, so no BFF or infrastructure change is needed.
 - Compose Watch syncs Admin source, and dependency manifests, shared contracts, and lockfile changes trigger rebuilds, matching the other services. Tests, typechecking, and builds stay host-run.
-- Local browser acceptance against the containerized backend and real AWS S3 is sufficient. Hosted Admin deployment, Cloudflare Pages, production CORS, and production origin selection remain Stage 6 work.
+- Local browser acceptance against the containerized backend and real AWS S3 is sufficient. The BFF admin/public listener split, the private admin site, and its S3 CORS origin (ADR-0007) remain Stage 6 work.
 
 ## Testing Decisions
 
@@ -295,7 +296,7 @@ The upload panel is a small state machine owned by the Admin page. It is not a d
 - Durable binding of an Upload Intent to its Lesson and Language.
 - Pagination, title or full-text search, and server-side filtering.
 - Dedicated phone authoring as an acceptance requirement.
-- Hosted Admin deployment, Cloudflare Pages, production CORS or origin configuration, Caddy, GHCR, GitHub Actions, and other Stage 6 deployment work.
+- The BFF admin/public listener split, the private admin site (ADR-0007), production origin configuration, Caddy, GHCR, GitHub Actions, and other Stage 6 deployment work.
 - Automated browser-driven end-to-end tests of the Admin, and new browser-automation dependencies.
 - Mobile app work (Stage 5), ElevenLabs API automation, quiz, learner accounts, payments, and server-synchronized progress.
 

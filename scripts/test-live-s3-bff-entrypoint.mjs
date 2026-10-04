@@ -14,7 +14,7 @@ const [
   import(require.resolve("@ez-dk-citizen/api-contracts")),
   import("/app/dist/app.js"),
   import("/app/dist/config.js"),
-  import("/app/dist/data-service-client.js"),
+  import("/app/dist/data-service/client.js"),
   import("/app/dist/storage.js"),
 ]);
 

@@ -163,7 +163,7 @@ if (detail.content !== 'เนื้อหา' || !detail.availableLanguageCodes
 function completionTracer() {
   return String.raw`
 import { createBffApp } from './dist/app.js';
-import { createDataServiceClient } from './dist/data-service-client.js';
+import { createDataServiceClient } from './dist/data-service/client.js';
 import { FakeStorage } from './dist/storage.js';
 
 const requestId = 'stage-3-completion-tracer';
@@ -182,6 +182,9 @@ const call = async (path, method, body) => {
 };
 const lesson = await call('/api/admin/lessons', 'POST', { chapter: 2, version: 1 });
 if (lesson.response.status !== 201) throw new Error('Completion tracer Lesson creation failed.');
+const refused = await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'PUBLISHED' });
+if (refused.response.status !== 409 || refused.body.code !== 'lesson_publication_incomplete' || JSON.stringify(refused.body.errors.map(({ path }) => path)) !== JSON.stringify([['lessonTexts', 'th'], ['lessonSources']])) throw new Error('Incomplete publication was not refused.');
+if ((await call('/api/admin/lessons/' + lesson.body.id, 'GET')).body.status !== 'DRAFT') throw new Error('Refused publication changed the Lesson status.');
 const text = await call('/api/admin/lessons/' + lesson.body.id + '/texts/th', 'PUT', { title: 'ไทย', content: 'เนื้อหา' });
 if (text.response.status !== 200) throw new Error('Completion tracer localization failed.');
 const intent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'lesson.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
@@ -194,13 +197,18 @@ if (retry.response.status !== 200 || JSON.stringify(retry.body) !== JSON.stringi
 await call('/api/admin/lessons/' + lesson.body.id + '/texts/da', 'PUT', { title: 'Dansk', content: 'Indhold' });
 const rebind = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'da' });
 if (rebind.response.status !== 409 || rebind.body.code !== 'media_asset_rebind_conflict') throw new Error('Completed media was rebound.');
-await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'PUBLISHED' });
+const source = await call('/api/admin/sources', 'POST', { url: 'https://example.test/completion-source', publishedAt: null });
+await call('/api/admin/lessons/' + lesson.body.id + '/sources/' + source.body.id, 'PUT', {});
+const published = await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'PUBLISHED' });
+if (published.response.status !== 200 || published.body.status !== 'PUBLISHED') throw new Error('Complete publication was not accepted.');
 const correctionIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'correction.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
 storage.putObject(storage.uploads.at(-1).key, { contentType: 'audio/mpeg', sizeBytes: 1 });
 const corrected = await call('/api/admin/media/' + correctionIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (corrected.response.status !== 200 || corrected.body.lessonAudio.audioVersion !== 2 || !corrected.body.lessonAudio.isCurrent) throw new Error('Corrected audio was not promoted.');
 const correctedRetry = await call('/api/admin/media/' + correctionIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (correctedRetry.response.status !== 200 || JSON.stringify(correctedRetry.body) !== JSON.stringify(corrected.body)) throw new Error('Corrected audio retry created a new version.');
+const supersededRetry = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
+if (supersededRetry.response.status !== 200 || supersededRetry.body.mediaAsset.id !== intent.body.mediaAssetId || supersededRetry.body.lessonAudio.audioVersion !== 1 || supersededRetry.body.lessonAudio.isCurrent !== false) throw new Error('Superseded audio retry did not report its original version as not current.');
 const playbackStart = storage.playbackAuthorizations.length;
 const playback = await call('/api/mobile/lessons/' + lesson.body.id, 'GET');
 if (playback.response.status !== 200 || playback.response.headers.get('cache-control') !== 'no-store' || playback.body.audio?.audioVersion !== 2 || playback.body.audio?.mediaAssetId !== correctionIntent.body.mediaAssetId || Object.keys(playback.body.audio ?? {}).sort().join(',') !== 'audioVersion,contentType,durationMs,mediaAssetId,playbackExpiresAt,playbackUrl,sizeBytes') throw new Error('Mobile playback projection failed.');

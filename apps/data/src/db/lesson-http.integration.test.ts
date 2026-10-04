@@ -255,6 +255,21 @@ test("internal Media Asset completion promotes corrections and returns matching 
   assert.equal(firstRetry.status, 200);
   assert.deepEqual(await firstRetry.json(), firstResult);
 
+  const source = await (
+    await app.request("/internal/sources", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        url: "https://example.com/corrections",
+        publishedAt: null,
+      }),
+    })
+  ).json();
+  await app.request(`/internal/lessons/${lesson.id}/sources/${source.id}`, {
+    method: "PUT",
+    headers,
+    body: "{}",
+  });
   const published = await app.request(`/internal/lessons/${lesson.id}`, {
     method: "PATCH",
     headers,
@@ -301,6 +316,25 @@ test("internal Media Asset completion promotes corrections and returns matching 
   assert.equal(
     (await afterRetry.json()).updatedAt,
     afterCorrectionBody.updatedAt,
+  );
+
+  const supersededRetry = await complete(firstAsset.id);
+  assert.equal(supersededRetry.status, 200);
+  assert.deepEqual(await supersededRetry.json(), {
+    ...firstResult,
+    lessonAudio: { ...firstResult.lessonAudio, isCurrent: false },
+  });
+  assert.deepEqual(
+    await database
+      .select({
+        mediaAssetId: lessonAudio.mediaAssetId,
+        audioVersion: lessonAudio.audioVersion,
+        isCurrent: lessonAudio.isCurrent,
+      })
+      .from(lessonAudio)
+      .where(eq(lessonAudio.lessonId, lesson.id))
+      .orderBy(lessonAudio.audioVersion),
+    history,
   );
 
   const rebind = await complete(firstAsset.id, "da");
@@ -902,6 +936,21 @@ test("Published localized detail returns only the requested current ready audio"
     await createAsset("audio/123e4567-e89b-12d3-a456-426614174074.mp3")
   ).json();
   assert.equal((await complete(first.id)).status, 200);
+  const source = await (
+    await app.request("/internal/sources", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        url: "https://example.com/current-audio",
+        publishedAt: null,
+      }),
+    })
+  ).json();
+  await app.request(`/internal/lessons/${lesson.id}/sources/${source.id}`, {
+    method: "PUT",
+    headers,
+    body: "{}",
+  });
   assert.equal(
     (
       await app.request(`/internal/lessons/${lesson.id}`, {
@@ -991,6 +1040,21 @@ test("internal localized reads filter by status and return Lesson aggregates", a
     },
   );
   assert.equal(localized.status, 200);
+  const source = await (
+    await app.request("/internal/sources", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        url: "https://example.com/localized-reads",
+        publishedAt: null,
+      }),
+    })
+  ).json();
+  await app.request(`/internal/lessons/${published.id}/sources/${source.id}`, {
+    method: "PUT",
+    headers,
+    body: "{}",
+  });
   const publish = await app.request(`/internal/lessons/${published.id}`, {
     method: "PATCH",
     headers,
@@ -1016,7 +1080,16 @@ test("internal localized reads filter by status and return Lesson aggregates", a
       updatedAt: (await publish.json()).updatedAt,
       availableLanguageCodes: ["th"],
       lessonTexts: [{ languageCode: "th", title: "บท", content: "เนื้อหา" }],
-      lessonSources: [],
+      lessonSources: [
+        {
+          id: source.id,
+          url: source.url,
+          publishedAt: null,
+          pageFrom: null,
+          pageTo: null,
+          sectionReference: null,
+        },
+      ],
     },
   );
 
@@ -1102,6 +1175,19 @@ test("internal Lesson patches enforce lifecycle and immutable history", async ()
     { method: "PUT", headers, body: "{}" },
   );
   assert.equal(draftSource.status, 200);
+  const makePublishable = async (id: number) => {
+    await app.request(`/internal/lessons/${id}/texts/th`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ title: "บท", content: "เนื้อหา" }),
+    });
+    await app.request(`/internal/lessons/${id}/sources/${source.id}`, {
+      method: "PUT",
+      headers,
+      body: "{}",
+    });
+  };
+  await makePublishable(draft.id);
   const published = await patchLesson(draft.id, {
     chapter: 12,
     version: 3,
@@ -1208,11 +1294,13 @@ test("internal Lesson patches enforce lifecycle and immutable history", async ()
   assert.equal((await directArchive.json()).status, "ARCHIVED");
 
   const publishedVersion = await createLesson(30, 1);
+  await makePublishable(publishedVersion.id);
   assert.equal(
     (await patchLesson(publishedVersion.id, { status: "PUBLISHED" })).status,
     200,
   );
   const competing = await createLesson(30, 2);
+  await makePublishable(competing.id);
   const beforeCompetingPublish = await app.request(
     `/internal/lessons/${competing.id}`,
     {
@@ -1256,4 +1344,112 @@ test("internal Lesson patches enforce lifecycle and immutable history", async ()
     headers: { Authorization: "Bearer data-token" },
   });
   assert.deepEqual(await afterRollback.json(), beforeRollbackDetail);
+});
+
+test("internal Lesson publication requires a Thai Lesson Text and a Lesson Source", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const request = (path: string, method: string, body?: unknown) =>
+    app.request(path, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  const read = async (id: number) =>
+    (await request(`/internal/lessons/${id}`, "GET")).json();
+  const expectIncomplete = async (
+    id: number,
+    body: unknown,
+    paths: Array<Array<string>>,
+  ) => {
+    const before = await read(id);
+    const response = await request(`/internal/lessons/${id}`, "PATCH", body);
+    assert.equal(response.status, 409);
+    const details = await response.json();
+    assert.equal(details.code, "lesson_publication_incomplete");
+    assert.deepEqual(
+      details.errors.map((error: { path: string[] }) => error.path),
+      paths,
+    );
+    assert.deepEqual(await read(id), before);
+  };
+  const thaiText = ["lessonTexts", "th"];
+  const lessonSources = ["lessonSources"];
+
+  const lesson = await (
+    await request("/internal/lessons", "POST", { chapter: 80, version: 1 })
+  ).json();
+  await expectIncomplete(lesson.id, { status: "PUBLISHED" }, [
+    thaiText,
+    lessonSources,
+  ]);
+
+  await request(`/internal/lessons/${lesson.id}/texts/th`, "PUT", {
+    title: "บท",
+    content: "เนื้อหา",
+  });
+  await expectIncomplete(lesson.id, { status: "PUBLISHED" }, [lessonSources]);
+  await expectIncomplete(
+    lesson.id,
+    { chapter: 81, version: 2, status: "PUBLISHED" },
+    [lessonSources],
+  );
+
+  const source = await (
+    await request("/internal/sources", "POST", {
+      url: "https://example.com/publication-prerequisites",
+      publishedAt: null,
+    })
+  ).json();
+  const untranslated = await (
+    await request("/internal/lessons", "POST", { chapter: 82, version: 1 })
+  ).json();
+  await request(`/internal/lessons/${untranslated.id}/texts/da`, "PUT", {
+    title: "Titel",
+    content: "Indhold",
+  });
+  await request(
+    `/internal/lessons/${untranslated.id}/sources/${source.id}`,
+    "PUT",
+    {},
+  );
+  await expectIncomplete(untranslated.id, { status: "PUBLISHED" }, [thaiText]);
+
+  await request(
+    `/internal/lessons/${lesson.id}/sources/${source.id}`,
+    "PUT",
+    {},
+  );
+  const published = await request(`/internal/lessons/${lesson.id}`, "PATCH", {
+    chapter: 81,
+    version: 2,
+    status: "PUBLISHED",
+  });
+  assert.equal(published.status, 200);
+  const publishedDetail = await published.json();
+  assert.deepEqual(
+    {
+      chapter: publishedDetail.chapter,
+      version: publishedDetail.version,
+      status: publishedDetail.status,
+      availableLanguageCodes: publishedDetail.availableLanguageCodes,
+    },
+    {
+      chapter: 81,
+      version: 2,
+      status: "PUBLISHED",
+      availableLanguageCodes: ["th"],
+    },
+  );
+  assert.equal(
+    (
+      await database
+        .select({ id: lessonAudio.id })
+        .from(lessonAudio)
+        .where(eq(lessonAudio.lessonId, lesson.id))
+    ).length,
+    0,
+  );
 });

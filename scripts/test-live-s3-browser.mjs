@@ -218,6 +218,35 @@ try {
     textBody,
   );
   assert.equal(text.response.status, 200, "Tracer Lesson Text was not saved.");
+  if (languageCode !== "th") {
+    const thaiText = await requestBff(
+      bffServer,
+      `/api/admin/lessons/${lessonId}/texts/th`,
+      "PUT",
+      textBody,
+    );
+    assert.equal(
+      thaiText.response.status,
+      200,
+      "Tracer Thai Lesson Text was not saved.",
+    );
+  }
+  const source = await requestBff(bffServer, "/api/admin/sources", "POST", {
+    url: "https://example.test/live-s3-tracer",
+    publishedAt: null,
+  });
+  assert.equal(source.response.status, 201, "Tracer Source was not created.");
+  const lessonSource = await requestBff(
+    bffServer,
+    `/api/admin/lessons/${lessonId}/sources/${source.body.id}`,
+    "PUT",
+    {},
+  );
+  assert.equal(
+    lessonSource.response.status,
+    200,
+    "Tracer Lesson Source was not attached.",
+  );
   const published = await requestBff(
     bffServer,
     `/api/admin/lessons/${lessonId}`,
