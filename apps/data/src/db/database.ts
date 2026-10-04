@@ -18,3 +18,8 @@ export function createDataDatabase(databaseUrl: string) {
 
   return { database, pool };
 }
+
+export type DataDatabase = ReturnType<typeof createDataDatabase>["database"];
+export type DataTransaction = Parameters<
+  Parameters<DataDatabase["transaction"]>[0]
+>[0];
