@@ -26,6 +26,12 @@ export class BffError extends Error {
   }
 }
 
+// The authenticated request the screens use; App supplies the in-memory token.
+export type Call = <T>(
+  bffRequest: Omit<BffRequest, "token">,
+  schema: { parse(value: unknown): T },
+) => Promise<T>;
+
 export async function request<T>(
   network: Network,
   bffRequest: BffRequest,
