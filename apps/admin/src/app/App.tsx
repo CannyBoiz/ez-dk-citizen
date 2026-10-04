@@ -1,9 +1,10 @@
 // The Admin shell: the in-memory token, the 401 re-entry prompt, the unsaved-changes
-// guards, and switching between the catalogue and one Lesson.
+// guards, and switching between the catalogue, the Sources screen, and one Lesson.
 import { useCallback, useEffect, useId, useState } from "react";
 
 import { TokenForm } from "../features/auth";
 import { Catalogue, LessonView, type CatalogueFilters } from "../features/lesson";
+import { SourceFinder } from "../features/source";
 import { BffError, request, type Call } from "../shared/lib/bff";
 import type { Network } from "../shared/lib/network";
 
@@ -11,10 +12,12 @@ export function App({ network }: { network: Network }) {
   // The token lives only in React state: never in storage, cookies, the URL, or the build.
   const [token, setToken] = useState<string | null>(null);
   const [reentry, setReentry] = useState(false);
-  const [openLessonId, setOpenLessonId] = useState<number | null>(null);
+  const [screen, setScreen] = useState<"catalogue" | "sources" | { lessonId: number }>(
+    "catalogue",
+  );
   // Held here so the catalogue's filters survive opening a Lesson and coming back.
   const [filters, setFilters] = useState<CatalogueFilters>({ chapter: "", status: "" });
-  // Whether the open Lesson has unsaved edits; drives both navigation warnings.
+  // Whether the open screen has unsaved edits; drives both navigation warnings.
   const [dirty, setDirty] = useState(false);
   const reentryTitle = useId();
 
@@ -32,7 +35,7 @@ export function App({ network }: { network: Network }) {
     if (!confirmLeave()) return;
     setToken(null);
     setReentry(false);
-    setOpenLessonId(null);
+    setScreen("catalogue");
     setFilters({ chapter: "", status: "" });
   }
 
@@ -60,18 +63,30 @@ export function App({ network }: { network: Network }) {
       </header>
       {token === null ? (
         <TokenForm network={network} onConnected={setToken} />
-      ) : openLessonId === null ? (
-        <Catalogue
-          call={call}
-          filters={filters}
-          onFiltersChange={setFilters}
-          onOpen={setOpenLessonId}
-        />
+      ) : screen === "catalogue" ? (
+        <>
+          <button type="button" onClick={() => setScreen("sources")}>
+            Sources
+          </button>
+          <Catalogue
+            call={call}
+            filters={filters}
+            onFiltersChange={setFilters}
+            onOpen={(lessonId) => setScreen({ lessonId })}
+          />
+        </>
+      ) : screen === "sources" ? (
+        <section>
+          <button type="button" onClick={() => confirmLeave() && setScreen("catalogue")}>
+            Back to catalogue
+          </button>
+          <SourceFinder call={call} onDirtyChange={setDirty} />
+        </section>
       ) : (
         <LessonView
           call={call}
-          lessonId={openLessonId}
-          onBack={() => confirmLeave() && setOpenLessonId(null)}
+          lessonId={screen.lessonId}
+          onBack={() => confirmLeave() && setScreen("catalogue")}
           onDirtyChange={setDirty}
         />
       )}

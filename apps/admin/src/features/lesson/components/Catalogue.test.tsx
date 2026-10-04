@@ -137,7 +137,7 @@ test("opening a Lesson shows its structure, Lesson Texts, and Lesson Sources, an
   fireEvent.click(screen.getByRole("button", { name: "Open chapter 1, version 1" }));
 
   await screen.findByRole("heading", { name: "Chapter 1, version 1" });
-  expect(requests.at(-1)).toMatchObject({ method: "GET", path: "/api/admin/lessons/1" });
+  expect(requests).toContainEqual(expect.objectContaining({ method: "GET", path: "/api/admin/lessons/1" }));
   expect(screen.queryByRole("table")).toBeNull();
   expect(screen.getByText("Published")).toBeTruthy();
   expect(within(textForm()).getByLabelText("Title")).toHaveProperty("value", "บทที่ 1");
@@ -145,8 +145,10 @@ test("opening a Lesson shows its structure, Lesson Texts, and Lesson Sources, an
   fireEvent.click(tab("da"));
   expect(within(textForm()).getByLabelText("Title")).toHaveProperty("value", "Kapitel 1");
   expect(screen.getByRole("link", { name: "https://example.dk/laerebog" })).toBeTruthy();
-  expect(screen.getByText(/p\. 12–14/)).toBeTruthy();
-  expect(screen.getByText(/Afsnit 2/)).toBeTruthy();
+  const lessonSource = screen.getByRole("form", { name: "Lesson Source https://example.dk/laerebog" });
+  expect(within(lessonSource).getByLabelText("Page from")).toHaveProperty("value", "12");
+  expect(within(lessonSource).getByLabelText("Page to")).toHaveProperty("value", "14");
+  expect(within(lessonSource).getByLabelText("Section reference")).toHaveProperty("value", "Afsnit 2");
 
   items = [{ ...catalogue[0]!, status: "ARCHIVED" }];
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));

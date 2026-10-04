@@ -1,5 +1,6 @@
-// The Lesson editor: the structure form and per-Language Lesson Text tabs, each saved
-// separately, with their unsaved edits reported up for the navigation guards.
+// The Lesson editor: the structure form, per-Language Lesson Text tabs, and per-Source
+// Lesson Source references, each saved separately, with their unsaved edits reported up
+// for the navigation guards.
 import {
   lessonDetailSchema,
   type LessonDetail,
@@ -12,12 +13,23 @@ import { EditForm, type Values } from "../../../shared/components/EditForm";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
 import type { Call } from "../../../shared/lib/bff";
 import type { BffRequest } from "../../../shared/lib/network";
+import { useAction } from "../../../shared/lib/useAction";
+import { SourceFinder, SourceLabel } from "../../source";
+import {
+  noReferences,
+  referenceFields,
+  toReferenceRequest,
+  toReferenceValues,
+  validateReferences,
+} from "../utils/references";
 import { statusLabels } from "../utils/statusLabels";
 
 // Tab order follows the spec; Thai, the learner's Language, is selected first.
 const languageCodes = ["da", "en", "th"] as const;
 type LanguageCode = (typeof languageCodes)[number];
-type Form = "structure" | LanguageCode;
+// Each Lesson Source's reference form is keyed by its Source ID.
+type Form = "structure" | LanguageCode | `source:${number}`;
+const sourceForm = (sourceId: number): Form => `source:${sourceId}`;
 
 export function LessonView({
   call,
@@ -35,6 +47,9 @@ export function LessonView({
   // Unsaved edits per form; a form without an entry shows what the backend holds.
   const [edits, setEdits] = useState<Partial<Record<Form, Values>>>({});
   const [languageCode, setLanguageCode] = useState<LanguageCode>("th");
+  // The Source finder's New Source form counts towards unsaved edits too.
+  const [finderDirty, setFinderDirty] = useState(false);
+  const detaching = useAction<number>();
   const tabsId = useId();
 
   async function load() {
@@ -59,11 +74,14 @@ export function LessonView({
             return [code, { title: text?.title ?? "", content: text?.content ?? "" }];
           }),
         ),
+        ...Object.fromEntries(
+          lesson.lessonSources.map((source) => [sourceForm(source.id), toReferenceValues(source)]),
+        ),
       }
     : {};
   const isDirty = (form: Form) =>
     Object.entries(edits[form] ?? {}).some(([field, value]) => value !== saved[form]?.[field]);
-  const dirty = (Object.keys(edits) as Form[]).some(isDirty);
+  const dirty = finderDirty || (Object.keys(edits) as Form[]).some(isDirty);
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -96,6 +114,26 @@ export function LessonView({
     setEdits((current) => {
       const { [form]: edit, ...rest } = current;
       return edit === submitted ? rest : current;
+    });
+  }
+
+  function detach(sourceId: number) {
+    const form = sourceForm(sourceId);
+    if (isDirty(form) && !window.confirm("Detach this Source and discard its unsaved references?"))
+      return;
+    void detaching.run(sourceId, async () => {
+      await call(
+        { method: "DELETE", path: `/api/admin/lessons/${lesson!.id}/sources/${sourceId}` },
+        { parse: () => undefined },
+      );
+      setEdits(({ [form]: _, ...rest }) => rest);
+      setLesson(
+        (current) =>
+          current && {
+            ...current,
+            lessonSources: current.lessonSources.filter((source) => source.id !== sourceId),
+          },
+      );
     });
   }
 
@@ -178,26 +216,58 @@ export function LessonView({
       <h3>Lesson Sources</h3>
       {lesson.lessonSources.length === 0 && <p>No Lesson Sources.</p>}
       <ul>
-        {lesson.lessonSources.map((source) => (
-          <li key={source.id}>
-            <a href={source.url} target="_blank" rel="noreferrer">
-              {source.url}
-            </a>
-            {[
-              source.publishedAt && `published ${source.publishedAt.slice(0, 10)}`,
-              pageRange(source.pageFrom, source.pageTo),
-              source.sectionReference,
-            ]
-              .filter(Boolean)
-              .map((part) => ` · ${part}`)}
-          </li>
-        ))}
+        {lesson.lessonSources.map((source) => {
+          const form = sourceForm(source.id);
+          return (
+            <li key={source.id}>
+              <SourceLabel {...source} />
+              <EditForm
+                name={`Lesson Source ${source.url}`}
+                fields={referenceFields}
+                validate={validateReferences}
+                status={formState(form, true)}
+                onSave={(submitted) =>
+                  save(form, submitted, {
+                    method: "PUT",
+                    path: `/api/admin/lessons/${lesson.id}/sources/${source.id}`,
+                    body: toReferenceRequest(submitted),
+                  })
+                }
+                {...formProps(form)}
+              />
+              <button
+                type="button"
+                aria-label={`Detach ${source.url}`}
+                disabled={readOnly || detaching.pending !== null}
+                onClick={() => detach(source.id)}
+              >
+                Detach
+              </button>
+              {detaching.failure?.key === source.id && <ErrorMessage error={detaching.failure.error} />}
+            </li>
+          );
+        })}
       </ul>
+      <SourceFinder
+        call={call}
+        onDirtyChange={setFinderDirty}
+        readOnly={readOnly}
+        attach={{
+          attachedIds: lesson.lessonSources.map((source) => source.id),
+          onAttach: async (sourceId) => {
+            setLesson(
+              await call(
+                {
+                  method: "PUT",
+                  path: `/api/admin/lessons/${lesson.id}/sources/${sourceId}`,
+                  body: noReferences,
+                },
+                lessonDetailSchema,
+              ),
+            );
+          },
+        }}
+      />
     </section>
   );
-}
-
-function pageRange(from: number | null, to: number | null) {
-  const pages = [...new Set([from, to].filter((page) => page !== null))].join("–");
-  return pages && `p. ${pages}`;
 }

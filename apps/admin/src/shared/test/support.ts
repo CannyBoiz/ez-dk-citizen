@@ -1,6 +1,12 @@
 // Shared fixtures, a fake Network, and an in-memory BFF for the whole-app tests.
 import { fireEvent, screen, within } from "@testing-library/react";
-import type { LessonDetail, LessonSummary } from "@ez-dk-citizen/api-contracts/schemas";
+import type {
+  LessonDetail,
+  LessonSummary,
+  CreateSourceRequest,
+  SourceResponse,
+  UpsertLessonSourceRequest,
+} from "@ez-dk-citizen/api-contracts/schemas";
 
 import type { BffRequest, BffResponse, Network } from "../lib/network";
 
@@ -81,15 +87,42 @@ export function lessonDetail(id: number, overrides: Partial<LessonDetail> = {}):
 }
 
 // An in-memory BFF for the editor tests; `override` injects failures, including 401s, per request.
+// Sources already cited by `initial` Lessons join the canonical `sources`.
 export function fakeBackend(
   initial: LessonDetail[] = [],
-  override: (request: BffRequest) => BffResponse | undefined = () => undefined,
+  {
+    override = () => undefined,
+    sources: extraSources = [],
+  }: {
+    override?: (request: BffRequest) => BffResponse | undefined;
+    sources?: SourceResponse[];
+  } = {},
 ) {
   const lessons = structuredClone(initial);
+  const sources = [
+    ...new Map(
+      [
+        ...lessons.flatMap((lesson) =>
+          lesson.lessonSources.map(({ id, url, publishedAt }) => ({ id, url, publishedAt })),
+        ),
+        ...extraSources,
+      ].map((source) => [source.id, source]),
+    ).values(),
+  ];
   return fakeNetwork((request) => {
     const overridden = override(request);
     if (overridden) return overridden;
-    const [id, , languageCode] = request.path.slice("/api/admin/lessons/".length).split("/");
+    if (request.path === "/api/admin/sources") {
+      if (request.method === "GET") return { status: 200, body: { items: sources } };
+      const newSource = request.body as CreateSourceRequest;
+      if (sources.some((source) => source.url === newSource.url))
+        return problem(409, "source_url_conflict", "A Source with this URL already exists.", "req-409-source");
+      const created = { id: Math.max(0, ...sources.map((source) => source.id)) + 1, ...newSource };
+      sources.push(created);
+      return { status: 201, body: created };
+    }
+    // `/:id`, `/:id/texts/:languageCode`, or `/:id/sources/:sourceId`.
+    const [id, collection, member] = request.path.slice("/api/admin/lessons/".length).split("/");
     const body = request.body as { chapter: number; version: number; title: string; content: string };
     const conflict = (chapter: number, version: number, except?: number) =>
       lessons.some((other) => other.id !== except && other.chapter === chapter && other.version === version);
@@ -120,10 +153,28 @@ export function fakeBackend(
     if (request.method === "PATCH") {
       if (conflict(body.chapter, body.version, lesson.id)) return conflictProblem;
       Object.assign(lesson, body);
+    } else if (collection === "sources") {
+      const source = sources.find((candidate) => candidate.id === Number(member));
+      if (!source) return problem(404, "source_not_found", "Source was not found.", "req-404");
+      const others = lesson.lessonSources.filter((cited) => cited.id !== source.id);
+      if (request.method === "DELETE") {
+        lesson.lessonSources = others;
+        return { status: 204, body: null };
+      }
+      const references = request.body as UpsertLessonSourceRequest;
+      lesson.lessonSources = [
+        ...others,
+        {
+          ...source,
+          pageFrom: references.pageFrom ?? null,
+          pageTo: references.pageTo ?? null,
+          sectionReference: references.sectionReference ?? null,
+        },
+      ].sort((a, b) => a.id - b.id);
     } else {
       lesson.lessonTexts = [
-        ...lesson.lessonTexts.filter((text) => text.languageCode !== languageCode),
-        { languageCode: languageCode!, title: body.title, content: body.content },
+        ...lesson.lessonTexts.filter((text) => text.languageCode !== member),
+        { languageCode: member!, title: body.title, content: body.content },
       ];
       lesson.availableLanguageCodes = lesson.lessonTexts.map((text) => text.languageCode).sort();
     }
@@ -166,4 +217,38 @@ export function textForm() {
 export function fieldError(label: string, container: HTMLElement) {
   const describedBy = within(container).getByLabelText(label).getAttribute("aria-describedby");
   return describedBy && document.getElementById(describedBy)?.textContent;
+}
+
+
+export const lawSource = {
+  id: 1,
+  url: "https://www.retsinformation.dk/eli/lta/2024/1",
+  publishedAt: "2024-01-15T00:00:00.000Z",
+};
+export const guideSource = { id: 2, url: "https://nyidanmark.dk/da/guide", publishedAt: null };
+// 01:00 at +02:00 is still 31 December in UTC.
+export const bookSource = {
+  id: 3,
+  url: "https://uim.dk/Indfødsretsprøven.pdf",
+  publishedAt: "2025-01-01T01:00:00+02:00",
+};
+
+export function finder() {
+  return screen.getByRole("region", { name: "Source finder" });
+}
+
+// The visible text of each Source the finder lists.
+export function sourceRows() {
+  return within(within(finder()).getByRole("list", { name: "Sources" }))
+    .queryAllByRole("listitem")
+    .map((item) => item.textContent);
+}
+
+export function newSourceForm() {
+  return within(finder()).getByRole("form", { name: "New Source" });
+}
+
+// Canonical Sources are found, created, and reused only.
+export function canonicalEditControls() {
+  return within(finder()).queryAllByRole("button", { name: /edit|delete|remove|update|rename/i });
 }

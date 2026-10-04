@@ -78,17 +78,18 @@ test("saving one Language sends only its Lesson Text and keeps unsaved text in o
 });
 
 test("blank Lesson Text is rejected in the form and backend validation errors attach to their field", async () => {
-  const { network, requests } = fakeBackend([lessonDetail(1)], (request) =>
-    request.method === "PUT" && request.body && (request.body as { content: string }).content === "rejected"
-      ? {
-          status: 422,
-          body: {
-            ...problem(422, "validation_failed", "Request body failed validation.", "req-422").body,
-            errors: [{ path: ["content"], message: "Content is not acceptable." }],
-          },
-        }
-      : undefined,
-  );
+  const { network, requests } = fakeBackend([lessonDetail(1)], {
+    override: (request) =>
+      request.method === "PUT" && request.body && (request.body as { content: string }).content === "rejected"
+        ? {
+            status: 422,
+            body: {
+              ...problem(422, "validation_failed", "Request body failed validation.", "req-422").body,
+              errors: [{ path: ["content"], message: "Content is not acceptable." }],
+            },
+          }
+        : undefined,
+  });
   render(<App network={network} />);
   await connect(validToken);
   await openLesson(1, 1);
@@ -116,11 +117,12 @@ test("a failed Lesson Text save keeps the pasted text and can be retried", async
   render(
     <App
       network={
-        fakeBackend([lessonDetail(1)], (request) =>
-          request.method === "PUT" && outage
-            ? problem(504, "data_service_timeout", "The Data Service timed out.", "req-504")
-            : undefined,
-        ).network
+        fakeBackend([lessonDetail(1)], {
+          override: (request) =>
+            request.method === "PUT" && outage
+              ? problem(504, "data_service_timeout", "The Data Service timed out.", "req-504")
+              : undefined,
+        }).network
       }
     />,
   );

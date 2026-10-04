@@ -5,7 +5,15 @@ import { BffError } from "../lib/bff";
 import { ErrorMessage } from "./ErrorMessage";
 
 export type Values = Record<string, string>;
-type Field = { name: string; label: string; kind: "number" | "text" | "textarea" };
+// Validation messages keyed by field name.
+export type FieldErrors = Record<string, string>;
+export type Field = {
+  name: string;
+  label: string;
+  kind: "number" | "text" | "textarea" | "url" | "date";
+  // A blank optional field passes validation; the caller decides what blank means.
+  optional?: boolean;
+};
 
 // One explicitly saved form: client-side validation first, then backend field errors.
 export function EditForm({
@@ -14,6 +22,7 @@ export function EditForm({
   value,
   onChange,
   onSave,
+  validate,
   readOnly = false,
   submitLabel = "Save",
   status,
@@ -23,20 +32,24 @@ export function EditForm({
   value: Values;
   onChange: (value: Values) => void;
   onSave: (value: Values) => Promise<void>;
+  // Cross-field checks, run after each field's own check; returns messages by field name.
+  validate?: (value: Values) => FieldErrors;
   readOnly?: boolean;
   submitLabel?: string;
   status?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [invalid, setInvalid] = useState<Values>({});
+  const [invalid, setInvalid] = useState<FieldErrors>({});
   const id = useId();
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
-    const problems: Values = {};
-    for (const { name, label, kind } of fields) {
+    // A field's own check takes precedence over a cross-field message for that field.
+    const problems: FieldErrors = { ...validate?.(value) };
+    for (const { name, label, kind, optional } of fields) {
       const field = value[name] ?? "";
+      if (optional && !field.trim()) continue;
       if (kind === "number" ? !/^[1-9]\d*$/.test(field) : !field.trim())
         problems[name] =
           kind === "number" ? `${label} must be a positive whole number.` : `${label} must not be blank.`;

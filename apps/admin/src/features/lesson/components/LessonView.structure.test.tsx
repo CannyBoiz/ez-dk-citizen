@@ -63,11 +63,12 @@ test("a failed structure save keeps the edits and shows the error with its reque
   render(
     <App
       network={
-        fakeBackend([lessonDetail(1)], (request) =>
-          request.method === "PATCH" && outage
-            ? problem(503, "data_service_unavailable", "The Data Service is unavailable.", "req-503")
-            : undefined,
-        ).network
+        fakeBackend([lessonDetail(1)], {
+          override: (request) =>
+            request.method === "PATCH" && outage
+              ? problem(503, "data_service_unavailable", "The Data Service is unavailable.", "req-503")
+              : undefined,
+        }).network
       }
     />,
   );

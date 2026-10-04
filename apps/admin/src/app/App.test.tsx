@@ -113,9 +113,12 @@ test("returning to the catalogue without edits asks nothing", async () => {
 
 test("a 401 during save prompts for the token, keeps the edits, and the save can be retried", async () => {
   let accepted = validToken;
-  const { network, requests } = fakeBackend([lessonDetail(1)], (request) =>
-    request.token === accepted ? undefined : problem(401, "authentication_required", "Authentication is required.", "req-401"),
-  );
+  const { network, requests } = fakeBackend([lessonDetail(1)], {
+    override: (request) =>
+      request.token === accepted
+        ? undefined
+        : problem(401, "authentication_required", "Authentication is required.", "req-401"),
+  });
   render(<App network={network} />);
   await connect(validToken);
   await openLesson(1, 1);
