@@ -1007,7 +1007,7 @@ ez-dk-citizen/
 │   └── caddy/
 │
 ├── .github/workflows/
-├── CONTEXT.md
+├── GLOSSARY.md
 └── AGENTS.md
 ```
 
@@ -1730,7 +1730,7 @@ Then run once per repository:
 /setup-matt-pocock-skills
 ```
 
-Use this `CONTEXT.md` as the canonical domain document unless repository setup explicitly chooses another location.
+Use this `GLOSSARY.md` as the canonical domain document unless repository setup explicitly chooses another location.
 
 ## Recommended skills for this project
 
