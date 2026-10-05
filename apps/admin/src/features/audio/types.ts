@@ -1,2 +1,4 @@
 // The Lesson and Language that current audio is read for and an upload targets.
-export type AudioTarget = { lessonId: number; languageCode: string };
+import type { LanguageCode } from "../../shared/lib/languages";
+
+export type AudioTarget = { lessonId: number; languageCode: LanguageCode };

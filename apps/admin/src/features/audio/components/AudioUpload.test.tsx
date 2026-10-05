@@ -9,38 +9,24 @@ import {
   connect,
   lessonDetail,
   fakeBackend,
-  holdRequests,
+  hold,
+  storageOutage,
   openLesson,
   type,
   tab,
   textForm,
   thaiText,
+  danishText,
   lawSource,
+  mp3File,
+  uploadPanel,
+  chooseFile,
+  fileInput,
+  uploadButton,
 } from "../../../shared/test/support";
 
 const intentPath = "/api/admin/media/upload-intents";
 
-function mp3(name = "chapter-1.mp3", size = 2048, type = "") {
-  const file = new File(["x"], name, { type });
-  Object.defineProperty(file, "size", { value: size });
-  return file;
-}
-
-function uploadPanel() {
-  return screen.getByRole("region", { name: "Upload audio" });
-}
-
-function fileInput() {
-  return within(uploadPanel()).getByLabelText("MP3 file") as HTMLInputElement;
-}
-
-function uploadButton() {
-  return within(uploadPanel()).getByRole("button", { name: "Upload" });
-}
-
-function choose(file: File) {
-  fireEvent.change(fileInput(), { target: { files: [file] } });
-}
 
 async function open(backend: ReturnType<typeof fakeBackend>) {
   render(<App network={backend.network} />);
@@ -54,15 +40,15 @@ test("files that are not .mp3, are empty, or exceed 50 MiB are rejected before a
   const sent = backend.requests.length;
 
   for (const [file, message] of [
-    [mp3("narration.wav", 2048, "audio/wav"), "Choose an .mp3 file."],
-    [mp3("empty.mp3", 0), "The file is empty."],
-    [mp3("huge.mp3", 50 * 1024 * 1024 + 1), "The file is larger than 50 MiB."],
+    [mp3File("narration.wav", 2048, "audio/wav"), "Choose an .mp3 file."],
+    [mp3File("empty.mp3", 0), "The file is empty."],
+    [mp3File("huge.mp3", 50 * 1024 * 1024 + 1), "The file is larger than 50 MiB."],
   ] as const) {
-    choose(file);
+    chooseFile(file);
     expect(within(uploadPanel()).getByRole("alert").textContent).toBe(message);
     expect(uploadButton()).toHaveProperty("disabled", true);
   }
-  choose(mp3("exactly-50-mib.mp3", 50 * 1024 * 1024));
+  chooseFile(mp3File("exactly-50-mib.mp3", 50 * 1024 * 1024));
   expect(within(uploadPanel()).queryByRole("alert")).toBeNull();
   expect(uploadButton()).toHaveProperty("disabled", false);
   expect(backend.requests.length).toBe(sent);
@@ -98,10 +84,10 @@ test("an upload goes Uploading with progress, then Finalizing, then Complete, st
   const backend = fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]);
   await open(backend);
   await within(screen.getByRole("region", { name: "Current audio" })).findByText("No audio yet for this Language.");
-  const file = mp3("chapter-1.mp3", 2048);
+  const file = mp3File("chapter-1.mp3", 2048);
 
-  const releaseIntent = holdRequests(backend.network, (request) => request.path === intentPath);
-  choose(file);
+  const releaseIntent = hold(backend.network, (request) => request.path === intentPath);
+  chooseFile(file);
   fireEvent.click(uploadButton());
   expect(within(uploadPanel()).getByRole("status").textContent).toBe("Preparing the upload of chapter-1.mp3…");
   expect(within(uploadPanel()).queryByRole("progressbar")).toBeNull();
@@ -126,7 +112,7 @@ test("an upload goes Uploading with progress, then Finalizing, then Complete, st
   await waitFor(() => expect(within(uploadPanel()).getByRole("status").textContent).toBe("Uploading chapter-1.mp3: 42%"));
   expect(within(uploadPanel()).getByRole("progressbar", { name: "Upload progress" })).toHaveProperty("value", 42);
 
-  const releaseCompletion = holdRequests(backend.network, (request) => request.path.endsWith("/complete"));
+  const releaseCompletion = hold(backend.network, (request) => request.path.endsWith("/complete"));
   upload!.finish(200);
   await waitFor(() => expect(within(uploadPanel()).getByRole("status").textContent).toBe("Finalizing the upload…"));
   expect(screen.queryByText(/Upload complete/)).toBeNull();
@@ -152,7 +138,7 @@ test("the Lesson and Language stay locked, and no second upload starts, until th
   const backend = fakeBackend([lessonDetail(1, { lessonTexts: [thaiText], lessonSources: [{ ...lawSource, pageFrom: null, pageTo: null, sectionReference: null }] })]);
   await open(backend);
 
-  choose(mp3());
+  chooseFile(mp3File());
   fireEvent.click(uploadButton());
   await waitFor(() => expect(backend.uploads).toHaveLength(1));
 
@@ -206,12 +192,12 @@ test.each([
       "intent" in failure && request.path === intentPath
         ? problem(502, "data_service_unavailable", "The Data Service is unavailable.", "req-502")
         : "complete" in failure && request.path.endsWith("/complete")
-          ? problem(503, "storage_unavailable", "Storage is unavailable.", "req-503")
+          ? storageOutage()
           : undefined,
   });
   await open(backend);
 
-  choose(mp3());
+  chooseFile(mp3File());
   fireEvent.click(uploadButton());
   if (!("intent" in failure)) {
     await waitFor(() => expect(backend.uploads).toHaveLength(1));
@@ -229,12 +215,12 @@ test.each([
 
 test("after a failure, only Start new upload begins another Upload Intent, and the failure survives a Language switch", async () => {
   const backend = fakeBackend([
-    lessonDetail(1, { lessonTexts: [thaiText, { languageCode: "da", title: "Kapitel 1", content: "Indhold" }] }),
+    lessonDetail(1, { lessonTexts: [thaiText, danishText] }),
   ]);
   await open(backend);
   const intents = () => backend.requests.filter((request) => request.path === intentPath);
 
-  choose(mp3());
+  chooseFile(mp3File());
   fireEvent.click(uploadButton());
   await waitFor(() => expect(backend.uploads).toHaveLength(1));
   backend.uploads[0]!.fail();
@@ -254,7 +240,7 @@ test("after a failure, only Start new upload begins another Upload Intent, and t
   fireEvent.click(within(uploadPanel()).getByRole("button", { name: "Start new upload" }));
   expect(within(uploadPanel()).queryByRole("alert")).toBeNull();
   expect(uploadButton()).toHaveProperty("disabled", true);
-  choose(mp3("retake.mp3"));
+  chooseFile(mp3File("retake.mp3"));
   fireEvent.click(uploadButton());
   await waitFor(() => expect(intents()).toHaveLength(2));
   expect(intents()[1]!.body).toMatchObject({ languageCode: "th", originalFilename: "retake.mp3" });
@@ -262,11 +248,11 @@ test("after a failure, only Start new upload begins another Upload Intent, and t
 
 test("a file chosen for one Language is cleared when another Language is selected", async () => {
   const backend = fakeBackend([
-    lessonDetail(1, { lessonTexts: [thaiText, { languageCode: "da", title: "Kapitel 1", content: "Indhold" }] }),
+    lessonDetail(1, { lessonTexts: [thaiText, danishText] }),
   ]);
   await open(backend);
 
-  choose(mp3());
+  chooseFile(mp3File());
   expect(uploadButton()).toHaveProperty("disabled", false);
   fireEvent.click(tab("da"));
   expect(uploadButton()).toHaveProperty("disabled", true);

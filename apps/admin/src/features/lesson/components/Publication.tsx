@@ -21,14 +21,14 @@ export function Publication({
   call,
   lesson,
   dirty,
-  uploading,
+  busy,
   onChange,
 }: {
   call: Call;
   lesson: LessonDetail;
-  // Publish waits for every edit to be saved; both actions wait for an active upload.
+  // Publish waits for every edit to be saved; both actions wait for an upload or detach in progress.
   dirty: boolean;
-  uploading: boolean;
+  busy: boolean;
   onChange: (lesson: LessonDetail) => void;
 }) {
   const transitioning = useAction<LessonStatus>();
@@ -50,7 +50,7 @@ export function Publication({
     );
   }
 
-  const busy = uploading || transitioning.pending !== null;
+  const waiting = busy || transitioning.pending !== null;
   const confirmArchive = () =>
     window.confirm(
       dirty ? `${archiveWarning} Unsaved changes on this Lesson will be discarded.` : archiveWarning,
@@ -68,17 +68,17 @@ export function Publication({
         <li>Danish or English Lesson Text (optional)</li>
       </ul>
       {lesson.status === "ARCHIVED" && <p>This Lesson is archived and read-only.</p>}
-      {uploading && <p>Publishing and archiving wait until the upload finishes.</p>}
+      {busy && <p>Publishing and archiving wait until the upload or detach in progress finishes.</p>}
       {dirty && lesson.status === "DRAFT" && <p>Save every change before publishing.</p>}
       {lesson.status === "DRAFT" && (
-        <button type="button" disabled={dirty || busy} onClick={() => transition("PUBLISHED")}>
+        <button type="button" disabled={dirty || waiting} onClick={() => transition("PUBLISHED")}>
           Publish
         </button>
       )}
       {lesson.status !== "ARCHIVED" && (
         <button
           type="button"
-          disabled={busy}
+          disabled={waiting}
           onClick={() => confirmArchive() && transition("ARCHIVED")}
         >
           Archive

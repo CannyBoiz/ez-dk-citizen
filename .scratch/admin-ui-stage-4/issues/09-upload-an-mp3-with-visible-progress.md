@@ -8,15 +8,15 @@ See the spec section "Upload workflow" and user stories 45–55 and 59.
 
 **Blocked by:** 08 — Show and play the current Lesson Audio
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Non-`.mp3`, empty, and over-50-MiB files are rejected before any request
-- [ ] Upload is unavailable until the selected Language's Lesson Text is saved and not dirty, and unavailable on Archived Lessons
-- [ ] The Upload Intent always declares `audio/mpeg` with the file's name and exact size
-- [ ] The S3 PUT reports progress, sends the signed headers except `Content-Length`, and never passes through the BFF
-- [ ] The panel shows Uploading with progress, then Finalizing, then Complete
-- [ ] Completion is sent with the original Lesson and Language even if the admin tries to change the selection
-- [ ] Complete appears only after completion returns `200`, and the audio panel then shows the new current rendition
-- [ ] A second upload cannot start while one is active, and the Lesson and Language selection is locked during Uploading and Finalizing
-- [ ] Any failure shows a Failed state and never reports success
-- [ ] Whole-app tests cover file rejection, the Lesson Text precondition, progress, the full state sequence, the target lock, single-upload enforcement, and Archived disabling
+- [x] Non-`.mp3`, empty, and over-50-MiB files are rejected before any request
+- [x] Upload is unavailable until the selected Language's Lesson Text is saved and not dirty, and unavailable on Archived Lessons
+- [x] The Upload Intent always declares `audio/mpeg` with the file's name and exact size
+- [x] The S3 PUT reports progress, sends the signed headers except `Content-Length`, and never passes through the BFF
+- [x] The panel shows Uploading with progress, then Finalizing, then Complete
+- [x] Completion is sent with the original Lesson and Language even if the admin tries to change the selection
+- [x] Complete appears only after completion returns `200`, and the audio panel then shows the new current rendition
+- [x] A second upload cannot start while one is active, and the Lesson and Language selection is locked during Uploading and Finalizing
+- [x] Any failure shows a Failed state and never reports success
+- [x] Whole-app tests cover file rejection, the Lesson Text precondition, progress, the full state sequence, the target lock, single-upload enforcement, and Archived disabling

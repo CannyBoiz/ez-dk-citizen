@@ -15,11 +15,12 @@ import { formatSize } from "../utils/formatSize";
 export function CurrentAudio({
   call,
   target: { lessonId, languageCode },
-  onLoaded,
+  onRead,
 }: {
   call: Call;
   target: AudioTarget;
-  onLoaded: (audio: AdminLessonAudio | null) => void;
+  // The current audio, null when there is none, or undefined when the read failed.
+  onRead: (audio: AdminLessonAudio | null | undefined) => void;
 }) {
   // undefined until the first read settles; null when the Language has no current audio.
   const [audio, setAudio] = useState<AdminLessonAudio | null>();
@@ -35,9 +36,10 @@ export function CurrentAudio({
         adminLessonAudioResponseSchema,
       );
       setAudio(current);
-      onLoaded(current);
+      onRead(current);
     } catch (caught) {
       setError(caught);
+      onRead(undefined);
     }
   }
 

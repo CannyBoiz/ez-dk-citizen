@@ -10,16 +10,16 @@ See the spec section "Admin current-audio read (Data Service and BFF)" and user 
 
 **Blocked by:** 05 — Author localized Lesson Texts
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The Data Service returns the current `READY` rendition for Draft, Published, and Archived Lessons, and none when there is no current rendition or no Lesson Text in that Language; superseded renditions are never returned
-- [ ] A missing Lesson is `404 lesson_not_found` and an unsupported Language is `422 unsupported_language`
-- [ ] The BFF route requires the admin token, generates exactly one Playback URL without an S3 metadata request, sets `Cache-Control: no-store`, and returns only `mediaAssetId`, `audioVersion`, `originalFilename`, `contentType`, `sizeBytes`, `durationMs`, `playbackUrl`, and `playbackExpiresAt`
-- [ ] Storage failures map to `503 storage_unavailable` or `504 storage_timeout`, with the existing secret-safe logging
-- [ ] The shared contract rejects storage identity and unknown fields in the admin audio response
-- [ ] The fake-storage end-to-end tracer reads admin audio on a Draft, and again after the Lesson is archived
-- [ ] The editor shows version, filename, size, and a native player for the selected Language, or a "no audio yet" state
-- [ ] An audio error appears only in the audio panel and leaves unsaved edits intact; **Reload audio** requests fresh authorization
-- [ ] The Admin makes no background Playback URL refresh requests
-- [ ] Saving Lesson Text in a Language with current audio shows the mismatch warning, and the audio panel still shows the same current rendition
-- [ ] Contract, Data Service HTTP (real PostgreSQL), BFF route, and Admin whole-app tests cover the behavior above
+- [x] The Data Service returns the current `READY` rendition for Draft, Published, and Archived Lessons, and none when there is no current rendition or no Lesson Text in that Language; superseded renditions are never returned
+- [x] A missing Lesson is `404 lesson_not_found` and an unsupported Language is `422 unsupported_language`
+- [x] The BFF route requires the admin token, generates exactly one Playback URL without an S3 metadata request, sets `Cache-Control: no-store`, and returns only `mediaAssetId`, `audioVersion`, `originalFilename`, `contentType`, `sizeBytes`, `durationMs`, `playbackUrl`, and `playbackExpiresAt`
+- [x] Storage failures map to `503 storage_unavailable` or `504 storage_timeout`, with the existing secret-safe logging
+- [x] The shared contract rejects storage identity and unknown fields in the admin audio response
+- [x] The fake-storage end-to-end tracer reads admin audio on a Draft, and again after the Lesson is archived
+- [x] The editor shows version, filename, size, and a native player for the selected Language, or a "no audio yet" state
+- [x] An audio error appears only in the audio panel and leaves unsaved edits intact; **Reload audio** requests fresh authorization
+- [x] The Admin makes no background Playback URL refresh requests
+- [x] Saving Lesson Text in a Language with current audio shows the mismatch warning, and the audio panel still shows the same current rendition
+- [x] Contract, Data Service HTTP (real PostgreSQL), BFF route, and Admin whole-app tests cover the behavior above

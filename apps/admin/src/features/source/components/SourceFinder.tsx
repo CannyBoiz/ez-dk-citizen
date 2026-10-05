@@ -26,7 +26,8 @@ export function SourceFinder({
   // Disables creating and attaching, as on a Lesson that is not a Draft.
   readOnly?: boolean;
   // Present inside a Lesson editor; the standalone Sources screen only finds and creates.
-  attach?: { attachedIds: number[]; onAttach: (sourceId: number) => Promise<void> };
+  // `busy` holds Attach back while another change to the Lesson finishes.
+  attach?: { attachedIds: number[]; busy: boolean; onAttach: (sourceId: number) => Promise<void> };
 }) {
   const [sources, setSources] = useState<SourceResponse[] | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -118,7 +119,7 @@ export function SourceFinder({
                   <button
                     type="button"
                     aria-label={`Attach ${source.url}`}
-                    disabled={readOnly || attached || attaching.pending !== null}
+                    disabled={readOnly || attach.busy || attached || attaching.pending !== null}
                     onClick={() => attaching.run(source.id, () => attach.onAttach(source.id))}
                   >
                     {attached ? "Attached" : "Attach"}

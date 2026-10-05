@@ -19,7 +19,12 @@ import {
   finder,
   newSourceForm,
   canonicalEditControls,
-  holdRequests,
+  hold,
+  settle,
+  structureForm,
+  textForm,
+  thaiText,
+  bookSource,
 } from "../../../shared/test/support";
 
 const cited = (source: SourceResponse, overrides = {}) => ({
@@ -78,7 +83,7 @@ test("a duplicate URL of an attached Source says it is already attached", async 
 test("a duplicate URL is reported at once, without waiting for the Source list to reload", async () => {
   const backend = fakeBackend([lessonDetail(1, { lessonSources: [cited(guide)] })]);
   await openDraft(backend);
-  const releaseReload = holdRequests(
+  const releaseReload = hold(
     backend.network,
     (request) => request.method === "GET" && request.path === "/api/admin/sources",
   );
@@ -199,7 +204,7 @@ test("detaching a Source removes it from the Draft and keeps the canonical Sourc
   fireEvent.click(screen.getByRole("button", { name: `Detach ${law.url}` }));
 
   await waitFor(() => expect(lessonSourceUrls()).toEqual([guide.url]));
-  expect(backend.requests.at(-1)).toEqual({
+  expect(backend.requests.find((request) => request.method === "DELETE")).toEqual({
     method: "DELETE",
     path: "/api/admin/lessons/1/sources/1",
     token: validToken,
@@ -222,6 +227,79 @@ test("detaching a Lesson Source with unsaved references asks before discarding t
   await waitFor(() => expect(lessonSourceUrls()).toEqual([]));
   expect(confirm).toHaveBeenCalledTimes(2);
   await waitFor(() => expect(unloadBlocked()).toBe(false));
+});
+
+test("Detach waits for Lesson changes in flight, and changes wait for a detach", async () => {
+  const backend = fakeBackend([lessonDetail(1, { lessonSources: [cited(law), cited(guide)] })], {
+    sources: [bookSource],
+  });
+  await openDraft(backend);
+  const detachLaw = () => screen.getByRole("button", { name: `Detach ${law.url}` });
+
+  const releaseSave = hold(backend.network, (request) => request.method === "PUT", "response");
+  type("Page from", "7", lessonSourceForm(guide.url));
+  fireEvent.click(within(lessonSourceForm(guide.url)).getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(detachLaw()).toHaveProperty("disabled", true));
+  releaseSave();
+  await waitFor(() => expect(detachLaw()).toHaveProperty("disabled", false));
+
+  const releaseDelete = hold(backend.network, (request) => request.method === "DELETE");
+  fireEvent.click(detachLaw());
+  await waitFor(() =>
+    expect(within(lessonSourceForm(guide.url)).getByLabelText("Page from")).toHaveProperty("readOnly", true),
+  );
+  expect(within(structureForm()).queryByRole("button", { name: "Save" })).toBeNull();
+  expect(attachButton(bookSource.url)).toHaveProperty("disabled", true);
+  expect(within(screen.getByRole("region", { name: "Publication" })).getByRole("button", { name: "Publish" })).toHaveProperty(
+    "disabled",
+    true,
+  );
+
+  releaseDelete();
+  await waitFor(() => expect(lessonSourceUrls()).toEqual([guide.url]));
+  expect(within(lessonSourceForm(guide.url)).getByLabelText("Page from")).toHaveProperty("readOnly", false);
+  expect(attachButton(bookSource.url)).toHaveProperty("disabled", false);
+  expect(within(lessonSourceForm(guide.url)).getByLabelText("Page from")).toHaveProperty("value", "7");
+});
+
+test("a New Source draft keeps its text and its unsaved-changes warnings while a detach runs", async () => {
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  const backend = fakeBackend([lessonDetail(1, { lessonSources: [cited(law)] })], { sources: [guide] });
+  await openDraft(backend);
+  const draftUrl = () => within(newSourceForm()).getByLabelText("Source URL");
+  type("Source URL", "https://example.dk/half-typed", newSourceForm());
+
+  const releaseDelete = hold(backend.network, (request) => request.method === "DELETE");
+  fireEvent.click(screen.getByRole("button", { name: `Detach ${law.url}` }));
+  await waitFor(() => expect(attachButton(guide.url)).toHaveProperty("disabled", true));
+
+  expect(draftUrl()).toHaveProperty("value", "https://example.dk/half-typed");
+  expect(unloadBlocked()).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+  expect(confirm).toHaveBeenCalledOnce();
+
+  releaseDelete();
+  await waitFor(() => expect(lessonSourceUrls()).toEqual([]));
+  expect(attachButton(guide.url)).toHaveProperty("disabled", false);
+  expect(draftUrl()).toHaveProperty("value", "https://example.dk/half-typed");
+});
+
+test("a Source attached again stays shown when a newer save answers before the attach", async () => {
+  const backend = fakeBackend([lessonDetail(1, { lessonTexts: [thaiText], lessonSources: [cited(law), cited(guide)] })]);
+  await openDraft(backend);
+  fireEvent.click(screen.getByRole("button", { name: `Detach ${law.url}` }));
+  await waitFor(() => expect(lessonSourceUrls()).toEqual([guide.url]));
+
+  const releaseAttach = hold(backend.network, (request) => request.path.endsWith("/sources/1"), "response");
+  fireEvent.click(attachButton(law.url));
+  await waitFor(() => expect(backend.requests.some((request) => request.path.endsWith("/sources/1") && request.method === "PUT")).toBe(true));
+  type("Content", "เนื้อหาใหม่", textForm());
+  fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(lessonSourceUrls()).toEqual([law.url, guide.url]));
+
+  releaseAttach();
+  await settle();
+  expect(lessonSourceUrls()).toEqual([law.url, guide.url]);
 });
 
 test("a failed detach keeps the Lesson Source and shows the error", async () => {

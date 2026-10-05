@@ -50,7 +50,7 @@ export function AudioUpload({
   // Why uploading is not possible right now, if it is not.
   unavailable?: string;
   onActiveChange: (active: boolean) => void;
-  onComplete: () => void;
+  onComplete: (target: AudioTarget) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string>();
@@ -129,7 +129,7 @@ export function AudioUpload({
       );
       step({ step: "complete", audioVersion: lessonAudio.audioVersion, ...attempt });
       clearFile();
-      onComplete();
+      onComplete(attempt.target);
     } catch (error) {
       step({ step: "failed", error, ...attempt });
     }

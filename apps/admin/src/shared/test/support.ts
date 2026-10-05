@@ -1,5 +1,5 @@
 // Shared fixtures, a fake Network, and an in-memory BFF for the whole-app tests.
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { expect } from "vitest";
 import type {
   AdminLessonAudio,
@@ -13,7 +13,6 @@ import type {
   UpsertLessonSourceRequest,
 } from "@ez-dk-citizen/api-contracts/schemas";
 
-import { hasLessonText } from "../../features/lesson/utils/lessonTexts";
 import type { BffRequest, BffResponse, Network, ObjectUpload } from "../lib/network";
 
 export const validToken = "correct-token";
@@ -51,7 +50,8 @@ export function fakeNetwork(
   const network: Network = {
     async bff(request) {
       requests.push(request);
-      return respond(request);
+      // A snapshot, as over a real network: later backend changes never reach a sent response.
+      return structuredClone(respond(request));
     },
     putObject(upload) {
       return new Promise((resolve, reject) =>
@@ -66,16 +66,42 @@ export function fakeNetwork(
   return { network, requests, uploads };
 }
 
-// Holds matching BFF requests until the returned release is called.
-export function holdRequests(network: Network, matches: (request: BffRequest) => boolean) {
+// Holds matching BFF calls until the returned release is called: before they reach the backend
+// ("request"), or after the backend has handled them, delaying only the response ("response").
+export function hold(
+  network: Network,
+  matches: (request: BffRequest) => boolean,
+  at: "request" | "response" = "request",
+) {
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
   const bff = network.bff;
   network.bff = async (request) => {
-    if (matches(request)) await held;
-    return bff(request);
+    if (at === "request" && matches(request)) await held;
+    const response = await bff(request);
+    if (at === "response" && matches(request)) await held;
+    return response;
   };
   return release;
+}
+
+// Matches only the first request that `matches` would, so later ones pass straight through.
+export function firstOnly(matches: (request: BffRequest) => boolean) {
+  let matched = false;
+  return (request: BffRequest) => {
+    if (matched || !matches(request)) return false;
+    return (matched = true);
+  };
+}
+
+// Lets pending responses and the updates they cause finish, before asserting that something
+// did not happen.
+export function settle() {
+  return act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
+}
+
+export function storageOutage(requestId = "req-503") {
+  return problem(503, "storage_unavailable", "Storage is unavailable.", requestId);
 }
 
 // Current Lesson Audio as the BFF stores it, keyed by `${lessonId}:${languageCode}`.
@@ -163,33 +189,10 @@ export function fakeBackend(
       ].map((source) => [source.id, source]),
     ).values(),
   ];
-  // The lifecycle rules of the Data Service, including the publication prerequisites.
+  // Every accepted transition succeeds; tests inject the backend's refusals through `override`.
   function transition(lesson: LessonDetail, status: LessonStatus): BffResponse {
-    const allowed =
-      lesson.status === "DRAFT" || (lesson.status === "PUBLISHED" && status === "ARCHIVED");
-    if (!allowed)
-      return problem(409, "lesson_lifecycle_conflict", "Lesson status transition is not allowed.", "req-409");
-    if (status === "PUBLISHED") {
-      const errors = [
-        ...(hasLessonText(lesson, "th")
-          ? []
-          : [{ path: ["lessonTexts", "th"], message: "A Thai Lesson Text is required." }]),
-        ...(lesson.lessonSources.length
-          ? []
-          : [{ path: ["lessonSources"], message: "At least one Lesson Source is required." }]),
-      ];
-      if (errors.length)
-        return {
-          status: 409,
-          body: {
-            ...problem(409, "lesson_publication_incomplete", "Lesson is missing publication prerequisites.", "req-409-incomplete").body,
-            errors,
-          },
-        };
-      if (lessons.some((other) => other.chapter === lesson.chapter && other.status === "PUBLISHED"))
-        return problem(409, "published_lesson_conflict", "This chapter already has a Published Lesson.", "req-409-published");
-    }
     lesson.status = status;
+    touch(lesson);
     return { status: 200, body: lesson };
   }
 
@@ -312,6 +315,7 @@ export function fakeBackend(
       const others = lesson.lessonSources.filter((cited) => cited.id !== source.id);
       if (request.method === "DELETE") {
         lesson.lessonSources = others;
+        touch(lesson);
         return { status: 204, body: null };
       }
       const references = request.body as UpsertLessonSourceRequest;
@@ -331,9 +335,15 @@ export function fakeBackend(
       ];
       lesson.availableLanguageCodes = lesson.lessonTexts.map((text) => text.languageCode).sort();
     }
+    touch(lesson);
     return { status: 200, body: lesson };
   });
   return { ...network, currentAudio };
+}
+
+// Like the Data Service, every change moves a Lesson's updatedAt strictly forward.
+function touch(lesson: LessonDetail) {
+  lesson.updatedAt = new Date(Math.max(Date.now(), Date.parse(lesson.updatedAt) + 1)).toISOString();
 }
 
 // Opens a Lesson and waits for the editor's own first reads, so they never race a test's requests.
@@ -363,6 +373,7 @@ export function unloadBlocked() {
 
 
 export const thaiText = { languageCode: "th", title: "บทที่ 1", content: "เนื้อหาภาษาไทย" };
+export const danishText = { languageCode: "da", title: "Kapitel 1", content: "Indhold" };
 
 export function tab(languageCode: string) {
   return screen.getByRole("tab", { name: new RegExp(`^${languageCode}\\b`) });
@@ -410,4 +421,27 @@ export function newSourceForm() {
 // Canonical Sources are found, created, and reused only.
 export function canonicalEditControls() {
   return within(finder()).queryAllByRole("button", { name: /edit|delete|remove|update|rename/i });
+}
+
+// A chosen file whose size is set without allocating it.
+export function mp3File(name = "chapter-1.mp3", size = 2048, type = "") {
+  const file = new File(["x"], name, { type });
+  Object.defineProperty(file, "size", { value: size });
+  return file;
+}
+
+export function uploadPanel() {
+  return screen.getByRole("region", { name: "Upload audio" });
+}
+
+export function fileInput() {
+  return within(uploadPanel()).getByLabelText("MP3 file") as HTMLInputElement;
+}
+
+export function uploadButton() {
+  return within(uploadPanel()).getByRole("button", { name: "Upload" });
+}
+
+export function chooseFile(file: File) {
+  fireEvent.change(fileInput(), { target: { files: [file] } });
 }

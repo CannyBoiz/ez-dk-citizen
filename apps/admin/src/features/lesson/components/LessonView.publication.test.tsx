@@ -1,5 +1,5 @@
 // The publication checklist, Publish, and Archive in the Lesson editor (ticket 07).
-import type { LessonDetail } from "@ez-dk-citizen/api-contracts/schemas";
+import type { LessonDetail, PatchLessonRequest } from "@ez-dk-citizen/api-contracts/schemas";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
@@ -19,7 +19,12 @@ import {
   newSourceForm,
   rows,
   unloadBlocked,
+  problem,
+  hold,
+  storedAudio,
+  settle,
 } from "../../../shared/test/support";
+import type { BffRequest, BffResponse } from "../../../shared/lib/network";
 
 const citedLaw = { ...lawSource, pageFrom: null, pageTo: null, sectionReference: null };
 const complete = (id: number, overrides: Partial<LessonDetail> = {}) =>
@@ -115,8 +120,31 @@ test("publishing a complete Draft makes it Published and read-only, and the cata
   expect(rows()).toEqual([["1", "1", "Published", "th"]]);
 });
 
+// The backend's publication refusals, injected for a PATCH that publishes.
+const refusePublication = (response: BffResponse) => ({
+  override: (request: BffRequest) =>
+    request.method === "PATCH" && (request.body as PatchLessonRequest).status === "PUBLISHED"
+      ? response
+      : undefined,
+});
+
 test("an incomplete Draft shows the backend's refusal with each missing requirement", async () => {
-  await openFirst(fakeBackend([lessonDetail(1)]));
+  const incomplete = problem(409, "lesson_publication_incomplete", "Lesson is missing publication prerequisites.", "req-409-incomplete");
+  await openFirst(
+    fakeBackend(
+      [lessonDetail(1)],
+      refusePublication({
+        ...incomplete,
+        body: {
+          ...incomplete.body,
+          errors: [
+            { path: ["lessonTexts", "th"], message: "A Thai Lesson Text is required." },
+            { path: ["lessonSources"], message: "At least one Lesson Source is required." },
+          ],
+        },
+      }),
+    ),
+  );
 
   fireEvent.click(publishButton());
 
@@ -130,7 +158,16 @@ test("an incomplete Draft shows the backend's refusal with each missing requirem
 });
 
 test("another Published version of the chapter is reported, and no action replaces it in one step", async () => {
-  await openFirst(fakeBackend([complete(1, { status: "PUBLISHED" }), complete(2, { chapter: 1, version: 2 })]), 1, 2);
+  await openFirst(
+    fakeBackend(
+      [complete(1, { status: "PUBLISHED" }), complete(2, { chapter: 1, version: 2 })],
+      refusePublication(
+        problem(409, "published_lesson_conflict", "This chapter already has a Published Lesson.", "req-409-published"),
+      ),
+    ),
+    1,
+    2,
+  );
 
   fireEvent.click(publishButton());
 
@@ -180,6 +217,30 @@ test("archiving with unsaved edits warns that they will be discarded, then disca
   expect(within(textForm()).getByLabelText("Content")).toHaveProperty("value", thaiText.content);
   expect(within(newSourceForm()).getByLabelText("Source URL")).toHaveProperty("value", "");
   await waitFor(() => expect(unloadBlocked()).toBe(false));
+});
+
+test("a save that finishes after archiving cannot reopen the Archived Lesson", async () => {
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const backend = fakeBackend([complete(1)], { audio: { "1:th": storedAudio() } });
+  await openFirst(backend);
+  const releaseSave = hold(backend.network, (request) => request.method === "PUT", "response");
+
+  type("Content", "บันทึกก่อนเก็บถาวร", textForm());
+  fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(backend.requests.some((request) => request.method === "PUT")).toBe(true));
+  fireEvent.click(within(publication()).getByRole("button", { name: "Archive" }));
+  await waitFor(() => expect(screen.getByText("Archived")).toBeTruthy());
+
+  releaseSave();
+  await waitFor(() => expect(within(textForm()).getByLabelText("Content")).toHaveProperty("value", "บันทึกก่อนเก็บถาวร"));
+  // Let the late save and its narration check settle.
+  await settle();
+  expect(screen.getByText("Archived")).toBeTruthy();
+  // Text can no longer change, so there is no narration to warn about.
+  expect(within(screen.getByRole("tabpanel")).queryByRole("status")).toBeNull();
+  expect(within(textForm()).getByLabelText("Content")).toHaveProperty("readOnly", true);
+  expect(within(publication()).queryAllByRole("button")).toEqual([]);
+  expect(within(structureForm()).queryByRole("button", { name: "Save" })).toBeNull();
 });
 
 test("an Archived Lesson stays readable with every mutation disabled", async () => {
