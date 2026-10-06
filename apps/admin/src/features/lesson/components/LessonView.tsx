@@ -109,6 +109,8 @@ export function LessonView({
     }
   }
 
+  // Loads once on mount: Lessons open only from the catalogue, so each mounts afresh.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount only
   useEffect(() => void load(), []);
 
   const saved: Partial<Record<Form, Values>> = lesson
@@ -132,7 +134,7 @@ export function LessonView({
   useEffect(() => {
     onDirtyChange(dirty);
     return () => onDirtyChange(false);
-  }, [dirty]);
+  }, [dirty, onDirtyChange]);
 
   if (lesson === null)
     return (

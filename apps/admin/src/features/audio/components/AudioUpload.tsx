@@ -64,7 +64,7 @@ export function AudioUpload({
     onActiveChange(isActive(next));
   }
 
-  useEffect(() => () => onActiveChange(false), []);
+  useEffect(() => () => onActiveChange(false), [onActiveChange]);
 
   function clearFile() {
     setFile(null);
@@ -73,6 +73,8 @@ export function AudioUpload({
   }
 
   // A file chosen for one Language is never uploaded to another. A failed attempt stays shown.
+  // Runs only when the Language changes; clearFile only resets state and the input.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on Language
   useEffect(() => {
     clearFile();
     setState((current) => (current.step === "complete" ? { step: "idle" } : current));

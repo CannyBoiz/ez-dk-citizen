@@ -16,9 +16,11 @@
     "test:integration": "node scripts/test-postgres-integration.mjs",
     "test:e2e": "node scripts/test-postgres-integration.mjs --end-to-end",
     "test:roles-anywhere": "node --env-file-if-exists=.env scripts/test-roles-anywhere-container.mjs",
-    "test:live-s3": "node --env-file-if-exists=.env scripts/test-live-s3-browser.mjs --preflight && pnpm typecheck && pnpm test && pnpm test:dev && pnpm test:integration && pnpm test:e2e && pnpm build && node --env-file-if-exists=.env scripts/test-live-s3-browser.mjs"
+    "test:live-s3": "node --env-file-if-exists=.env scripts/test-live-s3-browser.mjs --preflight && pnpm typecheck && pnpm test && pnpm test:dev && pnpm test:integration && pnpm test:e2e && pnpm build && node --env-file-if-exists=.env scripts/test-live-s3-browser.mjs",
+    "lint": "biome check",
+    "lint:fix": "biome check --write"
   },
   "devDependencies": {
-    "prettier": "^3.9.6"
+    "@biomejs/biome": "2.5.15"
   }
 }

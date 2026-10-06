@@ -40,7 +40,7 @@ export function SourceFinder({
   useEffect(() => {
     onDirtyChange(dirty);
     return () => onDirtyChange(false);
-  }, [dirty]);
+  }, [dirty, onDirtyChange]);
 
   async function load() {
     setError(null);
@@ -55,6 +55,8 @@ export function SourceFinder({
     }
   }
 
+  // Loads once on mount; after that, only create changes the list.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount only
   useEffect(() => void load(), []);
 
   async function create({ url, publishedAt }: Values) {

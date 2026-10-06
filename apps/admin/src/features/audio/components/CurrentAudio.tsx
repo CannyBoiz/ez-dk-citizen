@@ -43,6 +43,9 @@ export function CurrentAudio({
     }
   }
 
+  // Reads once on mount: LessonView remounts this panel by key for another Language or a new
+  // upload.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount only
   useEffect(() => void load(), []);
 
   return (
@@ -56,6 +59,8 @@ export function CurrentAudio({
             Audio version {audio.audioVersion} · {audio.originalFilename} ·{" "}
             {formatSize(audio.sizeBytes)}
           </p>
+          {/* Narration of the Lesson Text, which is its transcript. */}
+          {/* biome-ignore lint/a11y/useMediaCaption: transcript */}
           <audio
             controls
             preload="none"

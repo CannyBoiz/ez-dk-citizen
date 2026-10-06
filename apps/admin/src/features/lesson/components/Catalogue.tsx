@@ -49,6 +49,7 @@ export function Catalogue({
   }
 
   // Load once on connect; re-entering the token must not reset this screen.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount only
   useEffect(() => void load(), []);
 
   const chapters = [...new Set(lessons?.map((lesson) => lesson.chapter))].sort((a, b) => a - b);

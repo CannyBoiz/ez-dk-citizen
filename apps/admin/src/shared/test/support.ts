@@ -90,7 +90,8 @@ export function firstOnly(matches: (request: BffRequest) => boolean) {
   let matched = false;
   return (request: BffRequest) => {
     if (matched || !matches(request)) return false;
-    return (matched = true);
+    matched = true;
+    return true;
   };
 }
 

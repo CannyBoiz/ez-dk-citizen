@@ -77,6 +77,7 @@ export function EditForm({
             ? error.errors?.find((entry) => entry.path[0] === field.name)?.message
             : undefined);
         const props = {
+          id: `${id}-${field.name}-control`,
           value: value[field.name] ?? "",
           readOnly: readOnly || busy,
           "aria-invalid": message !== undefined,
@@ -86,7 +87,7 @@ export function EditForm({
         };
         return (
           <div key={field.name}>
-            <label>
+            <label htmlFor={props.id}>
               {field.label}
               {field.kind === "textarea" ? (
                 <textarea rows={12} {...props} />

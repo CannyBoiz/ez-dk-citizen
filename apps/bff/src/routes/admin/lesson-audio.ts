@@ -1,5 +1,6 @@
 import {
   adminLessonAudioResponseSchema,
+  type CurrentLessonAudioResponse,
   lessonLanguageParamsSchema,
   validateRequest,
   type RequestIdEnvironment,
@@ -32,7 +33,7 @@ export function createAdminLessonAudioRoutes(
           "The Data Service is unavailable.",
         );
       }
-      let current;
+      let current: CurrentLessonAudioResponse;
       try {
         current = await options.dataServiceClient.getCurrentLessonAudio(
           lessonId,
