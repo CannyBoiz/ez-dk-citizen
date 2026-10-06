@@ -3,12 +3,14 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createProjectName, withTeardown } from "./lib/docker-test-stack.mjs";
+
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
 const composeFile = path.join(repositoryRoot, "docker-compose.yml");
-const projectName = `ez-dk-citizen-integration-${process.pid}-${Date.now().toString(36)}`;
+const projectName = createProjectName("ez-dk-citizen-integration-");
 const databaseName = "ez_dk_citizen_integration";
 const databaseUser = "ez_dk_citizen_integration";
 const databasePassword = "integration-only-password";
@@ -38,97 +40,91 @@ assertPrivateCompiledTopology(
   ),
 );
 
-let integrationFailure;
-
-try {
-  await runDocker([
-    ...composeArguments,
-    "up",
-    "--detach",
-    "--build",
-    "--wait",
-    "--wait-timeout",
-    "120",
-    endToEnd ? "bff" : "hono-data",
-  ]);
-  if (endToEnd) {
-    await verifyBffReadiness();
-    await verifyDistinctCredentials();
+await withTeardown(
+  async () => {
     await runDocker([
       ...composeArguments,
-      "exec",
-      "-T",
-      "bff",
-      "node",
-      "-e",
-      tracer(),
+      "up",
+      "--detach",
+      "--build",
+      "--wait",
+      "--wait-timeout",
+      "120",
+      endToEnd ? "bff" : "hono-data",
     ]);
-    await runDocker([
-      ...composeArguments,
-      "exec",
-      "-T",
-      "bff",
-      "node",
-      "--input-type=module",
-      "-e",
-      completionTracer(),
-    ]);
-    await verifyTracerLogs();
-  } else {
-    await runDocker([
+    if (endToEnd) {
+      await verifyBffReadiness();
+      await verifyDistinctCredentials();
+      await runDocker([
+        ...composeArguments,
+        "exec",
+        "-T",
+        "bff",
+        "node",
+        "-e",
+        tracer(),
+      ]);
+      await runDocker([
+        ...composeArguments,
+        "exec",
+        "-T",
+        "bff",
+        "node",
+        "--input-type=module",
+        "-e",
+        completionTracer(),
+      ]);
+      await verifyTracerLogs();
+    } else {
+      await runDocker([
+        ...composeArguments,
+        "--profile",
+        "integration",
+        "run",
+        "--no-deps",
+        "--rm",
+        "postgres-check",
+      ]);
+      await runDocker([
+        ...composeArguments,
+        "--profile",
+        "integration",
+        "run",
+        "--no-deps",
+        "--rm",
+        "postgres-test",
+      ]);
+      await runDocker([
+        ...composeArguments,
+        "run",
+        "--no-deps",
+        "--rm",
+        "migrate",
+      ]);
+      await runDocker([
+        ...composeArguments,
+        "--profile",
+        "integration",
+        "run",
+        "--no-deps",
+        "--rm",
+        "postgres-check",
+      ]);
+      await verifyFailedMigrationBlocksDataService();
+    }
+  },
+  // A plain `down` skips containers from inactive profiles, such as
+  // `integration-failure`, so enable every profile for teardown.
+  () =>
+    runDocker([
       ...composeArguments,
       "--profile",
-      "integration",
-      "run",
-      "--no-deps",
-      "--rm",
-      "postgres-check",
-    ]);
-    await runDocker([
-      ...composeArguments,
-      "--profile",
-      "integration",
-      "run",
-      "--no-deps",
-      "--rm",
-      "postgres-test",
-    ]);
-    await runDocker([
-      ...composeArguments,
-      "run",
-      "--no-deps",
-      "--rm",
-      "migrate",
-    ]);
-    await runDocker([
-      ...composeArguments,
-      "--profile",
-      "integration",
-      "run",
-      "--no-deps",
-      "--rm",
-      "postgres-check",
-    ]);
-    await verifyFailedMigrationBlocksDataService();
-  }
-} catch (error) {
-  integrationFailure = error;
-} finally {
-  try {
-    await runDocker([
-      ...composeArguments,
+      "*",
       "down",
       "--volumes",
       "--remove-orphans",
-    ]);
-  } catch (cleanupError) {
-    integrationFailure ??= cleanupError;
-  }
-}
-
-if (integrationFailure) {
-  throw integrationFailure;
-}
+    ]),
+);
 
 console.log(
   endToEnd
