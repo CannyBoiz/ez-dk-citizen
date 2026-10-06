@@ -1,10 +1,10 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import {
   livenessResponseSchema,
   problemDetailsSchema,
   readinessResponseSchema,
 } from "@ez-dk-citizen/api-contracts";
-import assert from "node:assert/strict";
-import { test } from "node:test";
 
 import { createDataApp } from "./app.js";
 

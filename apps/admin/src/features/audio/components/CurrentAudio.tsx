@@ -2,8 +2,8 @@
 // and played straight from storage. Errors stay in this panel. Playback URLs are refreshed
 // only by Reload audio, never in the background.
 import {
-  adminLessonAudioResponseSchema,
   type AdminLessonAudio,
+  adminLessonAudioResponseSchema,
 } from "@ez-dk-citizen/api-contracts/schemas";
 import { useEffect, useState } from "react";
 
@@ -32,7 +32,10 @@ export function CurrentAudio({
     setPlaybackFailed(false);
     try {
       const { audio: current } = await call(
-        { method: "GET", path: `/api/admin/lessons/${lessonId}/audio/${languageCode}` },
+        {
+          method: "GET",
+          path: `/api/admin/lessons/${lessonId}/audio/${languageCode}`,
+        },
         adminLessonAudioResponseSchema,
       );
       setAudio(current);
@@ -72,7 +75,8 @@ export function CurrentAudio({
       )}
       {playbackFailed && (
         <p role="alert">
-          The audio could not be played. Its Playback URL may have expired; use Reload audio.
+          The audio could not be played. Its Playback URL may have expired; use
+          Reload audio.
         </p>
       )}
       {error !== null && <ErrorMessage error={error} />}

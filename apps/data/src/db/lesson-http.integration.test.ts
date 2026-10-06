@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { createDataApp } from "../app.js";
 import { useIntegrationDatabase } from "./integration-test-database.js";
-import { lesson as lessonTable, lessonAudio, mediaAsset } from "./schema.js";
+import { lessonAudio, lesson as lessonTable, mediaAsset } from "./schema.js";
 
 const database = useIntegrationDatabase();
 const app = createDataApp(async () => undefined, {

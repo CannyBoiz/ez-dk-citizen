@@ -1,6 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { randomUUID } from "node:crypto";
 
 const require = createRequire("/app/package.json");
 const { serve } = require("@hono/node-server");

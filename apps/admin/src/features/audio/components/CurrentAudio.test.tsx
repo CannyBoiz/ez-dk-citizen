@@ -1,30 +1,37 @@
 // Showing and playing the current Lesson Audio for the selected Language, and the narration
 // warning that depends on knowing it (ticket 08).
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
 import { App } from "../../../app/App";
 import {
-  validToken,
+  chooseFile,
   connect,
-  lessonDetail,
+  danishText,
   fakeBackend,
+  firstOnly,
+  hold,
+  lessonDetail,
+  mp3File,
   openLesson,
-  type,
+  settle,
+  storageOutage,
+  storedAudio,
   structureForm,
   tab,
   textForm,
   thaiText,
-  storedAudio,
-  hold,
-  storageOutage,
+  type,
   uploadButton,
-  mp3File,
   uploadPanel,
-  chooseFile,
-  danishText,
-  firstOnly,
-  settle,
+  validToken,
 } from "../../../shared/test/support";
 
 function audioPanel() {
@@ -32,11 +39,15 @@ function audioPanel() {
 }
 
 function player() {
-  return within(audioPanel()).getByLabelText("Current audio player") as HTMLAudioElement;
+  return within(audioPanel()).getByLabelText(
+    "Current audio player",
+  ) as HTMLAudioElement;
 }
 
 function audioRequests(backend: ReturnType<typeof fakeBackend>) {
-  return backend.requests.filter((request) => request.path.includes("/audio/")).map((request) => request.path);
+  return backend.requests
+    .filter((request) => request.path.includes("/audio/"))
+    .map((request) => request.path);
 }
 
 // The narration warning in the selected Language's tab, if shown.
@@ -57,20 +68,37 @@ async function open(backend: ReturnType<typeof fakeBackend>) {
 test.each(["DRAFT", "PUBLISHED", "ARCHIVED"] as const)(
   "a %s Lesson shows the current audio of the selected Language with a native player",
   async (status) => {
-    const backend = fakeBackend([lessonDetail(1, { status, lessonTexts: [thaiText] })], {
-      audio: { "1:th": storedAudio({ audioVersion: 2, originalFilename: "chapter-1-th.mp3" }) },
-    });
+    const backend = fakeBackend(
+      [lessonDetail(1, { status, lessonTexts: [thaiText] })],
+      {
+        audio: {
+          "1:th": storedAudio({
+            audioVersion: 2,
+            originalFilename: "chapter-1-th.mp3",
+          }),
+        },
+      },
+    );
     await open(backend);
 
-    await within(audioPanel()).findByText("Audio version 2 · chapter-1-th.mp3 · 3.0 MiB");
+    await within(audioPanel()).findByText(
+      "Audio version 2 · chapter-1-th.mp3 · 3.0 MiB",
+    );
     expect(player().controls).toBe(true);
-    expect(player().getAttribute("src")).toBe("https://s3.invalid/audio/41.mp3?playback=1");
+    expect(player().getAttribute("src")).toBe(
+      "https://s3.invalid/audio/41.mp3?playback=1",
+    );
     expect(audioRequests(backend)).toEqual(["/api/admin/lessons/1/audio/th"]);
 
     fireEvent.click(tab("da"));
     await within(audioPanel()).findByText("No audio yet for this Language.");
-    expect(within(audioPanel()).queryByLabelText("Current audio player")).toBeNull();
-    expect(audioRequests(backend)).toEqual(["/api/admin/lessons/1/audio/th", "/api/admin/lessons/1/audio/da"]);
+    expect(
+      within(audioPanel()).queryByLabelText("Current audio player"),
+    ).toBeNull();
+    expect(audioRequests(backend)).toEqual([
+      "/api/admin/lessons/1/audio/th",
+      "/api/admin/lessons/1/audio/da",
+    ]);
   },
 );
 
@@ -90,32 +118,50 @@ test("an audio load error stays in the audio panel, keeps unsaved edits, and Rel
   expect(alert.textContent).toContain("Storage is unavailable.");
   expect(alert.textContent).toContain("req-503-audio");
   expect(screen.getAllByRole("alert")).toHaveLength(1);
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty("value", "7");
+  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+    "value",
+    "7",
+  );
 
   outage = false;
-  fireEvent.click(within(audioPanel()).getByRole("button", { name: "Reload audio" }));
+  fireEvent.click(
+    within(audioPanel()).getByRole("button", { name: "Reload audio" }),
+  );
   await within(audioPanel()).findByLabelText("Current audio player");
   expect(within(audioPanel()).queryByRole("alert")).toBeNull();
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty("value", "7");
+  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+    "value",
+    "7",
+  );
 });
 
 test("a playback failure is reported in the audio panel and Reload audio fetches a fresh Playback URL", async () => {
-  const backend = fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })], { audio: { "1:th": storedAudio() } });
+  const backend = fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })], {
+    audio: { "1:th": storedAudio() },
+  });
   await open(backend);
   await within(audioPanel()).findByLabelText("Current audio player");
   const expired = player().getAttribute("src");
 
   fireEvent.error(player());
-  expect((await within(audioPanel()).findByRole("alert")).textContent).toContain("Reload audio");
+  expect(
+    (await within(audioPanel()).findByRole("alert")).textContent,
+  ).toContain("Reload audio");
 
-  fireEvent.click(within(audioPanel()).getByRole("button", { name: "Reload audio" }));
+  fireEvent.click(
+    within(audioPanel()).getByRole("button", { name: "Reload audio" }),
+  );
   await waitFor(() => expect(player().getAttribute("src")).not.toBe(expired));
-  expect(player().getAttribute("src")).toBe("https://s3.invalid/audio/41.mp3?playback=2");
+  expect(player().getAttribute("src")).toBe(
+    "https://s3.invalid/audio/41.mp3?playback=2",
+  );
   expect(within(audioPanel()).queryByRole("alert")).toBeNull();
 });
 
 test("Playback URLs are never refreshed in the background", async () => {
-  const backend = fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })], { audio: { "1:th": storedAudio() } });
+  const backend = fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })], {
+    audio: { "1:th": storedAudio() },
+  });
   await open(backend);
   await within(audioPanel()).findByLabelText("Current audio player");
   const sent = backend.requests.length;
@@ -166,17 +212,22 @@ test("the narration warning checks the backend when the audio panel could not te
   });
   await open(backend);
   await within(audioPanel()).findByRole("alert");
-  const save = () => fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
+  const save = () =>
+    fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
 
   type("Content", "แก้ไขครั้งแรก", textForm());
   save();
-  expect((await findNarrationWarning()).textContent).toContain("Could not check for th audio");
+  expect((await findNarrationWarning()).textContent).toContain(
+    "Could not check for th audio",
+  );
 
   outage = false;
   type("Content", "แก้ไขครั้งที่สอง", textForm());
   save();
   await waitFor(async () =>
-    expect((await findNarrationWarning()).textContent).toContain("The current th audio may no longer match it"),
+    expect((await findNarrationWarning()).textContent).toContain(
+      "The current th audio may no longer match it",
+    ),
   );
   expect(audioRequests(backend).at(-1)).toBe("/api/admin/lessons/1/audio/th");
 });
@@ -219,13 +270,24 @@ test("checking for audio after a save never holds the saved form", async () => {
   await open(backend);
   await within(audioPanel()).findByRole("alert");
   outage = false;
-  const releaseCheck = hold(backend.network, (request) => request.path.includes("/audio/"), "response");
+  const releaseCheck = hold(
+    backend.network,
+    (request) => request.path.includes("/audio/"),
+    "response",
+  );
 
   type("Content", "เนื้อหาใหม่", textForm());
   fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
   await waitFor(() => expect(tab("th").textContent).toBe("th: Saved"));
-  await waitFor(() => expect(within(textForm()).getByLabelText("Content")).toHaveProperty("readOnly", false));
-  expect(within(textForm()).getByRole("button", { name: "Save" })).toHaveProperty("disabled", false);
+  await waitFor(() =>
+    expect(within(textForm()).getByLabelText("Content")).toHaveProperty(
+      "readOnly",
+      false,
+    ),
+  );
+  expect(
+    within(textForm()).getByRole("button", { name: "Save" }),
+  ).toHaveProperty("disabled", false);
   expect(narrationWarning()).toBeNull();
 
   releaseCheck();
@@ -236,15 +298,27 @@ test("checking for audio after a save never holds the saved form", async () => {
 
 test("each Language keeps its own narration warning while slower checks finish", async () => {
   let thaiOutage = true;
-  const backend = fakeBackend([lessonDetail(1, { lessonTexts: [thaiText, danishText] })], {
-    audio: { "1:th": storedAudio(), "1:da": storedAudio({ mediaAssetId: 42, originalFilename: "da.mp3" }) },
-    override: (request) =>
-      request.path.endsWith("/audio/th") && thaiOutage ? storageOutage("req-503-audio") : undefined,
-  });
+  const backend = fakeBackend(
+    [lessonDetail(1, { lessonTexts: [thaiText, danishText] })],
+    {
+      audio: {
+        "1:th": storedAudio(),
+        "1:da": storedAudio({ mediaAssetId: 42, originalFilename: "da.mp3" }),
+      },
+      override: (request) =>
+        request.path.endsWith("/audio/th") && thaiOutage
+          ? storageOutage("req-503-audio")
+          : undefined,
+    },
+  );
   await open(backend);
   await within(audioPanel()).findByRole("alert");
   thaiOutage = false;
-  const releaseThaiCheck = hold(backend.network, (request) => request.path.endsWith("/audio/th"), "response");
+  const releaseThaiCheck = hold(
+    backend.network,
+    (request) => request.path.endsWith("/audio/th"),
+    "response",
+  );
 
   type("Content", "เนื้อหาใหม่", textForm());
   fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
@@ -254,21 +328,34 @@ test("each Language keeps its own narration warning while slower checks finish",
   await within(audioPanel()).findByText(/^Audio version 1 · da\.mp3/);
   type("Content", "Nyt indhold", textForm());
   fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(narrationWarning()?.textContent).toContain("The current da audio may no longer match it"));
+  await waitFor(() =>
+    expect(narrationWarning()?.textContent).toContain(
+      "The current da audio may no longer match it",
+    ),
+  );
 
   releaseThaiCheck();
   await settle();
-  expect(narrationWarning()?.textContent).toContain("The current da audio may no longer match it");
+  expect(narrationWarning()?.textContent).toContain(
+    "The current da audio may no longer match it",
+  );
   fireEvent.click(tab("th"));
-  expect(narrationWarning()?.textContent).toContain("The current th audio may no longer match it");
+  expect(narrationWarning()?.textContent).toContain(
+    "The current th audio may no longer match it",
+  );
 });
 
 test("a failed re-read turns a remembered 'no audio' back into unknown", async () => {
   let outage = false;
-  const backend = fakeBackend([lessonDetail(1, { lessonTexts: [thaiText, danishText] })], {
-    override: (request) =>
-      request.path.endsWith("/audio/th") && outage ? storageOutage("req-503-audio") : undefined,
-  });
+  const backend = fakeBackend(
+    [lessonDetail(1, { lessonTexts: [thaiText, danishText] })],
+    {
+      override: (request) =>
+        request.path.endsWith("/audio/th") && outage
+          ? storageOutage("req-503-audio")
+          : undefined,
+    },
+  );
   await open(backend);
   await within(audioPanel()).findByText("No audio yet for this Language.");
 
@@ -289,7 +376,9 @@ test("a failed re-read turns a remembered 'no audio' back into unknown", async (
 });
 
 test("a read answered after an upload completes cannot hide the new audio from the warning", async () => {
-  const backend = fakeBackend([lessonDetail(1, { lessonTexts: [thaiText, danishText] })]);
+  const backend = fakeBackend([
+    lessonDetail(1, { lessonTexts: [thaiText, danishText] }),
+  ]);
   await open(backend);
   await within(audioPanel()).findByText("No audio yet for this Language.");
   fireEvent.click(tab("da"));
@@ -325,10 +414,18 @@ test("a save answered after an upload completes checks what is known then", asyn
   chooseFile(mp3File());
   fireEvent.click(uploadButton());
   await waitFor(() => expect(backend.uploads).toHaveLength(1));
-  const releaseSave = hold(backend.network, (request) => request.method === "PUT", "response");
+  const releaseSave = hold(
+    backend.network,
+    (request) => request.method === "PUT",
+    "response",
+  );
   type("Content", "แก้ไขระหว่างอัปโหลด", textForm());
   fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(backend.requests.some((request) => request.method === "PUT")).toBe(true));
+  await waitFor(() =>
+    expect(backend.requests.some((request) => request.method === "PUT")).toBe(
+      true,
+    ),
+  );
 
   backend.uploads[0]!.finish(200);
   await within(uploadPanel()).findByText(/^Upload complete/);

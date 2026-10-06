@@ -2,10 +2,10 @@
 // New Source form, and, inside a Lesson editor, Attach. Canonical Sources are only
 // found, created, and reused.
 import {
-  sourceListResponseSchema,
-  sourceResponseSchema,
   type CreateSourceRequest,
   type SourceResponse,
+  sourceListResponseSchema,
+  sourceResponseSchema,
 } from "@ez-dk-citizen/api-contracts/schemas";
 import { useEffect, useState } from "react";
 
@@ -27,7 +27,11 @@ export function SourceFinder({
   readOnly?: boolean;
   // Present inside a Lesson editor; the standalone Sources screen only finds and creates.
   // `busy` holds Attach back while another change to the Lesson finishes.
-  attach?: { attachedIds: number[]; busy: boolean; onAttach: (sourceId: number) => Promise<void> };
+  attach?: {
+    attachedIds: number[];
+    busy: boolean;
+    onAttach: (sourceId: number) => Promise<void>;
+  };
 }) {
   const [sources, setSources] = useState<SourceResponse[] | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -35,7 +39,8 @@ export function SourceFinder({
   const [newSource, setNewSource] = useState<Values>({});
   const attaching = useAction<number>();
   // A read-only finder holds no New Source draft, so nothing can be left unsaved.
-  const dirty = !readOnly && Object.values(newSource).some((value) => value.trim());
+  const dirty =
+    !readOnly && Object.values(newSource).some((value) => value.trim());
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -79,7 +84,10 @@ export function SourceFinder({
       setSearch(created.url);
       setNewSource({});
     } catch (caught) {
-      if (!(caught instanceof BffError && caught.code === "source_url_conflict")) throw caught;
+      if (
+        !(caught instanceof BffError && caught.code === "source_url_conflict")
+      )
+        throw caught;
       // Point at the existing Source: search for its URL and reload in case it is new to this page.
       // The hint uses what this page already holds, so a slow reload never delays the message.
       setSearch(trimmedUrl);
@@ -95,20 +103,28 @@ export function SourceFinder({
   }
 
   const needle = search.trim().toLowerCase();
-  const visibleSources = sources?.filter((source) => source.url.toLowerCase().includes(needle));
+  const visibleSources = sources?.filter((source) =>
+    source.url.toLowerCase().includes(needle),
+  );
 
   return (
     <section aria-label="Source finder">
       <h3>Find or create a Source</h3>
       <label>
         Find Sources by URL
-        <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <input
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
       </label>
       {error !== null && <ErrorMessage error={error} onRetry={load} />}
       {attaching.failure && <ErrorMessage error={attaching.failure.error} />}
       {sources === null && error === null && <p>Loading Sources…</p>}
       {sources?.length === 0 && <p>No Sources yet.</p>}
-      {!!sources?.length && visibleSources!.length === 0 && <p>No Sources match this search.</p>}
+      {!!sources?.length && visibleSources!.length === 0 && (
+        <p>No Sources match this search.</p>
+      )}
       <ul aria-label="Sources">
         {visibleSources?.map((source) => {
           const attached = attach?.attachedIds.includes(source.id);
@@ -121,8 +137,15 @@ export function SourceFinder({
                   <button
                     type="button"
                     aria-label={`Attach ${source.url}`}
-                    disabled={readOnly || attach.busy || attached || attaching.pending !== null}
-                    onClick={() => attaching.run(source.id, () => attach.onAttach(source.id))}
+                    disabled={
+                      readOnly ||
+                      attach.busy ||
+                      attached ||
+                      attaching.pending !== null
+                    }
+                    onClick={() =>
+                      attaching.run(source.id, () => attach.onAttach(source.id))
+                    }
                   >
                     {attached ? "Attached" : "Attach"}
                   </button>
@@ -136,7 +159,12 @@ export function SourceFinder({
         name="New Source"
         fields={[
           { name: "url", label: "Source URL", kind: "url" },
-          { name: "publishedAt", label: "Publication date", kind: "date", optional: true },
+          {
+            name: "publishedAt",
+            label: "Publication date",
+            kind: "date",
+            optional: true,
+          },
         ]}
         value={readOnly ? {} : newSource}
         onChange={setNewSource}

@@ -1,10 +1,10 @@
 // The Lesson catalogue: every Lesson filtered in the browser, plus the New Draft Lesson form.
 import {
+  type CreateLessonRequest,
+  type LessonSummary,
   lessonDetailSchema,
   lessonListResponseSchema,
   lessonStatusSchema,
-  type CreateLessonRequest,
-  type LessonSummary,
 } from "@ez-dk-citizen/api-contracts/schemas";
 import { useEffect, useState } from "react";
 
@@ -52,7 +52,9 @@ export function Catalogue({
   // biome-ignore lint/correctness/useExhaustiveDependencies: mount only
   useEffect(() => void load(), []);
 
-  const chapters = [...new Set(lessons?.map((lesson) => lesson.chapter))].sort((a, b) => a - b);
+  const chapters = [...new Set(lessons?.map((lesson) => lesson.chapter))].sort(
+    (a, b) => a - b,
+  );
   // A chapter that vanished on reload falls back to all chapters, matching what the select shows.
   const chapterFilter = chapters.includes(Number(chapter)) ? chapter : "";
   const visibleLessons = lessons?.filter(
@@ -64,7 +66,8 @@ export function Catalogue({
   return (
     <section>
       <p>
-        Connected. {lessons === null ? "Loading Lessons…" : `${lessons.length} Lessons`}
+        Connected.{" "}
+        {lessons === null ? "Loading Lessons…" : `${lessons.length} Lessons`}
       </p>
       <button type="button" onClick={load}>
         Refresh
@@ -102,7 +105,9 @@ export function Catalogue({
             Chapter
             <select
               value={chapterFilter}
-              onChange={(event) => onFiltersChange({ chapter: event.target.value, status })}
+              onChange={(event) =>
+                onFiltersChange({ chapter: event.target.value, status })
+              }
             >
               <option value="">All chapters</option>
               {chapters.map((value) => (
@@ -116,7 +121,9 @@ export function Catalogue({
             Status
             <select
               value={status}
-              onChange={(event) => onFiltersChange({ chapter, status: event.target.value })}
+              onChange={(event) =>
+                onFiltersChange({ chapter, status: event.target.value })
+              }
             >
               <option value="">All statuses</option>
               {lessonStatusSchema.options.map((value) => (
@@ -145,7 +152,9 @@ export function Catalogue({
                     <td>{lesson.chapter}</td>
                     <td>{lesson.version}</td>
                     <td>{statusLabels[lesson.status]}</td>
-                    <td>{lesson.availableLanguageCodes.join(", ") || "None"}</td>
+                    <td>
+                      {lesson.availableLanguageCodes.join(", ") || "None"}
+                    </td>
                     <td>
                       <button
                         type="button"
@@ -173,7 +182,10 @@ const newDraftKey = "ez-dk-citizen.admin.newDraft";
 function readNewDraft(): Values {
   try {
     const stored = JSON.parse(localStorage.getItem(newDraftKey) ?? "{}");
-    return { chapter: String(stored.chapter ?? ""), version: String(stored.version ?? "") };
+    return {
+      chapter: String(stored.chapter ?? ""),
+      version: String(stored.version ?? ""),
+    };
   } catch {
     return { chapter: "", version: "" };
   }
@@ -181,7 +193,8 @@ function readNewDraft(): Values {
 
 function storeNewDraft(value: Values) {
   try {
-    if (Object.values(value).some(Boolean)) localStorage.setItem(newDraftKey, JSON.stringify(value));
+    if (Object.values(value).some(Boolean))
+      localStorage.setItem(newDraftKey, JSON.stringify(value));
     else localStorage.removeItem(newDraftKey);
   } catch {}
 }

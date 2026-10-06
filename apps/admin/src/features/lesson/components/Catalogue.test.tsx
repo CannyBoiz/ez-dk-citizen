@@ -4,22 +4,28 @@ import { expect, test } from "vitest";
 
 import { App } from "../../../app/App";
 import {
-  validToken,
-  problem,
-  fakeNetwork,
-  connect,
   catalogue,
-  rows,
   chapterVersions,
-  lessonDetail,
+  connect,
   fakeBackend,
-  type,
+  fakeNetwork,
+  lessonDetail,
+  problem,
+  rows,
   tab,
   textForm,
+  type,
+  validToken,
 } from "../../../shared/test/support";
 
 test("the catalogue lists every Lesson with chapter, version, status, and Languages", async () => {
-  render(<App network={fakeNetwork(() => ({ status: 200, body: { items: catalogue } })).network} />);
+  render(
+    <App
+      network={
+        fakeNetwork(() => ({ status: 200, body: { items: catalogue } })).network
+      }
+    />,
+  );
   await connect(validToken);
 
   await screen.findByRole("table");
@@ -32,23 +38,34 @@ test("the catalogue lists every Lesson with chapter, version, status, and Langua
 });
 
 test("chapter and status filters combine in the browser", async () => {
-  const { network, requests } = fakeNetwork(() => ({ status: 200, body: { items: catalogue } }));
+  const { network, requests } = fakeNetwork(() => ({
+    status: 200,
+    body: { items: catalogue },
+  }));
   render(<App network={network} />);
   await connect(validToken);
   await screen.findByRole("table");
   const sent = requests.length;
 
-  fireEvent.change(screen.getByLabelText("Chapter"), { target: { value: "1" } });
+  fireEvent.change(screen.getByLabelText("Chapter"), {
+    target: { value: "1" },
+  });
   expect(chapterVersions()).toEqual(["1.1", "1.2"]);
 
-  fireEvent.change(screen.getByLabelText("Status"), { target: { value: "DRAFT" } });
+  fireEvent.change(screen.getByLabelText("Status"), {
+    target: { value: "DRAFT" },
+  });
   expect(chapterVersions()).toEqual(["1.2"]);
 
   fireEvent.change(screen.getByLabelText("Chapter"), { target: { value: "" } });
   expect(chapterVersions()).toEqual(["1.2", "2.1"]);
 
-  fireEvent.change(screen.getByLabelText("Chapter"), { target: { value: "2" } });
-  fireEvent.change(screen.getByLabelText("Status"), { target: { value: "PUBLISHED" } });
+  fireEvent.change(screen.getByLabelText("Chapter"), {
+    target: { value: "2" },
+  });
+  fireEvent.change(screen.getByLabelText("Status"), {
+    target: { value: "PUBLISHED" },
+  });
   expect(screen.queryByRole("table")).toBeNull();
   expect(screen.getByText("No Lessons match these filters.")).toBeTruthy();
 
@@ -57,10 +74,16 @@ test("chapter and status filters combine in the browser", async () => {
 
 test("a chapter filter whose chapter disappears on Refresh falls back to all chapters", async () => {
   let items = catalogue;
-  render(<App network={fakeNetwork(() => ({ status: 200, body: { items } })).network} />);
+  render(
+    <App
+      network={fakeNetwork(() => ({ status: 200, body: { items } })).network}
+    />,
+  );
   await connect(validToken);
   await screen.findByRole("table");
-  fireEvent.change(screen.getByLabelText("Chapter"), { target: { value: "2" } });
+  fireEvent.change(screen.getByLabelText("Chapter"), {
+    target: { value: "2" },
+  });
 
   items = catalogue.filter((lesson) => lesson.chapter === 1);
   fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
@@ -85,10 +108,16 @@ test("filters are kept when returning from a Lesson", async () => {
   );
   await connect(validToken);
   await screen.findByRole("table");
-  fireEvent.change(screen.getByLabelText("Chapter"), { target: { value: "1" } });
-  fireEvent.change(screen.getByLabelText("Status"), { target: { value: "DRAFT" } });
+  fireEvent.change(screen.getByLabelText("Chapter"), {
+    target: { value: "1" },
+  });
+  fireEvent.change(screen.getByLabelText("Status"), {
+    target: { value: "DRAFT" },
+  });
 
-  fireEvent.click(screen.getByRole("button", { name: "Open chapter 1, version 2" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open chapter 1, version 2" }),
+  );
   await screen.findByRole("heading", { name: "Chapter 1, version 2" });
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
 
@@ -134,27 +163,55 @@ test("opening a Lesson shows its structure, Lesson Texts, and Lesson Sources, an
   await connect(validToken);
   await screen.findByRole("table");
 
-  fireEvent.click(screen.getByRole("button", { name: "Open chapter 1, version 1" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open chapter 1, version 1" }),
+  );
 
   await screen.findByRole("heading", { name: "Chapter 1, version 1" });
-  expect(requests).toContainEqual(expect.objectContaining({ method: "GET", path: "/api/admin/lessons/1" }));
+  expect(requests).toContainEqual(
+    expect.objectContaining({ method: "GET", path: "/api/admin/lessons/1" }),
+  );
   expect(screen.queryByRole("table")).toBeNull();
   expect(screen.getByText("Published")).toBeTruthy();
-  expect(within(textForm()).getByLabelText("Title")).toHaveProperty("value", "บทที่ 1");
-  expect(within(textForm()).getByLabelText("Content")).toHaveProperty("value", "เนื้อหาภาษาไทย");
+  expect(within(textForm()).getByLabelText("Title")).toHaveProperty(
+    "value",
+    "บทที่ 1",
+  );
+  expect(within(textForm()).getByLabelText("Content")).toHaveProperty(
+    "value",
+    "เนื้อหาภาษาไทย",
+  );
   fireEvent.click(tab("da"));
-  expect(within(textForm()).getByLabelText("Title")).toHaveProperty("value", "Kapitel 1");
-  expect(screen.getByRole("link", { name: "https://example.dk/laerebog" })).toBeTruthy();
-  const lessonSource = screen.getByRole("form", { name: "Lesson Source https://example.dk/laerebog" });
-  expect(within(lessonSource).getByLabelText("Page from")).toHaveProperty("value", "12");
-  expect(within(lessonSource).getByLabelText("Page to")).toHaveProperty("value", "14");
-  expect(within(lessonSource).getByLabelText("Section reference")).toHaveProperty("value", "Afsnit 2");
+  expect(within(textForm()).getByLabelText("Title")).toHaveProperty(
+    "value",
+    "Kapitel 1",
+  );
+  expect(
+    screen.getByRole("link", { name: "https://example.dk/laerebog" }),
+  ).toBeTruthy();
+  const lessonSource = screen.getByRole("form", {
+    name: "Lesson Source https://example.dk/laerebog",
+  });
+  expect(within(lessonSource).getByLabelText("Page from")).toHaveProperty(
+    "value",
+    "12",
+  );
+  expect(within(lessonSource).getByLabelText("Page to")).toHaveProperty(
+    "value",
+    "14",
+  );
+  expect(
+    within(lessonSource).getByLabelText("Section reference"),
+  ).toHaveProperty("value", "Afsnit 2");
 
   items = [{ ...catalogue[0]!, status: "ARCHIVED" }];
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
 
   await screen.findByRole("table");
-  expect(requests.at(-1)).toMatchObject({ method: "GET", path: "/api/admin/lessons" });
+  expect(requests.at(-1)).toMatchObject({
+    method: "GET",
+    path: "/api/admin/lessons",
+  });
   expect(rows()).toEqual([["1", "1", "Archived", "da, th"]]);
 });
 
@@ -166,7 +223,12 @@ test("a Data Service outage shows the error with its request ID and can be retri
       network={
         fakeNetwork(() =>
           ++listCalls > 1 && outage
-            ? problem(502, "data_service_unavailable", "The Data Service is unavailable.", "req-502")
+            ? problem(
+                502,
+                "data_service_unavailable",
+                "The Data Service is unavailable.",
+                "req-502",
+              )
             : { status: 200, body: { items: catalogue } },
         ).network
       }
@@ -219,8 +281,14 @@ test("New Draft values are kept locally across a closed tab and cleared once the
   render(<App network={network} />);
   await connect(validToken);
   await screen.findByRole("table");
-  expect(screen.getByLabelText("New Draft chapter")).toHaveProperty("value", "4");
-  expect(screen.getByLabelText("New Draft version")).toHaveProperty("value", "1");
+  expect(screen.getByLabelText("New Draft chapter")).toHaveProperty(
+    "value",
+    "4",
+  );
+  expect(screen.getByLabelText("New Draft version")).toHaveProperty(
+    "value",
+    "1",
+  );
   expect(JSON.stringify(localStorage)).not.toContain(validToken);
 
   fireEvent.click(screen.getByRole("button", { name: "Create Draft" }));

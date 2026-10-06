@@ -12,8 +12,8 @@ import { adminAuth } from "./middleware/admin-auth.js";
 import { adminCors } from "./middleware/cors.js";
 import { logging } from "./middleware/logging.js";
 import {
-  requestId,
   type RequestIdEnvironment,
+  requestId,
 } from "./middleware/request-id.js";
 import { createAdminLessonAudioRoutes } from "./routes/admin/lesson-audio.js";
 import { createAdminLessonSourceRoutes } from "./routes/admin/lesson-sources.js";

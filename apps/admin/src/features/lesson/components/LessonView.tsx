@@ -3,8 +3,8 @@
 // for the navigation guards; the selected Language's audio; and publication.
 import {
   adminLessonAudioResponseSchema,
-  lessonDetailSchema,
   type LessonDetail,
+  lessonDetailSchema,
   type PatchLessonRequest,
   type UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts/schemas";
@@ -13,11 +13,15 @@ import { useEffect, useId, useRef, useState } from "react";
 import { EditForm, type Values } from "../../../shared/components/EditForm";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
 import type { Call } from "../../../shared/lib/bff";
+import {
+  type LanguageCode,
+  languageCodes,
+} from "../../../shared/lib/languages";
 import type { BffRequest, Network } from "../../../shared/lib/network";
-import { languageCodes, type LanguageCode } from "../../../shared/lib/languages";
 import { useAction } from "../../../shared/lib/useAction";
 import { AudioUpload, CurrentAudio } from "../../audio";
 import { SourceFinder, SourceLabel } from "../../source";
+import { hasLessonText } from "../utils/lessonTexts";
 import {
   noReferences,
   referenceFields,
@@ -25,7 +29,6 @@ import {
   toReferenceValues,
   validateReferences,
 } from "../utils/references";
-import { hasLessonText } from "../utils/lessonTexts";
 import { statusLabels } from "../utils/statusLabels";
 import { Publication } from "./Publication";
 
@@ -75,7 +78,9 @@ export function LessonView({
   // so a Lesson older than the one shown (say, a save answered after Archive) never replaces it.
   function applyLesson(next: LessonDetail) {
     setLesson((current) =>
-      current && Date.parse(next.updatedAt) < Date.parse(current.updatedAt) ? current : next,
+      current && Date.parse(next.updatedAt) < Date.parse(current.updatedAt)
+        ? current
+        : next,
     );
   }
 
@@ -102,7 +107,10 @@ export function LessonView({
     setError(null);
     try {
       applyLesson(
-        await call({ method: "GET", path: `/api/admin/lessons/${lessonId}` }, lessonDetailSchema),
+        await call(
+          { method: "GET", path: `/api/admin/lessons/${lessonId}` },
+          lessonDetailSchema,
+        ),
       );
     } catch (caught) {
       setError(caught);
@@ -115,20 +123,33 @@ export function LessonView({
 
   const saved: Partial<Record<Form, Values>> = lesson
     ? {
-        structure: { chapter: String(lesson.chapter), version: String(lesson.version) },
+        structure: {
+          chapter: String(lesson.chapter),
+          version: String(lesson.version),
+        },
         ...Object.fromEntries(
           languageCodes.map((code) => {
-            const text = lesson.lessonTexts.find((candidate) => candidate.languageCode === code);
-            return [code, { title: text?.title ?? "", content: text?.content ?? "" }];
+            const text = lesson.lessonTexts.find(
+              (candidate) => candidate.languageCode === code,
+            );
+            return [
+              code,
+              { title: text?.title ?? "", content: text?.content ?? "" },
+            ];
           }),
         ),
         ...Object.fromEntries(
-          lesson.lessonSources.map((source) => [sourceForm(source.id), toReferenceValues(source)]),
+          lesson.lessonSources.map((source) => [
+            sourceForm(source.id),
+            toReferenceValues(source),
+          ]),
         ),
       }
     : {};
   const isDirty = (form: Form) =>
-    Object.entries(edits[form] ?? {}).some(([field, value]) => value !== saved[form]?.[field]);
+    Object.entries(edits[form] ?? {}).some(
+      ([field, value]) => value !== saved[form]?.[field],
+    );
   const dirty = finderDirty || (Object.keys(edits) as Form[]).some(isDirty);
 
   useEffect(() => {
@@ -151,13 +172,18 @@ export function LessonView({
   const detachingNow = detaching.pending !== null;
   const formProps = (form: Form) => ({
     value: edits[form] ?? saved[form] ?? {},
-    onChange: (value: Values) => setEdits((current) => ({ ...current, [form]: value })),
+    onChange: (value: Values) =>
+      setEdits((current) => ({ ...current, [form]: value })),
     readOnly: readOnly || detachingNow,
   });
   const formState = (form: Form, exists: boolean) =>
     isDirty(form) ? "Unsaved" : exists ? "Saved" : "Missing";
 
-  async function save(form: Form, submitted: Values, request: Omit<BffRequest, "token">) {
+  async function save(
+    form: Form,
+    submitted: Values,
+    request: Omit<BffRequest, "token">,
+  ) {
     applyLesson(await writeCall(request, lessonDetailSchema));
     // Edits made while the save was in flight stay unsaved.
     setEdits((current) => {
@@ -168,11 +194,17 @@ export function LessonView({
 
   function detach(sourceId: number) {
     const form = sourceForm(sourceId);
-    if (isDirty(form) && !window.confirm("Detach this Source and discard its unsaved references?"))
+    if (
+      isDirty(form) &&
+      !window.confirm("Detach this Source and discard its unsaved references?")
+    )
       return;
     void detaching.run(sourceId, async () => {
       await call(
-        { method: "DELETE", path: `/api/admin/lessons/${lesson!.id}/sources/${sourceId}` },
+        {
+          method: "DELETE",
+          path: `/api/admin/lessons/${lesson!.id}/sources/${sourceId}`,
+        },
         { parse: () => undefined },
       );
       setEdits(({ [form]: _, ...rest }) => rest);
@@ -180,7 +212,9 @@ export function LessonView({
         (current) =>
           current && {
             ...current,
-            lessonSources: current.lessonSources.filter((source) => source.id !== sourceId),
+            lessonSources: current.lessonSources.filter(
+              (source) => source.id !== sourceId,
+            ),
           },
       );
     });
@@ -191,7 +225,10 @@ export function LessonView({
     if (hasAudio.current[code] === undefined) {
       try {
         const { audio } = await call(
-          { method: "GET", path: `/api/admin/lessons/${lesson!.id}/audio/${code}` },
+          {
+            method: "GET",
+            path: `/api/admin/lessons/${lesson!.id}/audio/${code}`,
+          },
           adminLessonAudioResponseSchema,
         );
         learnAudio(code, audio !== null);
@@ -282,7 +319,10 @@ export function LessonView({
               void currentAudioExists(code).then((exists) =>
                 setNarrationWarnings((current) => ({
                   ...current,
-                  [code]: exists === false ? undefined : { audioKnown: exists === true },
+                  [code]:
+                    exists === false
+                      ? undefined
+                      : { audioKnown: exists === true },
                 })),
               );
             }}
@@ -304,7 +344,12 @@ export function LessonView({
         key={`${languageCode}:${audioReads}`}
         call={call}
         target={{ lessonId: lesson.id, languageCode }}
-        onRead={(audio) => learnAudio(languageCode, audio === undefined ? undefined : audio !== null)}
+        onRead={(audio) =>
+          learnAudio(
+            languageCode,
+            audio === undefined ? undefined : audio !== null,
+          )
+        }
       />
       {/* Not keyed by Language: a failed attempt stays visible after switching tabs. */}
       <AudioUpload
@@ -317,7 +362,10 @@ export function LessonView({
           // Completion made this rendition current, whatever the panel's next read reports.
           learnAudio(uploaded.languageCode, true);
           // The new rendition was made for the text as it is now.
-          setNarrationWarnings((current) => ({ ...current, [uploaded.languageCode]: undefined }));
+          setNarrationWarnings((current) => ({
+            ...current,
+            [uploaded.languageCode]: undefined,
+          }));
           setAudioReads((count) => count + 1);
         }}
       />
@@ -351,7 +399,9 @@ export function LessonView({
               >
                 Detach
               </button>
-              {detaching.failure?.key === source.id && <ErrorMessage error={detaching.failure.error} />}
+              {detaching.failure?.key === source.id && (
+                <ErrorMessage error={detaching.failure.error} />
+              )}
             </li>
           );
         })}

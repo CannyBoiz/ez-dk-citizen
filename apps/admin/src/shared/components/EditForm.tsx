@@ -1,5 +1,5 @@
 // The shared explicitly saved form behind every editable form in the Admin.
-import { useId, useState, type SubmitEvent } from "react";
+import { type SubmitEvent, useId, useState } from "react";
 
 import { BffError } from "../lib/bff";
 import { ErrorMessage } from "./ErrorMessage";
@@ -52,7 +52,9 @@ export function EditForm({
       if (optional && !field.trim()) continue;
       if (kind === "number" ? !/^[1-9]\d*$/.test(field) : !field.trim())
         problems[name] =
-          kind === "number" ? `${label} must be a positive whole number.` : `${label} must not be blank.`;
+          kind === "number"
+            ? `${label} must be a positive whole number.`
+            : `${label} must not be blank.`;
     }
     setInvalid(problems);
     setError(null);
@@ -74,14 +76,16 @@ export function EditForm({
         const message =
           invalid[field.name] ??
           (error instanceof BffError
-            ? error.errors?.find((entry) => entry.path[0] === field.name)?.message
+            ? error.errors?.find((entry) => entry.path[0] === field.name)
+                ?.message
             : undefined);
         const props = {
           id: `${id}-${field.name}-control`,
           value: value[field.name] ?? "",
           readOnly: readOnly || busy,
           "aria-invalid": message !== undefined,
-          "aria-describedby": message === undefined ? undefined : `${id}-${field.name}`,
+          "aria-describedby":
+            message === undefined ? undefined : `${id}-${field.name}`,
           onChange: (event: { target: { value: string } }) =>
             onChange({ ...value, [field.name]: event.target.value }),
         };
@@ -95,7 +99,9 @@ export function EditForm({
                 <input type={field.kind} {...props} />
               )}
             </label>
-            {message !== undefined && <span id={`${id}-${field.name}`}>{message}</span>}
+            {message !== undefined && (
+              <span id={`${id}-${field.name}`}>{message}</span>
+            )}
           </div>
         );
       })}

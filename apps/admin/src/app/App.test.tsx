@@ -1,22 +1,27 @@
 // The app shell: Disconnect, 401 re-entry, and the unsaved-changes guards.
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
-
-import { App } from "./App";
 import {
-  validToken,
-  lessons,
-  problem,
-  fakeNetwork,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { expect, test, vi } from "vitest";
+import {
   connect,
-  lessonSummary,
-  lessonDetail,
   fakeBackend,
+  fakeNetwork,
+  lessonDetail,
+  lessonSummary,
+  lessons,
   openLesson,
-  type,
+  problem,
   structureForm,
+  type,
   unloadBlocked,
+  validToken,
 } from "../shared/test/support";
+import { App } from "./App";
 
 test("Disconnect clears the token and returns to the token prompt", async () => {
   const { network, requests } = fakeNetwork();
@@ -38,7 +43,12 @@ test("a later 401 prompts for the token over the current screen and the operatio
   const { network, requests } = fakeNetwork((request) =>
     request.token === accepted
       ? { status: 200, body: { items: [lessonSummary(1), lessonSummary(2)] } }
-      : problem(401, "authentication_required", "Authentication is required.", "req-401"),
+      : problem(
+          401,
+          "authentication_required",
+          "Authentication is required.",
+          "req-401",
+        ),
   );
   render(<App network={network} />);
   await connect(validToken);
@@ -47,7 +57,9 @@ test("a later 401 prompts for the token over the current screen and the operatio
   accepted = "rotated-token";
   fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
 
-  const dialog = await screen.findByRole("dialog", { name: "Re-enter admin token" });
+  const dialog = await screen.findByRole("dialog", {
+    name: "Re-enter admin token",
+  });
   expect(screen.getByText(/2 Lessons/)).toBeTruthy();
 
   await connect("rotated-token");
@@ -56,7 +68,10 @@ test("a later 401 prompts for the token over the current screen and the operatio
 
   fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
   await screen.findByText(/2 Lessons/);
-  expect(requests.at(-1)).toMatchObject({ path: "/api/admin/lessons", token: "rotated-token" });
+  expect(requests.at(-1)).toMatchObject({
+    path: "/api/admin/lessons",
+    token: "rotated-token",
+  });
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
@@ -65,7 +80,12 @@ test("the token re-entry prompt offers Disconnect", async () => {
   const { network } = fakeNetwork((request) =>
     request.token === accepted
       ? { status: 200, body: lessons }
-      : problem(401, "authentication_required", "Authentication is required.", "req-401"),
+      : problem(
+          401,
+          "authentication_required",
+          "Authentication is required.",
+          "req-401",
+        ),
   );
   render(<App network={network} />);
   await connect(validToken);
@@ -73,7 +93,9 @@ test("the token re-entry prompt offers Disconnect", async () => {
 
   accepted = "rotated-token";
   fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-  const dialog = await screen.findByRole("dialog", { name: "Re-enter admin token" });
+  const dialog = await screen.findByRole("dialog", {
+    name: "Re-enter admin token",
+  });
   fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
 
   expect(screen.queryByRole("dialog")).toBeNull();
@@ -92,7 +114,10 @@ test("dirty edits trigger the before-unload warning and a confirmation before re
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
   expect(confirm).toHaveBeenCalledOnce();
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty("value", "5");
+  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+    "value",
+    "5",
+  );
 
   confirm.mockReturnValue(true);
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
@@ -117,7 +142,12 @@ test("a 401 during save prompts for the token, keeps the edits, and the save can
     override: (request) =>
       request.token === accepted
         ? undefined
-        : problem(401, "authentication_required", "Authentication is required.", "req-401"),
+        : problem(
+            401,
+            "authentication_required",
+            "Authentication is required.",
+            "req-401",
+          ),
   });
   render(<App network={network} />);
   await connect(validToken);
@@ -125,15 +155,29 @@ test("a 401 during save prompts for the token, keeps the edits, and the save can
 
   accepted = "rotated-token";
   type("Version", "9", structureForm());
-  fireEvent.click(within(structureForm()).getByRole("button", { name: "Save" }));
+  fireEvent.click(
+    within(structureForm()).getByRole("button", { name: "Save" }),
+  );
 
-  const dialog = await screen.findByRole("dialog", { name: "Re-enter admin token" });
-  fireEvent.change(within(dialog).getByLabelText("Admin token"), { target: { value: "rotated-token" } });
+  const dialog = await screen.findByRole("dialog", {
+    name: "Re-enter admin token",
+  });
+  fireEvent.change(within(dialog).getByLabelText("Admin token"), {
+    target: { value: "rotated-token" },
+  });
   fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
   await waitFor(() => expect(dialog.isConnected).toBe(false));
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty("value", "9");
+  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+    "value",
+    "9",
+  );
 
-  fireEvent.click(within(structureForm()).getByRole("button", { name: "Save" }));
+  fireEvent.click(
+    within(structureForm()).getByRole("button", { name: "Save" }),
+  );
   await screen.findByRole("heading", { name: "Chapter 1, version 9" });
-  expect(requests.at(-1)).toMatchObject({ method: "PATCH", token: "rotated-token" });
+  expect(requests.at(-1)).toMatchObject({
+    method: "PATCH",
+    token: "rotated-token",
+  });
 });

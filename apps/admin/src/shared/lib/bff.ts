@@ -1,6 +1,6 @@
 import {
-  problemDetailsSchema,
   type ProblemDetails,
+  problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts/schemas";
 
 import type { BffRequest, BffResponse, Network } from "./network";

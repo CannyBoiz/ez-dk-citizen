@@ -50,13 +50,19 @@ export function createNetwork(baseUrl: string): Network {
       return new Promise((resolve, reject) => {
         const request = new XMLHttpRequest();
         request.open("PUT", url);
-        for (const [name, value] of Object.entries(headers)) request.setRequestHeader(name, value);
+        for (const [name, value] of Object.entries(headers))
+          request.setRequestHeader(name, value);
         request.upload.onprogress = (event) => {
           if (event.lengthComputable) onProgress(event.loaded / event.total);
         };
         request.onload = () => resolve({ status: request.status });
-        request.onerror = request.onabort = request.ontimeout = () =>
-          reject(new StorageError("The upload to storage did not complete."));
+        request.onerror =
+          request.onabort =
+          request.ontimeout =
+            () =>
+              reject(
+                new StorageError("The upload to storage did not complete."),
+              );
         request.send(file);
       });
     },

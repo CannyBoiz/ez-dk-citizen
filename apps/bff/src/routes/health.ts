@@ -1,7 +1,7 @@
 import {
   livenessResponseSchema,
-  readinessResponseSchema,
   type RequestIdEnvironment,
+  readinessResponseSchema,
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 

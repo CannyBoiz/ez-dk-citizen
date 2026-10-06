@@ -2,17 +2,17 @@
 // PUT to storage with progress, then completion. Success is shown only after completion, and
 // after a failure only the explicit Start new upload begins another Upload Intent.
 import {
+  type CompleteMediaAssetRequest,
+  type CreateUploadIntentRequest,
   completeMediaAssetResponseSchema,
   maxUploadSizeBytes,
   uploadIntentResponseSchema,
-  type CompleteMediaAssetRequest,
-  type CreateUploadIntentRequest,
 } from "@ez-dk-citizen/api-contracts/schemas";
 import { useEffect, useRef, useState } from "react";
 
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
 import type { Call } from "../../../shared/lib/bff";
-import { StorageError, type Network } from "../../../shared/lib/network";
+import { type Network, StorageError } from "../../../shared/lib/network";
 import type { AudioTarget } from "../types";
 
 // One upload attempt: fixed to the Lesson and Language it started for, whatever is selected later.
@@ -77,7 +77,9 @@ export function AudioUpload({
   // biome-ignore lint/correctness/useExhaustiveDependencies: on Language
   useEffect(() => {
     clearFile();
-    setState((current) => (current.step === "complete" ? { step: "idle" } : current));
+    setState((current) =>
+      current.step === "complete" ? { step: "idle" } : current,
+    );
   }, [target.languageCode]);
 
   function choose(chosen: File | undefined) {
@@ -107,18 +109,25 @@ export function AudioUpload({
       attempt.mediaAssetId = intent.mediaAssetId;
       step({ step: "uploading", percent: 0, ...attempt });
       // The browser derives Content-Length from the File; scripts cannot set it.
-      const { "Content-Length": _contentLength, ...headers } = intent.uploadHeaders;
+      const { "Content-Length": _contentLength, ...headers } =
+        intent.uploadHeaders;
       const { status } = await putObject({
         url: intent.uploadUrl,
         headers,
         file: chosen,
         onProgress: (fraction) =>
-          setState({ step: "uploading", percent: Math.round(fraction * 100), ...attempt }),
+          setState({
+            step: "uploading",
+            percent: Math.round(fraction * 100),
+            ...attempt,
+          }),
       }).catch(() => {
         throw new StorageError("The upload to storage did not complete.");
       });
       if (status < 200 || status > 299)
-        throw new StorageError(`Storage rejected the upload with status ${status}.`);
+        throw new StorageError(
+          `Storage rejected the upload with status ${status}.`,
+        );
 
       step({ step: "finalizing", ...attempt });
       const { lessonAudio } = await call(
@@ -129,7 +138,11 @@ export function AudioUpload({
         },
         completeMediaAssetResponseSchema,
       );
-      step({ step: "complete", audioVersion: lessonAudio.audioVersion, ...attempt });
+      step({
+        step: "complete",
+        audioVersion: lessonAudio.audioVersion,
+        ...attempt,
+      });
       clearFile();
       onComplete(attempt.target);
     } catch (error) {
@@ -173,12 +186,20 @@ export function AudioUpload({
           <p role="status">
             Uploading {state.filename}: {state.percent}%
           </p>
-          <progress aria-label="Upload progress" max={100} value={state.percent} />
+          <progress
+            aria-label="Upload progress"
+            max={100}
+            value={state.percent}
+          />
         </>
       )}
-      {state.step === "finalizing" && <p role="status">Finalizing the upload…</p>}
+      {state.step === "finalizing" && (
+        <p role="status">Finalizing the upload…</p>
+      )}
       {state.step === "complete" && (
-        <p role="status">Upload complete: audio version {state.audioVersion} is now current.</p>
+        <p role="status">
+          Upload complete: audio version {state.audioVersion} is now current.
+        </p>
       )}
       {failed && (
         <>

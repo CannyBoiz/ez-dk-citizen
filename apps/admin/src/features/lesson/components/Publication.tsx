@@ -2,9 +2,9 @@
 // publication prerequisites; the backend stays the authority, and its refusals are shown.
 // Replacing a Published version is two separate actions: archive it, then publish the Draft.
 import {
-  lessonDetailSchema,
   type LessonDetail,
   type LessonStatus,
+  lessonDetailSchema,
   type PatchLessonRequest,
 } from "@ez-dk-citizen/api-contracts/schemas";
 
@@ -53,25 +53,41 @@ export function Publication({
   const waiting = busy || transitioning.pending !== null;
   const confirmArchive = () =>
     window.confirm(
-      dirty ? `${archiveWarning} Unsaved changes on this Lesson will be discarded.` : archiveWarning,
+      dirty
+        ? `${archiveWarning} Unsaved changes on this Lesson will be discarded.`
+        : archiveWarning,
     );
   return (
     <section aria-label="Publication">
       <h3>Publication</h3>
       <ul>
         <li>
-          Thai Lesson Text (required):{" "}
-          {saved(hasLessonText(lesson, "th"))}
+          Thai Lesson Text (required): {saved(hasLessonText(lesson, "th"))}
         </li>
-        <li>Lesson Source (required): {saved(lesson.lessonSources.length > 0)}</li>
+        <li>
+          Lesson Source (required): {saved(lesson.lessonSources.length > 0)}
+        </li>
         <li>Thai audio (optional)</li>
         <li>Danish or English Lesson Text (optional)</li>
       </ul>
-      {lesson.status === "ARCHIVED" && <p>This Lesson is archived and read-only.</p>}
-      {busy && <p>Publishing and archiving wait until the upload or detach in progress finishes.</p>}
-      {dirty && lesson.status === "DRAFT" && <p>Save every change before publishing.</p>}
+      {lesson.status === "ARCHIVED" && (
+        <p>This Lesson is archived and read-only.</p>
+      )}
+      {busy && (
+        <p>
+          Publishing and archiving wait until the upload or detach in progress
+          finishes.
+        </p>
+      )}
+      {dirty && lesson.status === "DRAFT" && (
+        <p>Save every change before publishing.</p>
+      )}
       {lesson.status === "DRAFT" && (
-        <button type="button" disabled={dirty || waiting} onClick={() => transition("PUBLISHED")}>
+        <button
+          type="button"
+          disabled={dirty || waiting}
+          onClick={() => transition("PUBLISHED")}
+        >
           Publish
         </button>
       )}

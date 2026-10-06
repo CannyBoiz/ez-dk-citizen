@@ -1,22 +1,28 @@
 // Finding and creating canonical Sources on the Sources screen (ticket 06).
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
 import { App } from "../../../app/App";
 import {
-  validToken,
+  bookSource,
+  canonicalEditControls,
   connect,
   fakeBackend,
+  fieldError,
+  finder,
+  guideSource,
+  lawSource,
+  newSourceForm,
+  sourceRows,
   type,
   unloadBlocked,
-  fieldError,
-  lawSource,
-  guideSource,
-  bookSource,
-  finder,
-  sourceRows,
-  newSourceForm,
-  canonicalEditControls,
+  validToken,
 } from "../../../shared/test/support";
 
 async function openSources(backend: ReturnType<typeof fakeBackend>) {
@@ -27,7 +33,9 @@ async function openSources(backend: ReturnType<typeof fakeBackend>) {
 }
 
 test("Sources are filtered by URL text and show their UTC publication date", async () => {
-  await openSources(fakeBackend([], { sources: [lawSource, guideSource, bookSource] }));
+  await openSources(
+    fakeBackend([], { sources: [lawSource, guideSource, bookSource] }),
+  );
   await waitFor(() => expect(sourceRows()).toHaveLength(3));
 
   expect(sourceRows()).toEqual([
@@ -35,14 +43,20 @@ test("Sources are filtered by URL text and show their UTC publication date", asy
     `${guideSource.url} · publication date unknown`,
     `${bookSource.url} · published 2024-12-31`,
   ]);
-  expect(screen.getByRole("link", { name: lawSource.url }).getAttribute("href")).toBe(lawSource.url);
+  expect(
+    screen.getByRole("link", { name: lawSource.url }).getAttribute("href"),
+  ).toBe(lawSource.url);
 
   type("Find Sources by URL", "  NYIDANMARK ", finder());
-  expect(sourceRows()).toEqual([`${guideSource.url} · publication date unknown`]);
+  expect(sourceRows()).toEqual([
+    `${guideSource.url} · publication date unknown`,
+  ]);
 
   type("Find Sources by URL", "nothing-like-this", finder());
   expect(sourceRows()).toEqual([]);
-  expect(within(finder()).getByText("No Sources match this search.")).toBeTruthy();
+  expect(
+    within(finder()).getByText("No Sources match this search."),
+  ).toBeTruthy();
   expect(canonicalEditControls()).toEqual([]);
 });
 
@@ -51,23 +65,43 @@ test("creating a Source sends a blank date as null and a chosen date as midnight
   await openSources(backend);
 
   type("Source URL", "https://example.dk/undated", newSourceForm());
-  fireEvent.click(within(newSourceForm()).getByRole("button", { name: "Create Source" }));
-  await waitFor(() => expect(sourceRows()).toEqual(["https://example.dk/undated · publication date unknown"]));
+  fireEvent.click(
+    within(newSourceForm()).getByRole("button", { name: "Create Source" }),
+  );
+  await waitFor(() =>
+    expect(sourceRows()).toEqual([
+      "https://example.dk/undated · publication date unknown",
+    ]),
+  );
   expect(backend.requests.at(-1)).toEqual({
     method: "POST",
     path: "/api/admin/sources",
     token: validToken,
     body: { url: "https://example.dk/undated", publishedAt: null },
   });
-  expect(within(newSourceForm()).getByLabelText("Source URL")).toHaveProperty("value", "");
+  expect(within(newSourceForm()).getByLabelText("Source URL")).toHaveProperty(
+    "value",
+    "",
+  );
 
   type("Source URL", "https://example.dk/dated", newSourceForm());
   type("Publication date", "2025-03-09", newSourceForm());
-  expect(within(newSourceForm()).getByLabelText("Publication date")).toHaveProperty("type", "date");
-  fireEvent.click(within(newSourceForm()).getByRole("button", { name: "Create Source" }));
-  await waitFor(() => expect(sourceRows()).toEqual(["https://example.dk/dated · published 2025-03-09"]));
+  expect(
+    within(newSourceForm()).getByLabelText("Publication date"),
+  ).toHaveProperty("type", "date");
+  fireEvent.click(
+    within(newSourceForm()).getByRole("button", { name: "Create Source" }),
+  );
+  await waitFor(() =>
+    expect(sourceRows()).toEqual([
+      "https://example.dk/dated · published 2025-03-09",
+    ]),
+  );
   expect(backend.requests.at(-1)).toMatchObject({
-    body: { url: "https://example.dk/dated", publishedAt: "2025-03-09T00:00:00.000Z" },
+    body: {
+      url: "https://example.dk/dated",
+      publishedAt: "2025-03-09T00:00:00.000Z",
+    },
   });
 });
 
@@ -76,8 +110,12 @@ test("a blank Source URL is rejected before submission", async () => {
   await openSources(backend);
   const sent = backend.requests.length;
 
-  fireEvent.click(within(newSourceForm()).getByRole("button", { name: "Create Source" }));
-  expect(fieldError("Source URL", newSourceForm())).toBe("Source URL must not be blank.");
+  fireEvent.click(
+    within(newSourceForm()).getByRole("button", { name: "Create Source" }),
+  );
+  expect(fieldError("Source URL", newSourceForm())).toBe(
+    "Source URL must not be blank.",
+  );
   expect(backend.requests.length).toBe(sent);
 });
 
@@ -85,19 +123,31 @@ test("a duplicate URL says the Source exists, shows it, and points to attaching 
   await openSources(fakeBackend([], { sources: [lawSource, guideSource] }));
 
   type("Source URL", guideSource.url, newSourceForm());
-  fireEvent.click(within(newSourceForm()).getByRole("button", { name: "Create Source" }));
+  fireEvent.click(
+    within(newSourceForm()).getByRole("button", { name: "Create Source" }),
+  );
 
   const alert = await within(newSourceForm()).findByRole("alert");
   expect(alert.textContent).toContain("A Source with this URL already exists.");
   expect(alert.textContent).toContain("attach it from a Draft Lesson");
   expect(alert.textContent).toContain("req-409-source");
-  expect(sourceRows()).toEqual([`${guideSource.url} · publication date unknown`]);
-  expect(within(newSourceForm()).getByLabelText("Source URL")).toHaveProperty("value", guideSource.url);
-  expect(within(finder()).queryByRole("button", { name: /^Attach/ })).toBeNull();
+  expect(sourceRows()).toEqual([
+    `${guideSource.url} · publication date unknown`,
+  ]);
+  expect(within(newSourceForm()).getByLabelText("Source URL")).toHaveProperty(
+    "value",
+    guideSource.url,
+  );
+  expect(
+    within(finder()).queryByRole("button", { name: /^Attach/ }),
+  ).toBeNull();
 });
 
 test("an uncreated New Source warns before leaving the Sources screen", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+  const confirm = vi
+    .spyOn(window, "confirm")
+    .mockReturnValueOnce(false)
+    .mockReturnValueOnce(true);
   await openSources(fakeBackend());
 
   type("Source URL", "https://example.dk/half-typed", newSourceForm());
@@ -105,7 +155,10 @@ test("an uncreated New Source warns before leaving the Sources screen", async ()
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
   expect(confirm).toHaveBeenCalledOnce();
-  expect(within(newSourceForm()).getByLabelText("Source URL")).toHaveProperty("value", "https://example.dk/half-typed");
+  expect(within(newSourceForm()).getByLabelText("Source URL")).toHaveProperty(
+    "value",
+    "https://example.dk/half-typed",
+  );
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
   await screen.findByRole("button", { name: "Sources" });

@@ -1,10 +1,10 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import {
   lessonDetailSchema,
   problemDetailsSchema,
   publishedLessonDetailSchema,
 } from "@ez-dk-citizen/api-contracts";
-import assert from "node:assert/strict";
-import { test } from "node:test";
 
 import { createBffApp } from "../../app.js";
 import { DataServiceError } from "../../data-service/client.js";
@@ -269,9 +269,7 @@ test("BFF keeps playback-signing failures correlated and storage-safe", async ()
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:01:00.000Z",
           availableLanguageCodes: ["th"],
-          lessonTexts: [
-            { languageCode: "th", title: "ไทย", content: "เนื้อหา" },
-          ],
+          lessonTexts: [{ languageCode: "th", title: "ไทย", content: "เนื้อหา" }],
           lessonSources: [],
           currentAudio: {
             mediaAssetId: 9,

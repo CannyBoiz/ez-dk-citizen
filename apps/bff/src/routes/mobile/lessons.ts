@@ -2,19 +2,19 @@ import {
   languageQuerySchema,
   lessonIdParamsSchema,
   mobileLessonDetailSchema,
-  validateRequest,
   type RequestIdEnvironment,
+  validateRequest,
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
 import type { BffAppOptions } from "../../app.js";
 import { mapDataServiceError } from "../../errors/downstream.js";
 import { problem } from "../../errors/problem-details.js";
-import { authorizePlayback } from "../../playback.js";
 import {
   composeMobileLessonDetail,
   composeMobileLessonList,
 } from "../../mobile/compose.js";
+import { authorizePlayback } from "../../playback.js";
 
 export function createMobileLessonRoutes(
   options: Pick<BffAppOptions, "dataServiceClient" | "storage">,

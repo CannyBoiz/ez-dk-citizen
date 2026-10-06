@@ -1,24 +1,41 @@
 // Shared fixtures, a fake Network, and an in-memory BFF for the whole-app tests.
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { expect } from "vitest";
+
 import type {
   AdminLessonAudio,
   CompleteMediaAssetRequest,
+  CreateSourceRequest,
   CreateUploadIntentRequest,
   LessonDetail,
   LessonStatus,
   LessonSummary,
-  CreateSourceRequest,
   SourceResponse,
   UpsertLessonSourceRequest,
 } from "@ez-dk-citizen/api-contracts/schemas";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { expect } from "vitest";
 
-import type { BffRequest, BffResponse, Network, ObjectUpload } from "../lib/network";
+import type {
+  BffRequest,
+  BffResponse,
+  Network,
+  ObjectUpload,
+} from "../lib/network";
 
 export const validToken = "correct-token";
 export const lessons = { items: [] };
 
-export function problem(status: number, code: string, detail: string, requestId: string) {
+export function problem(
+  status: number,
+  code: string,
+  detail: string,
+  requestId: string,
+) {
   return {
     status,
     body: {
@@ -43,7 +60,12 @@ export function fakeNetwork(
   respond: (request: BffRequest) => BffResponse = (request) =>
     request.token === validToken
       ? { status: 200, body: lessons }
-      : problem(401, "authentication_required", "Authentication is required.", "req-401"),
+      : problem(
+          401,
+          "authentication_required",
+          "Authentication is required.",
+          "req-401",
+        ),
 ) {
   const requests: BffRequest[] = [];
   const uploads: PendingUpload[] = [];
@@ -102,11 +124,19 @@ export function settle() {
 }
 
 export function storageOutage(requestId = "req-503") {
-  return problem(503, "storage_unavailable", "Storage is unavailable.", requestId);
+  return problem(
+    503,
+    "storage_unavailable",
+    "Storage is unavailable.",
+    requestId,
+  );
 }
 
 // Current Lesson Audio as the BFF stores it, keyed by `${lessonId}:${languageCode}`.
-export type StoredAudio = Omit<AdminLessonAudio, "playbackUrl" | "playbackExpiresAt">;
+export type StoredAudio = Omit<
+  AdminLessonAudio,
+  "playbackUrl" | "playbackExpiresAt"
+>;
 
 export function storedAudio(overrides: Partial<StoredAudio> = {}): StoredAudio {
   return {
@@ -121,12 +151,16 @@ export function storedAudio(overrides: Partial<StoredAudio> = {}): StoredAudio {
 }
 
 export async function connect(token: string) {
-  fireEvent.change(screen.getByLabelText("Admin token"), { target: { value: token } });
+  fireEvent.change(screen.getByLabelText("Admin token"), {
+    target: { value: token },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 }
 
-
-export function lessonSummary(id: number, overrides: Partial<LessonSummary> = {}): LessonSummary {
+export function lessonSummary(
+  id: number,
+  overrides: Partial<LessonSummary> = {},
+): LessonSummary {
   return {
     id,
     chapter: id,
@@ -140,26 +174,46 @@ export function lessonSummary(id: number, overrides: Partial<LessonSummary> = {}
 }
 
 export const catalogue = [
-  lessonSummary(1, { status: "PUBLISHED", availableLanguageCodes: ["da", "th"] }),
+  lessonSummary(1, {
+    status: "PUBLISHED",
+    availableLanguageCodes: ["da", "th"],
+  }),
   lessonSummary(2, { chapter: 1, version: 2, availableLanguageCodes: ["th"] }),
   lessonSummary(3, { chapter: 2, version: 1 }),
-  lessonSummary(4, { chapter: 2, version: 2, status: "ARCHIVED", availableLanguageCodes: ["en"] }),
+  lessonSummary(4, {
+    chapter: 2,
+    version: 2,
+    status: "ARCHIVED",
+    availableLanguageCodes: ["en"],
+  }),
 ];
 
 export function rows() {
   return screen
     .getAllByRole("row")
     .slice(1)
-    .map((row) => within(row).getAllByRole("cell").slice(0, 4).map((cell) => cell.textContent));
+    .map((row) =>
+      within(row)
+        .getAllByRole("cell")
+        .slice(0, 4)
+        .map((cell) => cell.textContent),
+    );
 }
 
 export function chapterVersions() {
   return rows().map(([chapter, version]) => `${chapter}.${version}`);
 }
 
-
-export function lessonDetail(id: number, overrides: Partial<LessonDetail> = {}): LessonDetail {
-  return { ...lessonSummary(id), lessonTexts: [], lessonSources: [], ...overrides };
+export function lessonDetail(
+  id: number,
+  overrides: Partial<LessonDetail> = {},
+): LessonDetail {
+  return {
+    ...lessonSummary(id),
+    lessonTexts: [],
+    lessonSources: [],
+    ...overrides,
+  };
 }
 
 // An in-memory BFF for the editor tests; `override` injects failures, including 401s, per request.
@@ -184,7 +238,11 @@ export function fakeBackend(
     ...new Map(
       [
         ...lessons.flatMap((lesson) =>
-          lesson.lessonSources.map(({ id, url, publishedAt }) => ({ id, url, publishedAt })),
+          lesson.lessonSources.map(({ id, url, publishedAt }) => ({
+            id,
+            url,
+            publishedAt,
+          })),
         ),
         ...extraSources,
       ].map((source) => [source.id, source]),
@@ -201,11 +259,20 @@ export function fakeBackend(
     const overridden = override(request);
     if (overridden) return overridden;
     if (request.path === "/api/admin/sources") {
-      if (request.method === "GET") return { status: 200, body: { items: sources } };
+      if (request.method === "GET")
+        return { status: 200, body: { items: sources } };
       const newSource = request.body as CreateSourceRequest;
       if (sources.some((source) => source.url === newSource.url))
-        return problem(409, "source_url_conflict", "A Source with this URL already exists.", "req-409-source");
-      const created = { id: Math.max(0, ...sources.map((source) => source.id)) + 1, ...newSource };
+        return problem(
+          409,
+          "source_url_conflict",
+          "A Source with this URL already exists.",
+          "req-409-source",
+        );
+      const created = {
+        id: Math.max(0, ...sources.map((source) => source.id)) + 1,
+        ...newSource,
+      };
       sources.push(created);
       return { status: 201, body: created };
     }
@@ -219,7 +286,9 @@ export function fakeBackend(
           uploadUrl: `https://s3.invalid/audio/${mediaAssetId}.mp3?signature=upload`,
           uploadHeaders: {
             "Content-Type": "audio/mpeg",
-            "Content-Length": String((request.body as CreateUploadIntentRequest).sizeBytes),
+            "Content-Length": String(
+              (request.body as CreateUploadIntentRequest).sizeBytes,
+            ),
             "If-None-Match": "*",
           },
           expiresAt: "2026-10-04T12:15:00.000Z",
@@ -229,7 +298,8 @@ export function fakeBackend(
     if (request.path.startsWith("/api/admin/media/")) {
       const mediaAssetId = Number(request.path.split("/")[4]);
       const intent = intents.get(mediaAssetId)!;
-      const { lessonId, languageCode } = request.body as CompleteMediaAssetRequest;
+      const { lessonId, languageCode } =
+        request.body as CompleteMediaAssetRequest;
       const key = `${lessonId}:${languageCode}`;
       const audioVersion = (currentAudio[key]?.audioVersion ?? 0) + 1;
       currentAudio[key] = storedAudio({
@@ -261,10 +331,22 @@ export function fakeBackend(
       };
     }
     // `/:id`, `/:id/texts/:languageCode`, `/:id/sources/:sourceId`, or `/:id/audio/:languageCode`.
-    const [id, collection, member] = request.path.slice("/api/admin/lessons/".length).split("/");
-    const body = request.body as { chapter: number; version: number; title: string; content: string };
+    const [id, collection, member] = request.path
+      .slice("/api/admin/lessons/".length)
+      .split("/");
+    const body = request.body as {
+      chapter: number;
+      version: number;
+      title: string;
+      content: string;
+    };
     const conflict = (chapter: number, version: number, except?: number) =>
-      lessons.some((other) => other.id !== except && other.chapter === chapter && other.version === version);
+      lessons.some(
+        (other) =>
+          other.id !== except &&
+          other.chapter === chapter &&
+          other.version === version,
+      );
     const conflictProblem = problem(
       409,
       "lesson_version_conflict",
@@ -275,17 +357,30 @@ export function fakeBackend(
     if (!id) {
       if (request.method === "POST") {
         if (conflict(body.chapter, body.version)) return conflictProblem;
-        const created = lessonDetail(Math.max(0, ...lessons.map((lesson) => lesson.id)) + 1, body);
+        const created = lessonDetail(
+          Math.max(0, ...lessons.map((lesson) => lesson.id)) + 1,
+          body,
+        );
         lessons.push(created);
         return { status: 201, body: created };
       }
       return {
         status: 200,
-        body: { items: lessons.map(({ lessonTexts, lessonSources, ...summary }) => summary) },
+        body: {
+          items: lessons.map(
+            ({ lessonTexts, lessonSources, ...summary }) => summary,
+          ),
+        },
       };
     }
     const lesson = lessons.find((candidate) => candidate.id === Number(id));
-    if (!lesson) return problem(404, "lesson_not_found", "Lesson was not found.", "req-404");
+    if (!lesson)
+      return problem(
+        404,
+        "lesson_not_found",
+        "Lesson was not found.",
+        "req-404",
+      );
     if (collection === "audio") {
       const stored = currentAudio[`${lesson.id}:${member}`];
       playbacks += 1;
@@ -303,17 +398,34 @@ export function fakeBackend(
       };
     }
     if (request.method === "GET") return { status: 200, body: lesson };
-    const status = (request.body as { status?: LessonStatus } | undefined)?.status;
+    const status = (request.body as { status?: LessonStatus } | undefined)
+      ?.status;
     if (request.method === "PATCH" && status) return transition(lesson, status);
     if (lesson.status !== "DRAFT")
-      return problem(409, "lesson_not_editable", "Only Draft Lessons can be edited.", "req-409");
+      return problem(
+        409,
+        "lesson_not_editable",
+        "Only Draft Lessons can be edited.",
+        "req-409",
+      );
     if (request.method === "PATCH") {
-      if (conflict(body.chapter, body.version, lesson.id)) return conflictProblem;
+      if (conflict(body.chapter, body.version, lesson.id))
+        return conflictProblem;
       Object.assign(lesson, body);
     } else if (collection === "sources") {
-      const source = sources.find((candidate) => candidate.id === Number(member));
-      if (!source) return problem(404, "source_not_found", "Source was not found.", "req-404");
-      const others = lesson.lessonSources.filter((cited) => cited.id !== source.id);
+      const source = sources.find(
+        (candidate) => candidate.id === Number(member),
+      );
+      if (!source)
+        return problem(
+          404,
+          "source_not_found",
+          "Source was not found.",
+          "req-404",
+        );
+      const others = lesson.lessonSources.filter(
+        (cited) => cited.id !== source.id,
+      );
       if (request.method === "DELETE") {
         lesson.lessonSources = others;
         touch(lesson);
@@ -334,7 +446,9 @@ export function fakeBackend(
         ...lesson.lessonTexts.filter((text) => text.languageCode !== member),
         { languageCode: member!, title: body.title, content: body.content },
       ];
-      lesson.availableLanguageCodes = lesson.lessonTexts.map((text) => text.languageCode).sort();
+      lesson.availableLanguageCodes = lesson.lessonTexts
+        .map((text) => text.languageCode)
+        .sort();
     }
     touch(lesson);
     return { status: 200, body: lesson };
@@ -344,27 +458,40 @@ export function fakeBackend(
 
 // Like the Data Service, every change moves a Lesson's updatedAt strictly forward.
 function touch(lesson: LessonDetail) {
-  lesson.updatedAt = new Date(Math.max(Date.now(), Date.parse(lesson.updatedAt) + 1)).toISOString();
+  lesson.updatedAt = new Date(
+    Math.max(Date.now(), Date.parse(lesson.updatedAt) + 1),
+  ).toISOString();
 }
 
 // Opens a Lesson and waits for the editor's own first reads, so they never race a test's requests.
 export async function openLesson(chapter: number, version: number) {
-  fireEvent.click(await screen.findByRole("button", { name: `Open chapter ${chapter}, version ${version}` }));
-  await screen.findByRole("heading", { name: `Chapter ${chapter}, version ${version}` });
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: `Open chapter ${chapter}, version ${version}`,
+    }),
+  );
+  await screen.findByRole("heading", {
+    name: `Chapter ${chapter}, version ${version}`,
+  });
   await waitFor(() => {
     expect(screen.queryByText("Loading audio…")).toBeNull();
     expect(screen.queryByText("Loading Sources…")).toBeNull();
   });
 }
 
-export function type(label: string, value: string, container: HTMLElement = document.body) {
-  fireEvent.change(within(container).getByLabelText(label), { target: { value } });
+export function type(
+  label: string,
+  value: string,
+  container: HTMLElement = document.body,
+) {
+  fireEvent.change(within(container).getByLabelText(label), {
+    target: { value },
+  });
 }
 
 export function structureForm() {
   return screen.getByRole("form", { name: "Structure" });
 }
-
 
 export function unloadBlocked() {
   const event = new Event("beforeunload", { cancelable: true });
@@ -372,9 +499,16 @@ export function unloadBlocked() {
   return event.defaultPrevented;
 }
 
-
-export const thaiText = { languageCode: "th", title: "บทที่ 1", content: "เนื้อหาภาษาไทย" };
-export const danishText = { languageCode: "da", title: "Kapitel 1", content: "Indhold" };
+export const thaiText = {
+  languageCode: "th",
+  title: "บทที่ 1",
+  content: "เนื้อหาภาษาไทย",
+};
+export const danishText = {
+  languageCode: "da",
+  title: "Kapitel 1",
+  content: "Indhold",
+};
 
 export function tab(languageCode: string) {
   return screen.getByRole("tab", { name: new RegExp(`^${languageCode}\\b`) });
@@ -384,19 +518,23 @@ export function textForm() {
   return screen.getByRole("form", { name: "Lesson Text" });
 }
 
-
 export function fieldError(label: string, container: HTMLElement) {
-  const describedBy = within(container).getByLabelText(label).getAttribute("aria-describedby");
+  const describedBy = within(container)
+    .getByLabelText(label)
+    .getAttribute("aria-describedby");
   return describedBy && document.getElementById(describedBy)?.textContent;
 }
-
 
 export const lawSource = {
   id: 1,
   url: "https://www.retsinformation.dk/eli/lta/2024/1",
   publishedAt: "2024-01-15T00:00:00.000Z",
 };
-export const guideSource = { id: 2, url: "https://nyidanmark.dk/da/guide", publishedAt: null };
+export const guideSource = {
+  id: 2,
+  url: "https://nyidanmark.dk/da/guide",
+  publishedAt: null,
+};
 // 01:00 at +02:00 is still 31 December in UTC.
 export const bookSource = {
   id: 3,
@@ -421,7 +559,9 @@ export function newSourceForm() {
 
 // Canonical Sources are found, created, and reused only.
 export function canonicalEditControls() {
-  return within(finder()).queryAllByRole("button", { name: /edit|delete|remove|update|rename/i });
+  return within(finder()).queryAllByRole("button", {
+    name: /edit|delete|remove|update|rename/i,
+  });
 }
 
 // A chosen file whose size is set without allocating it.

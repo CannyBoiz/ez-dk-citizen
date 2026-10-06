@@ -1,8 +1,8 @@
 import {
   installRequestLifecycle,
   problem,
-  requireBearerToken,
   type RequestIdEnvironment,
+  requireBearerToken,
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";

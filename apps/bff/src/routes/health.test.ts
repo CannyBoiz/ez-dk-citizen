@@ -1,9 +1,9 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import {
   livenessResponseSchema,
   readinessResponseSchema,
 } from "@ez-dk-citizen/api-contracts";
-import assert from "node:assert/strict";
-import { test } from "node:test";
 
 import { createBffApp } from "../app.js";
 

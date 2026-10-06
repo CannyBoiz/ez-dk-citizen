@@ -3,20 +3,27 @@
 import { useCallback, useEffect, useId, useState } from "react";
 
 import { TokenForm } from "../features/auth";
-import { Catalogue, LessonView, type CatalogueFilters } from "../features/lesson";
+import {
+  Catalogue,
+  type CatalogueFilters,
+  LessonView,
+} from "../features/lesson";
 import { SourceFinder } from "../features/source";
-import { BffError, request, type Call } from "../shared/lib/bff";
+import { BffError, type Call, request } from "../shared/lib/bff";
 import type { Network } from "../shared/lib/network";
 
 export function App({ network }: { network: Network }) {
   // The token lives only in React state: never in storage, cookies, the URL, or the build.
   const [token, setToken] = useState<string | null>(null);
   const [reentry, setReentry] = useState(false);
-  const [screen, setScreen] = useState<"catalogue" | "sources" | { lessonId: number }>(
-    "catalogue",
-  );
+  const [screen, setScreen] = useState<
+    "catalogue" | "sources" | { lessonId: number }
+  >("catalogue");
   // Held here so the catalogue's filters survive opening a Lesson and coming back.
-  const [filters, setFilters] = useState<CatalogueFilters>({ chapter: "", status: "" });
+  const [filters, setFilters] = useState<CatalogueFilters>({
+    chapter: "",
+    status: "",
+  });
   // Whether the open screen has unsaved edits; drives both navigation warnings.
   const [dirty, setDirty] = useState(false);
   const reentryTitle = useId();
@@ -29,7 +36,8 @@ export function App({ network }: { network: Network }) {
   }, [dirty]);
 
   const confirmLeave = () =>
-    !dirty || window.confirm("You have unsaved changes. Leave and discard them?");
+    !dirty ||
+    window.confirm("You have unsaved changes. Leave and discard them?");
 
   function disconnect() {
     if (!confirmLeave()) return;
@@ -42,7 +50,11 @@ export function App({ network }: { network: Network }) {
   const call = useCallback<Call>(
     async (bffRequest, schema) => {
       try {
-        return await request(network, { ...bffRequest, token: token ?? "" }, schema);
+        return await request(
+          network,
+          { ...bffRequest, token: token ?? "" },
+          schema,
+        );
       } catch (error) {
         if (error instanceof BffError && error.status === 401) setReentry(true);
         throw error;
@@ -77,7 +89,10 @@ export function App({ network }: { network: Network }) {
         </>
       ) : screen === "sources" ? (
         <section>
-          <button type="button" onClick={() => confirmLeave() && setScreen("catalogue")}>
+          <button
+            type="button"
+            onClick={() => confirmLeave() && setScreen("catalogue")}
+          >
             Back to catalogue
           </button>
           <SourceFinder call={call} onDirtyChange={setDirty} />

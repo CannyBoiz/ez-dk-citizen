@@ -2,8 +2,8 @@ import {
   adminLessonAudioResponseSchema,
   type CurrentLessonAudioResponse,
   lessonLanguageParamsSchema,
-  validateRequest,
   type RequestIdEnvironment,
+  validateRequest,
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 

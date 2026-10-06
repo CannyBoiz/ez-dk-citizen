@@ -3,7 +3,9 @@ import { useState } from "react";
 
 export function useAction<Key>() {
   const [pending, setPending] = useState<Key | null>(null);
-  const [failure, setFailure] = useState<{ key: Key; error: unknown } | null>(null);
+  const [failure, setFailure] = useState<{ key: Key; error: unknown } | null>(
+    null,
+  );
 
   async function run(key: Key, action: () => Promise<void>) {
     setFailure(null);
