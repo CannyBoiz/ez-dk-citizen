@@ -1674,7 +1674,12 @@ requirement.
    admin listener (`/api/admin/*`, port from `BFF_ADMIN_PORT`); the public
    listener registers no admin routes (ADR-0007).
 1. Dockerfiles.
-2. Compose.
+2. Compose. Open question: does production deploy this repo's
+   `docker-compose.yml`, or its own production Compose file in
+   `cannyboiz-devops-hub`? The repo file also carries test-only services behind
+   the `integration` and `integration-failure` profiles. Revisit
+   `restart: unless-stopped` with that decision: today it also restarts
+   orphaned local test stacks after Docker restarts.
 3. Caddy: a public site for the mobile API and a same-origin admin site
    (Admin static build + `/api/admin/*`) bound to the tailnet; set the S3 CORS
    `admin_production_origin` to the admin site origin.
