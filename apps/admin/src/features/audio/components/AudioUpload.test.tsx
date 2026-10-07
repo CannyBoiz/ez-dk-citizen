@@ -315,9 +315,20 @@ test.each([
 );
 
 test("after a failure, only Start new upload begins another Upload Intent, and the failure survives a Language switch", async () => {
-  const backend = fakeBackend([
-    lessonDetail(1, { lessonTexts: [thaiText, danishText] }),
-  ]);
+  const backend = fakeBackend(
+    [lessonDetail(1, { lessonTexts: [thaiText, danishText] })],
+    {
+      override: (request) =>
+        request.path.endsWith("/complete")
+          ? problem(
+              422,
+              "invalid_uploaded_media",
+              "Uploaded object does not match its declared media metadata.",
+              "req-422",
+            )
+          : undefined,
+    },
+  );
   await open(backend);
   const intents = () =>
     backend.requests.filter((request) => request.path === intentPath);
@@ -325,7 +336,7 @@ test("after a failure, only Start new upload begins another Upload Intent, and t
   chooseFile(mp3File());
   fireEvent.click(uploadButton());
   await waitFor(() => expect(backend.uploads).toHaveLength(1));
-  backend.uploads[0]!.fail();
+  backend.uploads[0]!.finish(200);
   await within(uploadPanel()).findByRole("alert");
 
   expect(uploadButton()).toHaveProperty("disabled", true);

@@ -19,7 +19,7 @@ import {
 } from "../../../shared/lib/languages";
 import type { BffRequest, Network } from "../../../shared/lib/network";
 import { useAction } from "../../../shared/lib/useAction";
-import { AudioUpload, CurrentAudio } from "../../audio";
+import { AudioUpload, CurrentAudio, type UploadStatus } from "../../audio";
 import { SourceFinder, SourceLabel } from "../../source";
 import { hasLessonText } from "../utils/lessonTexts";
 import {
@@ -42,12 +42,14 @@ export function LessonView({
   lessonId,
   onBack,
   onDirtyChange,
+  onUploadChange,
 }: {
   call: Call;
   putObject: Network["putObject"];
   lessonId: number;
   onBack: () => void;
   onDirtyChange: (dirty: boolean) => void;
+  onUploadChange: (status: UploadStatus) => void;
 }) {
   const [lesson, setLesson] = useState<LessonDetail | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -57,8 +59,10 @@ export function LessonView({
   // The Source finder's New Source form counts towards unsaved edits too.
   const [finderDirty, setFinderDirty] = useState(false);
   const detaching = useAction<number>();
-  // While an upload is Uploading or Finalizing, its Lesson and Language stay locked.
-  const [uploading, setUploading] = useState(false);
+  // The upload's status, reported up for the navigation guards. While it is active (Uploading
+  // or Finalizing), its Lesson and Language stay locked.
+  const [upload, setUpload] = useState<UploadStatus>("idle");
+  const uploading = upload === "active";
   // Bumped after a completed upload, so the audio panel reads the new current rendition.
   const [audioReads, setAudioReads] = useState(0);
   // Whether each Language has current audio, as far as this page knows; drives the narration
@@ -156,6 +160,11 @@ export function LessonView({
     onDirtyChange(dirty);
     return () => onDirtyChange(false);
   }, [dirty, onDirtyChange]);
+
+  useEffect(() => {
+    onUploadChange(upload);
+    return () => onUploadChange("idle");
+  }, [upload, onUploadChange]);
 
   if (lesson === null)
     return (
@@ -357,7 +366,7 @@ export function LessonView({
         putObject={putObject}
         target={{ lessonId: lesson.id, languageCode }}
         unavailable={uploadUnavailable}
-        onActiveChange={setUploading}
+        onStatusChange={setUpload}
         onComplete={(uploaded) => {
           // Completion made this rendition current, whatever the panel's next read reports.
           learnAudio(uploaded.languageCode, true);

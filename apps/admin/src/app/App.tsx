@@ -2,6 +2,7 @@
 // guards, and switching between the catalogue, the Sources screen, and one Lesson.
 import { useCallback, useEffect, useId, useState } from "react";
 
+import type { UploadStatus } from "../features/audio";
 import { TokenForm } from "../features/auth";
 import {
   Catalogue,
@@ -24,20 +25,29 @@ export function App({ network }: { network: Network }) {
     chapter: "",
     status: "",
   });
-  // Whether the open screen has unsaved edits; drives both navigation warnings.
+  // Whether the open screen has unsaved edits, and what leaving would lose of an upload; both
+  // drive the navigation warnings.
   const [dirty, setDirty] = useState(false);
+  const [upload, setUpload] = useState<UploadStatus>("idle");
+  const losses = [
+    dirty && "You have unsaved changes, which will be discarded.",
+    upload === "active" &&
+      "An upload is in progress, and its outcome will not be shown.",
+    upload === "recoverable" &&
+      "A failed upload can still be recovered on this page, and that recovery will be discarded.",
+  ].filter((loss) => loss !== false);
   const reentryTitle = useId();
 
+  const warnOnUnload = losses.length > 0;
   useEffect(() => {
-    if (!dirty) return;
+    if (!warnOnUnload) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  }, [warnOnUnload]);
 
   const confirmLeave = () =>
-    !dirty ||
-    window.confirm("You have unsaved changes. Leave and discard them?");
+    losses.length === 0 || window.confirm(`${losses.join(" ")} Leave anyway?`);
 
   function disconnect() {
     if (!confirmLeave()) return;
@@ -104,6 +114,7 @@ export function App({ network }: { network: Network }) {
           lessonId={screen.lessonId}
           onBack={() => confirmLeave() && setScreen("catalogue")}
           onDirtyChange={setDirty}
+          onUploadChange={setUpload}
         />
       )}
       {token !== null && reentry && (

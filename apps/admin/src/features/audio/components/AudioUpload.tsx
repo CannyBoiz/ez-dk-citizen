@@ -1,33 +1,77 @@
 // Uploading an MP3 as the next rendition for one Lesson and Language: Upload Intent, a direct
-// PUT to storage with progress, then completion. Success is shown only after completion, and
-// after a failure only the explicit Start new upload begins another Upload Intent.
+// PUT to storage with progress, then completion. Success is shown only after completion. A
+// failure is recovered, where it can be, by completing the same Media Asset again; only the
+// explicit Start new upload begins another Upload Intent.
 import {
   type CompleteMediaAssetRequest,
   type CreateUploadIntentRequest,
   completeMediaAssetResponseSchema,
   maxUploadSizeBytes,
+  type UploadIntentResponse,
   uploadIntentResponseSchema,
 } from "@ez-dk-citizen/api-contracts/schemas";
 import { useEffect, useRef, useState } from "react";
 
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
-import type { Call } from "../../../shared/lib/bff";
+import { BffError, type Call } from "../../../shared/lib/bff";
 import { type Network, StorageError } from "../../../shared/lib/network";
 import type { AudioTarget } from "../types";
 
 // One upload attempt: fixed to the Lesson and Language it started for, whatever is selected later.
-type Attempt = { target: AudioTarget; filename: string; mediaAssetId?: number };
+type Attempt = { target: AudioTarget; filename: string };
+// An attempt that holds a Media Asset ID, which every recovery reuses.
+type Started = Attempt & { mediaAssetId: number };
+// Retryable: the file reached storage but completion failed transiently. Uncertain: the PUT
+// failed, so whether the file reached storage is unknown until completion checks it.
+type Recovery = "retryable" | "uncertain";
 type UploadState =
   | { step: "idle" }
   | ({ step: "preparing" } & Attempt)
-  | ({ step: "uploading"; percent: number } & Attempt)
-  | ({ step: "finalizing" } & Attempt)
-  | ({ step: "complete"; audioVersion: number } & Attempt)
-  | ({ step: "failed"; error: unknown } & Attempt);
+  | ({ step: "uploading"; percent: number } & Started)
+  | ({ step: "finalizing" } & Started)
+  | ({ step: "complete"; audioVersion: number } & Started)
+  | ({ step: "failed"; error: unknown; kind: Recovery } & Started)
+  | ({ step: "failed"; error: unknown; kind: "terminal" } & Attempt & {
+        mediaAssetId?: number;
+      });
 
 // While an attempt is in one of these steps, its Lesson and Language stay locked.
 const isActive = ({ step }: UploadState) =>
   step === "preparing" || step === "uploading" || step === "finalizing";
+
+// What leaving the page would lose: an attempt in progress, a failed attempt that can still
+// be recovered, or nothing.
+export type UploadStatus = "active" | "recoverable" | "idle";
+const statusOf = (state: UploadState): UploadStatus =>
+  isActive(state)
+    ? "active"
+    : state.step === "failed" && state.kind !== "terminal"
+      ? "recoverable"
+      : "idle";
+
+// Each failure kind's explanation and its one way forward. Recovery is offered while it can
+// still succeed; only then is a new upload offered.
+const failureKinds = {
+  retryable: {
+    help: "The file reached storage but was not finalized. Retry finalization to make it current.",
+    action: "Retry finalization",
+  },
+  uncertain: {
+    help: "It is not known whether the file reached storage. Check the upload to find out.",
+    action: "Check upload / Retry finalization",
+  },
+  terminal: { help: "A new upload is required.", action: "Start new upload" },
+};
+
+// A completion failure that a retry may get past: the BFF unreachable, failing upstream, or
+// answering unreadably, or the token rejected (re-entered before retrying). Any other 4xx is a
+// refusal that is final for the attempt.
+const isTransient = (error: unknown) =>
+  !(error instanceof BffError) ||
+  error.status === undefined ||
+  error.status === 401 ||
+  error.status < 400 ||
+  error.status >= 500;
 
 function fileProblem(file: File) {
   if (!file.name.endsWith(".mp3")) return "Choose an .mp3 file.";
@@ -40,7 +84,7 @@ export function AudioUpload({
   putObject,
   target,
   unavailable,
-  onActiveChange,
+  onStatusChange,
   onComplete,
 }: {
   call: Call;
@@ -49,7 +93,7 @@ export function AudioUpload({
   target: AudioTarget;
   // Why uploading is not possible right now, if it is not.
   unavailable?: string;
-  onActiveChange: (active: boolean) => void;
+  onStatusChange: (status: UploadStatus) => void;
   onComplete: (target: AudioTarget) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
@@ -61,10 +105,10 @@ export function AudioUpload({
   // Reported in the same update as the step, so the lock never lags behind the panel.
   function step(next: UploadState) {
     setState(next);
-    onActiveChange(isActive(next));
+    onStatusChange(statusOf(next));
   }
 
-  useEffect(() => () => onActiveChange(false), [onActiveChange]);
+  useEffect(() => () => onStatusChange("idle"), [onStatusChange]);
 
   function clearFile() {
     setFile(null);
@@ -91,8 +135,9 @@ export function AudioUpload({
   async function upload(chosen: File) {
     const attempt: Attempt = { target, filename: chosen.name };
     step({ step: "preparing", ...attempt });
+    let intent: UploadIntentResponse;
     try {
-      const intent = await call(
+      intent = await call(
         {
           method: "POST",
           path: "/api/admin/media/upload-intents",
@@ -106,47 +151,76 @@ export function AudioUpload({
         },
         uploadIntentResponseSchema,
       );
-      attempt.mediaAssetId = intent.mediaAssetId;
-      step({ step: "uploading", percent: 0, ...attempt });
-      // The browser derives Content-Length from the File; scripts cannot set it.
-      const { "Content-Length": _contentLength, ...headers } =
-        intent.uploadHeaders;
-      const { status } = await putObject({
-        url: intent.uploadUrl,
-        headers,
-        file: chosen,
-        onProgress: (fraction) =>
-          setState({
-            step: "uploading",
-            percent: Math.round(fraction * 100),
-            ...attempt,
-          }),
-      }).catch(() => {
-        throw new StorageError("The upload to storage did not complete.");
-      });
-      if (status < 200 || status > 299)
-        throw new StorageError(
-          `Storage rejected the upload with status ${status}.`,
-        );
+    } catch (error) {
+      step({ step: "failed", error, kind: "terminal", ...attempt });
+      return;
+    }
 
-      step({ step: "finalizing", ...attempt });
+    const started: Started = { ...attempt, mediaAssetId: intent.mediaAssetId };
+    step({ step: "uploading", percent: 0, ...started });
+    // The browser derives Content-Length from the File; scripts cannot set it.
+    const { "Content-Length": _contentLength, ...headers } =
+      intent.uploadHeaders;
+    const { status } = await putObject({
+      url: intent.uploadUrl,
+      headers,
+      file: chosen,
+      onProgress: (fraction) =>
+        setState({
+          step: "uploading",
+          percent: Math.round(fraction * 100),
+          ...started,
+        }),
+    }).catch(() => ({ status: undefined }));
+    if (status === undefined || status < 200 || status > 299) {
+      step({
+        step: "failed",
+        error: new StorageError(
+          status === undefined
+            ? "The upload to storage did not complete."
+            : `Storage rejected the upload with status ${status}.`,
+        ),
+        kind: "uncertain",
+        ...started,
+      });
+      return;
+    }
+    await finalize(started, "retryable");
+  }
+
+  // Completion with the attempt's own Media Asset ID and target, never a new Upload Intent. A
+  // transient failure leaves the attempt recoverable as `recovery`; any other is terminal.
+  async function finalize(
+    { target, filename, mediaAssetId }: Started,
+    recovery: Recovery,
+  ) {
+    // Only the attempt itself, without a failed state's step, kind, or error. Its target, not
+    // the selected one.
+    const started = { target, filename, mediaAssetId };
+    step({ step: "finalizing", ...started });
+    try {
       const { lessonAudio } = await call(
         {
           method: "POST",
-          path: `/api/admin/media/${intent.mediaAssetId}/complete`,
-          body: attempt.target satisfies CompleteMediaAssetRequest,
+          path: `/api/admin/media/${mediaAssetId}/complete`,
+          body: target satisfies CompleteMediaAssetRequest,
         },
         completeMediaAssetResponseSchema,
       );
       step({
         step: "complete",
         audioVersion: lessonAudio.audioVersion,
-        ...attempt,
+        ...started,
       });
       clearFile();
-      onComplete(attempt.target);
+      onComplete(target);
     } catch (error) {
-      step({ step: "failed", error, ...attempt });
+      step({
+        step: "failed",
+        error,
+        kind: isTransient(error) ? recovery : "terminal",
+        ...started,
+      });
     }
   }
 
@@ -209,9 +283,19 @@ export function AudioUpload({
               `Upload of ${state.filename} for ${state.target.languageCode} failed` +
               (state.mediaAssetId ? ` (Media Asset ${state.mediaAssetId})` : "")
             }
-          />
-          <button type="button" onClick={startNewUpload}>
-            Start new upload
+          >
+            {" "}
+            {failureKinds[state.kind].help}
+          </ErrorMessage>
+          <button
+            type="button"
+            onClick={() =>
+              state.kind === "terminal"
+                ? startNewUpload()
+                : finalize(state, state.kind)
+            }
+          >
+            {failureKinds[state.kind].action}
           </button>
         </>
       )}
