@@ -8,6 +8,11 @@ export const testProjectPrefixes = [
   "ez-dk-live-s3-",
 ];
 
+// The live S3 test lists its smoke keys in a temp folder named with this prefix,
+// so `pnpm test:clean` can point at keys an interrupted run left in S3.
+export const smokeKeyDirectoryPrefix = "ez-dk-live-s3-";
+export const smokeKeyFileName = "smoke-keys";
+
 const handledSignals = ["SIGINT", "SIGTERM", "SIGHUP"];
 
 export function createProjectName(prefix) {

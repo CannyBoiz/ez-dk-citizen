@@ -3,7 +3,11 @@ import { readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { testProjectPrefixes } from "./lib/docker-test-stack.mjs";
+import {
+  smokeKeyDirectoryPrefix,
+  smokeKeyFileName,
+  testProjectPrefixes,
+} from "./lib/docker-test-stack.mjs";
 
 // Removes Docker resources that interrupted test runs left behind. It never
 // touches the development stack, images, or S3. Do not run it while a Docker
@@ -26,8 +30,8 @@ for (const [kind, listArguments, removeArguments] of [
 if (!removed) console.log("No leftover test Docker resources.");
 
 for (const entry of await readdir(tmpdir())) {
-  if (!entry.startsWith("ez-dk-live-s3-")) continue;
-  const smokeKeyFile = path.join(tmpdir(), entry, "smoke-keys");
+  if (!entry.startsWith(smokeKeyDirectoryPrefix)) continue;
+  const smokeKeyFile = path.join(tmpdir(), entry, smokeKeyFileName);
   const keys = await readFile(smokeKeyFile, "utf8").catch(() => "");
   if (keys.trim()) {
     console.log(

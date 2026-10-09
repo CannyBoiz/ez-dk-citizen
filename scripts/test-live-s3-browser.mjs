@@ -6,7 +6,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createProjectName, withTeardown } from "./lib/docker-test-stack.mjs";
+import {
+  createProjectName,
+  smokeKeyDirectoryPrefix,
+  smokeKeyFileName,
+  withTeardown,
+} from "./lib/docker-test-stack.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -125,9 +130,9 @@ if (process.argv.includes("--preflight")) {
 }
 
 const smokeKeyFileDirectory = await mkdtemp(
-  path.join(tmpdir(), "ez-dk-live-s3-"),
+  path.join(tmpdir(), smokeKeyDirectoryPrefix),
 );
-const smokeKeyFile = path.join(smokeKeyFileDirectory, "smoke-keys");
+const smokeKeyFile = path.join(smokeKeyFileDirectory, smokeKeyFileName);
 await writeFile(smokeKeyFile, "", { mode: 0o600 });
 const entrypointFile = path.join(
   repositoryRoot,

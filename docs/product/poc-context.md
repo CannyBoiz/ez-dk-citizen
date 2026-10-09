@@ -1735,7 +1735,7 @@ Then run once per repository:
 /setup-matt-pocock-skills
 ```
 
-Use this `GLOSSARY.md` as the canonical domain document unless repository setup explicitly chooses another location.
+Use this document as the canonical domain document unless repository setup explicitly chooses another location.
 
 ## Recommended skills for this project
 
