@@ -60,7 +60,8 @@ export function LessonView({
   const [finderDirty, setFinderDirty] = useState(false);
   const detaching = useAction<number>();
   // The upload's status, reported up for the navigation guards. While it is active (Uploading
-  // or Finalizing), its Lesson and Language stay locked.
+  // or Finalizing), its Lesson and Language stay locked. Held here as well as in App, like
+  // `dirty`: this page locks on it, and App warns on it.
   const [upload, setUpload] = useState<UploadStatus>("idle");
   const uploading = upload === "active";
   // Bumped after a completed upload, so the audio panel reads the new current rendition.

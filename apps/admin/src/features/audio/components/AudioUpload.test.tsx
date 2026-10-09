@@ -348,6 +348,10 @@ test("after a failure, only Start new upload begins another Upload Intent, and t
   expect(within(uploadPanel()).getByRole("alert").textContent).toContain(
     "Upload of chapter-1.mp3 for th failed (Media Asset 100)",
   );
+  // The panel is about the failed attempt, so it names that attempt's Language.
+  expect(within(uploadPanel()).getByRole("heading").textContent).toBe(
+    "Upload audio (th)",
+  );
   fireEvent.click(tab("th"));
 
   fireEvent.click(

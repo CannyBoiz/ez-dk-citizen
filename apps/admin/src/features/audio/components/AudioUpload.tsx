@@ -40,7 +40,8 @@ const isActive = ({ step }: UploadState) =>
   step === "preparing" || step === "uploading" || step === "finalizing";
 
 // What leaving the page would lose: an attempt in progress, a failed attempt that can still
-// be recovered, or nothing.
+// be recovered, or nothing. "idle" means nothing to lose, so it also covers a completed attempt
+// and a terminal failure, not only an upload that has not started.
 export type UploadStatus = "active" | "recoverable" | "idle";
 const statusOf = (state: UploadState): UploadStatus =>
   isActive(state)
@@ -49,8 +50,8 @@ const statusOf = (state: UploadState): UploadStatus =>
       ? "recoverable"
       : "idle";
 
-// Each failure kind's explanation and its one way forward. Recovery is offered while it can
-// still succeed; only then is a new upload offered.
+// Each failure kind's explanation and its way forward. While recovery can still succeed, Start
+// new upload is offered beside it, so a backend that keeps failing never traps the admin.
 const failureKinds = {
   retryable: {
     help: "The file reached storage but was not finalized. Retry finalization to make it current.",
@@ -60,7 +61,9 @@ const failureKinds = {
     help: "It is not known whether the file reached storage. Check the upload to find out.",
     action: "Check upload / Retry finalization",
   },
-  terminal: { help: "A new upload is required.", action: "Start new upload" },
+  terminal: { help: "A new upload is required." },
+} satisfies Record<Recovery, { help: string; action: string }> & {
+  terminal: { help: string };
 };
 
 // A completion failure that a retry may get past: the BFF unreachable, failing upstream, or
@@ -107,8 +110,6 @@ export function AudioUpload({
     setState(next);
     onStatusChange(statusOf(next));
   }
-
-  useEffect(() => () => onStatusChange("idle"), [onStatusChange]);
 
   function clearFile() {
     setFile(null);
@@ -230,9 +231,11 @@ export function AudioUpload({
   }
 
   const failed = state.step === "failed";
+  // Once an attempt has started, the panel is about that attempt and its Language.
+  const shown = "target" in state ? state.target : target;
   return (
     <section aria-label="Upload audio">
-      <h4>Upload audio ({target.languageCode})</h4>
+      <h4>Upload audio ({shown.languageCode})</h4>
       {unavailable && <p>{unavailable}</p>}
       <label>
         MP3 file
@@ -287,15 +290,13 @@ export function AudioUpload({
             {" "}
             {failureKinds[state.kind].help}
           </ErrorMessage>
-          <button
-            type="button"
-            onClick={() =>
-              state.kind === "terminal"
-                ? startNewUpload()
-                : finalize(state, state.kind)
-            }
-          >
-            {failureKinds[state.kind].action}
+          {state.kind !== "terminal" && (
+            <button type="button" onClick={() => finalize(state, state.kind)}>
+              {failureKinds[state.kind].action}
+            </button>
+          )}
+          <button type="button" onClick={startNewUpload}>
+            Start new upload
           </button>
         </>
       )}

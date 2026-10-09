@@ -6,7 +6,7 @@ The existing opt-in live-S3 tracer remains the automated proof of direct S3 tran
 
 See the spec section "Testing Decisions" (manual acceptance).
 
-**Blocked by:** 07 — Publish and archive from the Admin; 10 — Recover interrupted uploads
+**Blocked by:** 07 — Publish and archive from the Admin; 10 — Recover interrupted uploads; 12 — Escape and clarify upload recovery
 
 **Status:** ready-for-human
 

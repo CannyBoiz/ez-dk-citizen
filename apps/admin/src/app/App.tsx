@@ -26,7 +26,8 @@ export function App({ network }: { network: Network }) {
     status: "",
   });
   // Whether the open screen has unsaved edits, and what leaving would lose of an upload; both
-  // drive the navigation warnings.
+  // drive the navigation warnings. Reported separately, because the Sources screen has edits but
+  // no upload, and each screen also uses its own value for its own locks.
   const [dirty, setDirty] = useState(false);
   const [upload, setUpload] = useState<UploadStatus>("idle");
   const losses = [

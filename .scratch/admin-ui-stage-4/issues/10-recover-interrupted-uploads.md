@@ -25,3 +25,5 @@ See the spec section "Upload workflow" and user stories 56–63.
 - [x] Leaving the page during an upload or with recoverable state triggers the before-unload warning
 - [x] Navigating to another Lesson with recoverable state asks for confirmation that recovery will be discarded, and confirming discards it
 - [x] Whole-app tests cover every recovery path above, including asserting the requests the fake network module received
+
+**Follow-up:** 12 — Escape and clarify upload recovery, from this ticket's code review.

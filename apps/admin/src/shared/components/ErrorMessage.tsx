@@ -1,5 +1,5 @@
 // Shows a BFF or storage error's message and any request ID, with an optional Retry and
-// extra detail.
+// extra detail. A 500 is a backend bug rather than an outage, so it points at the logs.
 import type { ReactNode } from "react";
 
 import { BffError } from "../lib/bff";
@@ -31,6 +31,13 @@ export function ErrorMessage({
         <>
           {" "}
           Request ID: <code>{requestId}</code>
+        </>
+      )}
+      {error instanceof BffError && error.status === 500 && (
+        <>
+          {" "}
+          The server failed unexpectedly. Look up the request ID in the backend
+          logs.
         </>
       )}
       {onRetry && (

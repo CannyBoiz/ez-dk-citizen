@@ -37,10 +37,11 @@ const intentPath = "/api/admin/media/upload-intents";
 const isCompletion = (request: BffRequest) =>
   request.path.endsWith("/complete");
 
-// Answers the first request that `matches` with `response`; "network" sends it but no answer arrives.
+// Answers the first request that `matches` with `response`; a TypeError sends it but no answer
+// arrives, as when the network fails.
 function failFirst(
   matches: (request: BffRequest) => boolean,
-  response: BffResponse | "network",
+  response: BffResponse | TypeError,
 ) {
   return { matches: firstOnly(matches), response };
 }
@@ -53,20 +54,14 @@ async function open(
   const backend = fakeBackend(
     [lessonDetail(1, { lessonTexts: [thaiText], ...lesson })],
     {
-      override: (request) =>
-        failure?.response !== "network" && failure?.matches(request)
-          ? failure.response
-          : undefined,
+      override: (request) => {
+        if (!failure?.matches(request)) return undefined;
+        // The fake network has already recorded the request, so throwing leaves it unanswered.
+        if (failure.response instanceof TypeError) throw failure.response;
+        return failure.response;
+      },
     },
   );
-  if (failure?.response === "network") {
-    const bff = backend.network.bff;
-    backend.network.bff = async (request) => {
-      if (!failure.matches(request)) return bff(request);
-      backend.requests.push(request);
-      throw new TypeError("Failed to fetch");
-    };
-  }
   render(<App network={backend.network} />);
   await connect(validToken);
   await openLesson(1, 1);
@@ -110,7 +105,7 @@ test.each([
     "storage times out",
     problem(504, "storage_timeout", "Storage timed out.", "req-504"),
   ],
-  ["the network fails", "network"],
+  ["the network fails", new TypeError("Failed to fetch")],
   ["its answer is unreadable", { status: 200, body: {} }],
 ] as const)(
   "when completion fails because %s, Retry finalization completes the same Media Asset without uploading again",
@@ -126,6 +121,7 @@ test.each([
     expect(failure).toContain(retryable);
     expect(screen.queryByText(/Upload complete/)).toBeNull();
     expect(button("Check upload / Retry finalization")).toBeNull();
+    expect(button("Start new upload")).not.toBeNull();
 
     fireEvent.click(button("Retry finalization")!);
     await within(uploadPanel()).findByText(completeMessage);
@@ -166,7 +162,7 @@ test.each([
     expect(failure).toContain(uncertain);
     expect(backend.completions()).toEqual([]);
     expect(button("Retry finalization")).toBeNull();
-    expect(button("Start new upload")).toBeNull();
+    expect(button("Start new upload")).not.toBeNull();
 
     // The object landed after all, so the check finalizes it.
     fireEvent.click(button("Check upload / Retry finalization")!);
@@ -416,12 +412,65 @@ test("a transient failure while checking the upload keeps the check on offer", a
     expect((await alert()).textContent).toContain("Storage is unavailable."),
   );
   expect((await alert()).textContent).toContain(uncertain);
-  expect(button("Start new upload")).toBeNull();
+  expect(button("Start new upload")).not.toBeNull();
 
   fireEvent.click(button("Check upload / Retry finalization")!);
   await within(uploadPanel()).findByText(completeMessage);
   expect(backend.completions().map(({ path }) => path)).toEqual(
     Array(2).fill("/api/admin/media/100/complete"),
   );
+  expect(backend.intents()).toHaveLength(1);
+});
+
+test("Start new upload gives up on a recoverable failure: the recovery is discarded and only the new upload is finalized", async () => {
+  const backend = await open(failFirst(isCompletion, storageOutage()));
+  await startUpload(backend);
+  backend.uploads[0]!.finish(200);
+  expect((await alert()).textContent).toContain(retryable);
+  expect(unloadBlocked()).toBe(true);
+
+  fireEvent.click(button("Start new upload")!);
+  expect(within(uploadPanel()).queryByRole("alert")).toBeNull();
+  expect(unloadBlocked()).toBe(false);
+  expect(backend.intents()).toHaveLength(1);
+
+  chooseFile(mp3File("retake.mp3"));
+  fireEvent.click(uploadButton());
+  await waitFor(() => expect(backend.uploads).toHaveLength(2));
+  backend.uploads[1]!.finish(200);
+  await within(uploadPanel()).findByText(completeMessage);
+  expect(backend.intents()).toHaveLength(2);
+  expect(backend.completions().map(({ path }) => path)).toEqual([
+    "/api/admin/media/100/complete",
+    "/api/admin/media/101/complete",
+  ]);
+});
+
+test("a 500 during completion stays recoverable and says the request needs investigating in the backend logs", async () => {
+  const backend = await open(
+    failFirst(
+      isCompletion,
+      problem(
+        500,
+        "internal_error",
+        "The request could not be completed.",
+        "req-500",
+      ),
+    ),
+  );
+  await startUpload(backend);
+  backend.uploads[0]!.finish(200);
+
+  const failure = (await alert()).textContent;
+  expect(failure).toContain(
+    "The request could not be completed. Request ID: req-500",
+  );
+  expect(failure).toContain(
+    "The server failed unexpectedly. Look up the request ID in the backend logs.",
+  );
+  expect(failure).toContain(retryable);
+
+  fireEvent.click(button("Retry finalization")!);
+  await within(uploadPanel()).findByText(completeMessage);
   expect(backend.intents()).toHaveLength(1);
 });
