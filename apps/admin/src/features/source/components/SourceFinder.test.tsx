@@ -94,6 +94,7 @@ test("creating a Source sends a blank date as null and a chosen date as midnight
   );
   await waitFor(() =>
     expect(sourceRows()).toEqual([
+      "https://example.dk/undated · publication date unknown",
       "https://example.dk/dated · published 2025-03-09",
     ]),
   );
@@ -103,6 +104,61 @@ test("creating a Source sends a blank date as null and a chosen date as midnight
       publishedAt: "2025-03-09T00:00:00.000Z",
     },
   });
+});
+
+test("creating a Source keeps the search and confirms it, saying when the search hides it", async () => {
+  await openSources(fakeBackend([], { sources: [lawSource, guideSource] }));
+  type("Find Sources by URL", "nyidanmark", finder());
+
+  type("Source URL", "https://example.dk/new", newSourceForm());
+  fireEvent.click(
+    within(newSourceForm()).getByRole("button", { name: "Create Source" }),
+  );
+
+  const status = within(finder()).getByRole("status");
+  await waitFor(() =>
+    expect(status.textContent).toBe(
+      "Source created: https://example.dk/new. It doesn't match the current search, so it isn't listed.",
+    ),
+  );
+  expect(within(finder()).getByLabelText("Find Sources by URL")).toHaveProperty(
+    "value",
+    "nyidanmark",
+  );
+  expect(sourceRows()).toEqual([
+    `${guideSource.url} · publication date unknown`,
+  ]);
+
+  type("Find Sources by URL", "", finder());
+  expect(status.textContent).toBe("Source created: https://example.dk/new.");
+  expect(sourceRows()).toContain(
+    "https://example.dk/new · publication date unknown",
+  );
+});
+
+test("a failed Source create shows the error, keeps the input, and clears the last confirmation", async () => {
+  const backend = fakeBackend();
+  await openSources(backend);
+  type("Source URL", "https://example.dk/first", newSourceForm());
+  fireEvent.click(
+    within(newSourceForm()).getByRole("button", { name: "Create Source" }),
+  );
+  await within(finder()).findByText(
+    "Source created: https://example.dk/first.",
+  );
+  backend.network.bff = () => Promise.reject(new TypeError("Failed to fetch"));
+
+  type("Source URL", "https://example.dk/offline", newSourceForm());
+  fireEvent.click(
+    within(newSourceForm()).getByRole("button", { name: "Create Source" }),
+  );
+
+  await within(newSourceForm()).findByRole("alert");
+  expect(within(newSourceForm()).getByLabelText("Source URL")).toHaveProperty(
+    "value",
+    "https://example.dk/offline",
+  );
+  expect(within(finder()).getByRole("status").textContent).toBe("");
 });
 
 test("a blank Source URL is rejected before submission", async () => {

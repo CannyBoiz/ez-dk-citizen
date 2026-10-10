@@ -38,6 +38,8 @@ export function SourceFinder({
   const [error, setError] = useState<unknown>(null);
   const [search, setSearch] = useState("");
   const [newSource, setNewSource] = useState<Values>({});
+  // The URL of the Source this page last created, confirmed until the next create.
+  const [createdUrl, setCreatedUrl] = useState<string | null>(null);
   const attaching = useAction<number>();
   // A read-only finder holds no New Source draft, so nothing can be left unsaved.
   const dirty =
@@ -67,6 +69,7 @@ export function SourceFinder({
 
   async function create({ url, publishedAt }: Values) {
     const trimmedUrl = url!.trim();
+    setCreatedUrl(null);
     try {
       const created = await call(
         {
@@ -81,8 +84,8 @@ export function SourceFinder({
         sourceResponseSchema,
       );
       setSources((current) => [...(current ?? []), created]);
-      // Narrow to the new Source so it is visible, ready to attach, whatever the search was.
-      setSearch(created.url);
+      // The search stays as the admin typed it; the confirmation says if it hides the new Source.
+      setCreatedUrl(created.url);
       setNewSource({});
     } catch (caught) {
       if (
@@ -104,9 +107,8 @@ export function SourceFinder({
   }
 
   const needle = search.trim().toLowerCase();
-  const visibleSources = sources?.filter((source) =>
-    source.url.toLowerCase().includes(needle),
-  );
+  const matches = (url: string) => url.toLowerCase().includes(needle);
+  const visibleSources = sources?.filter((source) => matches(source.url));
 
   return (
     <section aria-label="Source finder">
@@ -173,6 +175,13 @@ export function SourceFinder({
         submitLabel="Create Source"
         onSave={create}
       />
+      {/* Always rendered, so screen readers announce the confirmation when it fills in. */}
+      <p role="status">
+        {createdUrl !== null && `Source created: ${createdUrl}.`}
+        {createdUrl !== null &&
+          !matches(createdUrl) &&
+          " It doesn't match the current search, so it isn't listed."}
+      </p>
     </section>
   );
 }
