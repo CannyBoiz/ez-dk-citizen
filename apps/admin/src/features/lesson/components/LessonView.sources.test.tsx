@@ -1,5 +1,4 @@
 // Citing Sources from the Lesson editor: attach, reference editing, and detach (ticket 06).
-import type { SourceResponse } from "@ez-dk-citizen/api-contracts/schemas";
 import {
   fireEvent,
   render,
@@ -13,6 +12,7 @@ import { App } from "../../../app/App";
 import {
   bookSource,
   canonicalEditControls,
+  cited,
   connect,
   fakeBackend,
   fieldError,
@@ -32,14 +32,6 @@ import {
   unloadBlocked,
   validToken,
 } from "../../../shared/test/support";
-
-const cited = (source: SourceResponse, overrides = {}) => ({
-  ...source,
-  pageFrom: null,
-  pageTo: null,
-  sectionReference: null,
-  ...overrides,
-});
 
 function attachButton(url: string) {
   return within(finder()).getByRole("button", { name: `Attach ${url}` });

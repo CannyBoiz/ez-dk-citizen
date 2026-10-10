@@ -542,6 +542,15 @@ export const bookSource = {
   publishedAt: "2025-01-01T01:00:00+02:00",
 };
 
+// A Source as a Lesson Source, with no references unless overridden.
+export const cited = (source: SourceResponse, overrides = {}) => ({
+  ...source,
+  pageFrom: null,
+  pageTo: null,
+  sectionReference: null,
+  ...overrides,
+});
+
 export function finder() {
   return screen.getByRole("region", { name: "Source finder" });
 }

@@ -41,14 +41,15 @@ export function LessonView({
   putObject,
   lessonId,
   onBack,
-  onDirtyChange,
+  onUnsavedChange,
   onUploadChange,
 }: {
   call: Call;
   putObject: Network["putObject"];
   lessonId: number;
   onBack: () => void;
-  onDirtyChange: (dirty: boolean) => void;
+  // Names the unsaved forms, in page order, for the navigation guards.
+  onUnsavedChange: (forms: string[]) => void;
   onUploadChange: (status: UploadStatus) => void;
 }) {
   const [lesson, setLesson] = useState<LessonDetail | null>(null);
@@ -57,11 +58,11 @@ export function LessonView({
   const [edits, setEdits] = useState<Partial<Record<Form, Values>>>({});
   const [languageCode, setLanguageCode] = useState<LanguageCode>("th");
   // The Source finder's New Source form counts towards unsaved edits too.
-  const [finderDirty, setFinderDirty] = useState(false);
+  const [finderUnsaved, setFinderUnsaved] = useState<string[]>([]);
   const detaching = useAction<number>();
   // The upload's status, reported up for the navigation guards. While it is active (Uploading
   // or Finalizing), its Lesson and Language stay locked. Held here as well as in App, like
-  // `dirty`: this page locks on it, and App warns on it.
+  // the unsaved forms: this page locks on it, and App warns on it.
   const [upload, setUpload] = useState<UploadStatus>("idle");
   const uploading = upload === "active";
   // Bumped after a completed upload, so the audio panel reads the new current rendition.
@@ -155,12 +156,24 @@ export function LessonView({
     Object.entries(edits[form] ?? {}).some(
       ([field, value]) => value !== saved[form]?.[field],
     );
-  const dirty = finderDirty || (Object.keys(edits) as Form[]).some(isDirty);
+  const unsaved = [
+    isDirty("structure") && "Structure",
+    ...languageCodes.map((code) => isDirty(code) && `Lesson Text (${code})`),
+    ...(lesson?.lessonSources ?? []).map(
+      (source) =>
+        isDirty(sourceForm(source.id)) && `Lesson Source ${source.url}`,
+    ),
+    ...finderUnsaved,
+  ].filter((form) => form !== false);
+  const dirty = unsaved.length > 0;
+  // A new array every render, so the report reruns on the names, not on the array.
+  const unsavedNames = unsaved.join("\n");
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reruns when the names change
   useEffect(() => {
-    onDirtyChange(dirty);
-    return () => onDirtyChange(false);
-  }, [dirty, onDirtyChange]);
+    onUnsavedChange(unsaved);
+    return () => onUnsavedChange([]);
+  }, [unsavedNames, onUnsavedChange]);
 
   useEffect(() => {
     onUploadChange(upload);
@@ -418,7 +431,7 @@ export function LessonView({
       </ul>
       <SourceFinder
         call={call}
-        onDirtyChange={setFinderDirty}
+        onUnsavedChange={setFinderUnsaved}
         readOnly={readOnly}
         attach={{
           attachedIds: lesson.lessonSources.map((source) => source.id),

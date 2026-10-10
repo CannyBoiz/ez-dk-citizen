@@ -154,7 +154,9 @@ test("an uncreated New Source warns before leaving the Sources screen", async ()
   expect(unloadBlocked()).toBe(true);
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenCalledOnce();
+  expect(confirm).toHaveBeenCalledExactlyOnceWith(
+    "Unsaved changes in New Source will be discarded. Leave anyway?",
+  );
   expect(within(newSourceForm()).getByLabelText("Source URL")).toHaveProperty(
     "value",
     "https://example.dk/half-typed",

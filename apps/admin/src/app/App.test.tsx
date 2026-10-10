@@ -8,15 +8,21 @@ import {
 } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import {
+  cited,
   connect,
   fakeBackend,
   fakeNetwork,
+  guideSource,
   lessonDetail,
   lessonSummary,
   lessons,
+  newSourceForm,
   openLesson,
   problem,
+  settle,
   structureForm,
+  tab,
+  textForm,
   type,
   unloadBlocked,
   validToken,
@@ -123,6 +129,49 @@ test("dirty edits trigger the before-unload warning and a confirmation before re
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
   await screen.findByRole("table");
   expect(unloadBlocked()).toBe(false);
+});
+
+test("the leave confirmation names each unsaved form, and a saved form drops out", async () => {
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  render(
+    <App
+      network={
+        fakeBackend([lessonDetail(1, { lessonSources: [cited(guideSource)] })])
+          .network
+      }
+    />,
+  );
+  await connect(validToken);
+  await openLesson(1, 1);
+
+  type("Version", "5", structureForm());
+  type("Title", "บทที่ 1", textForm());
+  fireEvent.click(tab("da"));
+  type("Title", "Kapitel 1", textForm());
+  type(
+    "Page from",
+    "3",
+    screen.getByRole("form", { name: `Lesson Source ${guideSource.url}` }),
+  );
+  type("Source URL", "https://example.dk/half-typed", newSourceForm());
+
+  fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+  expect(confirm).toHaveBeenLastCalledWith(
+    `Unsaved changes in Structure, Lesson Text (da), Lesson Text (th), Lesson Source ${guideSource.url}, and New Source will be discarded. Leave anyway?`,
+  );
+
+  fireEvent.click(
+    within(structureForm()).getByRole("button", { name: "Save" }),
+  );
+  await waitFor(() =>
+    expect(within(structureForm()).getByText("Saved")).toBeTruthy(),
+  );
+  // The Lesson editor reports its unsaved forms to the shell after it renders.
+  await settle();
+  fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+  expect(confirm).toHaveBeenLastCalledWith(
+    `Unsaved changes in Lesson Text (da), Lesson Text (th), Lesson Source ${guideSource.url}, and New Source will be discarded. Leave anyway?`,
+  );
 });
 
 test("returning to the catalogue without edits asks nothing", async () => {

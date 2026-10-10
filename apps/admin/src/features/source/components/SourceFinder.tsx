@@ -17,12 +17,13 @@ import { SourceLabel } from "./SourceLabel";
 
 export function SourceFinder({
   call,
-  onDirtyChange,
+  onUnsavedChange,
   readOnly = false,
   attach,
 }: {
   call: Call;
-  onDirtyChange: (dirty: boolean) => void;
+  // Names this finder's unsaved forms: the New Source form, or nothing.
+  onUnsavedChange: (forms: string[]) => void;
   // Disables creating and attaching, as on a Lesson that is not a Draft.
   readOnly?: boolean;
   // Present inside a Lesson editor; the standalone Sources screen only finds and creates.
@@ -43,9 +44,9 @@ export function SourceFinder({
     !readOnly && Object.values(newSource).some((value) => value.trim());
 
   useEffect(() => {
-    onDirtyChange(dirty);
-    return () => onDirtyChange(false);
-  }, [dirty, onDirtyChange]);
+    onUnsavedChange(dirty ? ["New Source"] : []);
+    return () => onUnsavedChange([]);
+  }, [dirty, onUnsavedChange]);
 
   async function load() {
     setError(null);

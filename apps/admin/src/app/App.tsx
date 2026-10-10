@@ -13,6 +13,8 @@ import { SourceFinder } from "../features/source";
 import { BffError, type Call, request } from "../shared/lib/bff";
 import type { Network } from "../shared/lib/network";
 
+const listFormat = new Intl.ListFormat("en", { type: "conjunction" });
+
 export function App({ network }: { network: Network }) {
   // The token lives only in React state: never in storage, cookies, the URL, or the build.
   const [token, setToken] = useState<string | null>(null);
@@ -25,13 +27,14 @@ export function App({ network }: { network: Network }) {
     chapter: "",
     status: "",
   });
-  // Whether the open screen has unsaved edits, and what leaving would lose of an upload; both
+  // The open screen's unsaved forms by name, and what leaving would lose of an upload; both
   // drive the navigation warnings. Reported separately, because the Sources screen has edits but
   // no upload, and each screen also uses its own value for its own locks.
-  const [dirty, setDirty] = useState(false);
+  const [unsaved, setUnsaved] = useState<string[]>([]);
   const [upload, setUpload] = useState<UploadStatus>("idle");
   const losses = [
-    dirty && "You have unsaved changes, which will be discarded.",
+    unsaved.length > 0 &&
+      `Unsaved changes in ${listFormat.format(unsaved)} will be discarded.`,
     upload === "active" &&
       "An upload is in progress, and its outcome will not be shown.",
     upload === "recoverable" &&
@@ -106,7 +109,7 @@ export function App({ network }: { network: Network }) {
           >
             Back to catalogue
           </button>
-          <SourceFinder call={call} onDirtyChange={setDirty} />
+          <SourceFinder call={call} onUnsavedChange={setUnsaved} />
         </section>
       ) : (
         <LessonView
@@ -114,7 +117,7 @@ export function App({ network }: { network: Network }) {
           putObject={network.putObject}
           lessonId={screen.lessonId}
           onBack={() => confirmLeave() && setScreen("catalogue")}
-          onDirtyChange={setDirty}
+          onUnsavedChange={setUnsaved}
           onUploadChange={setUpload}
         />
       )}
