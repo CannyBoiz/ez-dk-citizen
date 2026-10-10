@@ -5,6 +5,7 @@
   "packageManager": "pnpm@11.24.0",
   "scripts": {
     "dev": "docker compose watch",
+    "dev:live-s3": "docker compose --file docker-compose.yml --file docker-compose.override.yml --file docker-compose.roles-anywhere.yml watch",
     "typecheck": "pnpm --recursive --if-present typecheck",
     "build": "pnpm --recursive --if-present build",
     "db:generate": "pnpm --filter @ez-dk-citizen/data db:generate",

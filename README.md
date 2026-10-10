@@ -94,6 +94,11 @@ Dedicated-CA rotation is the emergency fallback. Replacing only the certificate
 while retaining the trusted identity does not revoke the compromised certificate.
 Hetzner VPS reconciliation remains deferred to Stage 6.
 
+`pnpm dev:live-s3` adds `docker-compose.roles-anywhere.yml` to the development
+stack. It needs `S3_BUCKET`, `AWS_REGION`, `ADMIN_API_TOKEN`, and
+`DATA_SERVICE_TOKEN` from `.env` or the shell, and it blanks the default
+`ADMIN_ORIGINS`, so set that too (normally `http://127.0.0.1:5173`).
+
 `pnpm test:roles-anywhere` and `pnpm test:live-s3` load the optional root `.env`;
 exported shell variables take precedence. The identity smoke test requires
 `AWS_REGION` and `S3_BUCKET`. The live S3 tracer additionally requires distinct
@@ -137,6 +142,7 @@ workspaces. Both application containers listen on configurable `PORT=3000`.
 | Command                    | Purpose                                                                      |
 | -------------------------- | ---------------------------------------------------------------------------- |
 | `pnpm dev`                 | Run the complete local stack through Docker Compose Watch.                   |
+| `pnpm dev:live-s3`         | Run `pnpm dev` with the BFF's mounted Roles Anywhere identity and real S3.   |
 | `pnpm typecheck`           | Type-check every workspace without emitting files.                           |
 | `pnpm build`               | Compile every workspace to JavaScript.                                       |
 | `pnpm db:generate`         | Generate a Drizzle migration from the schema.                                |
