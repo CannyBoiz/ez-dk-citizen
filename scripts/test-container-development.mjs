@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createConnection, createServer } from "node:net";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { createProjectName, withTeardown } from "./lib/docker-test-stack.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const projectName = `ez-dk-citizen-development-test-${process.pid}-${Date.now().toString(36)}`;
+const projectName = createProjectName("ez-dk-citizen-development-test-");
 const bffPort = await findAvailablePort();
 let postgresPort = await findAvailablePort();
 
@@ -109,45 +111,30 @@ assertWatch(
   ],
 );
 
-let smokeFailure;
-
-try {
-  await spawnDocker([
-    ...composeArguments,
-    "up",
-    "--detach",
-    "--build",
-    "--wait",
-    "--wait-timeout",
-    "120",
-    "bff",
-    "admin",
-  ]);
-
-  const response = await fetch(`http://127.0.0.1:${bffPort}/ready`);
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { status: "ok" });
-  await connectTo(postgresPort);
-  const admin = await waitForAdmin(`http://127.0.0.1:${adminPort}/`);
-  assert.match(admin, /<div id="root">/);
-} catch (error) {
-  smokeFailure = error;
-} finally {
-  try {
+await withTeardown(
+  async () => {
     await spawnDocker([
       ...composeArguments,
-      "down",
-      "--volumes",
-      "--remove-orphans",
+      "up",
+      "--detach",
+      "--build",
+      "--wait",
+      "--wait-timeout",
+      "120",
+      "bff",
+      "admin",
     ]);
-  } catch (cleanupError) {
-    smokeFailure ??= cleanupError;
-  }
-}
 
-if (smokeFailure) {
-  throw smokeFailure;
-}
+    const response = await fetch(`http://127.0.0.1:${bffPort}/ready`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { status: "ok" });
+    await connectTo(postgresPort);
+    const admin = await waitForAdmin(`http://127.0.0.1:${adminPort}/`);
+    assert.match(admin, /<div id="root">/);
+  },
+  () =>
+    spawnDocker([...composeArguments, "down", "--volumes", "--remove-orphans"]),
+);
 
 console.log("Container development smoke test passed.");
 

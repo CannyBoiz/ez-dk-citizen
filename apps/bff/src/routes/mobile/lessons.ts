@@ -2,8 +2,8 @@ import {
   languageQuerySchema,
   lessonIdParamsSchema,
   mobileLessonDetailSchema,
-  validateRequest,
   type RequestIdEnvironment,
+  validateRequest,
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
@@ -11,13 +11,10 @@ import type { BffAppOptions } from "../../app.js";
 import { mapDataServiceError } from "../../errors/downstream.js";
 import { problem } from "../../errors/problem-details.js";
 import {
-  logStorageFailure,
-  storageFailureProblem,
-} from "../../errors/storage.js";
-import {
   composeMobileLessonDetail,
   composeMobileLessonList,
 } from "../../mobile/compose.js";
+import { authorizePlayback } from "../../playback.js";
 
 export function createMobileLessonRoutes(
   options: Pick<BffAppOptions, "dataServiceClient" | "storage">,
@@ -76,36 +73,13 @@ export function createMobileLessonRoutes(
             );
           let audio = null;
           if (lesson.currentAudio) {
-            if (!options.storage)
-              return problem(
-                c,
-                502,
-                "storage_unavailable",
-                "Storage is unavailable.",
-              );
-            try {
-              const authorization =
-                await options.storage.createPlaybackAuthorization(
-                  lesson.currentAudio.objectKey,
-                );
-              audio = {
-                mediaAssetId: lesson.currentAudio.mediaAssetId,
-                audioVersion: lesson.currentAudio.audioVersion,
-                contentType: lesson.currentAudio.contentType,
-                sizeBytes: lesson.currentAudio.sizeBytes,
-                durationMs: lesson.currentAudio.durationMs,
-                playbackUrl: authorization.playbackUrl,
-                playbackExpiresAt: authorization.expiresAt,
-              };
-            } catch (error) {
-              logStorageFailure(
-                c.get("requestId"),
-                "playback",
-                lesson.currentAudio.mediaAssetId,
-                error,
-              );
-              return storageFailureProblem(c, error, false);
-            }
+            const { objectKey, ...current } = lesson.currentAudio;
+            const playback = await authorizePlayback(c, options.storage, {
+              mediaAssetId: current.mediaAssetId,
+              objectKey,
+            });
+            if (playback instanceof Response) return playback;
+            audio = { ...current, ...playback };
           }
           c.header("Cache-Control", "no-store");
           return c.json(mobileLessonDetailSchema.parse({ ...detail, audio }));

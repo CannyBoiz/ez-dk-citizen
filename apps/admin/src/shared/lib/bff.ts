@@ -1,9 +1,9 @@
 import {
-  problemDetailsSchema,
   type ProblemDetails,
+  problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts/schemas";
 
-import type { BffRequest, Network } from "./network";
+import type { BffRequest, BffResponse, Network } from "./network";
 
 type BffErrorDetails = Partial<
   Pick<ProblemDetails, "status" | "code" | "requestId" | "errors">
@@ -37,7 +37,7 @@ export async function request<T>(
   bffRequest: BffRequest,
   schema: { parse(value: unknown): T },
 ): Promise<T> {
-  let response;
+  let response: BffResponse;
   try {
     response = await network.bff(bffRequest);
   } catch {

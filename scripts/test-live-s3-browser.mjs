@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { createServer } from "node:http";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import {
+  createProjectName,
+  smokeKeyDirectoryPrefix,
+  smokeKeyFileName,
+  withTeardown,
+} from "./lib/docker-test-stack.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -78,7 +85,7 @@ assert.equal(
   `Roles Anywhere private key must have mode 0600: ${privateKeyFile}`,
 );
 
-const projectName = `ez-dk-live-s3-${process.pid}-${Date.now().toString(36)}`;
+const projectName = createProjectName("ez-dk-live-s3-");
 const containerName = `${projectName}-bff`;
 const composeEnvironment = {
   ...environment,
@@ -123,9 +130,9 @@ if (process.argv.includes("--preflight")) {
 }
 
 const smokeKeyFileDirectory = await mkdtemp(
-  path.join(tmpdir(), "ez-dk-live-s3-"),
+  path.join(tmpdir(), smokeKeyDirectoryPrefix),
 );
-const smokeKeyFile = path.join(smokeKeyFileDirectory, "smoke-keys");
+const smokeKeyFile = path.join(smokeKeyFileDirectory, smokeKeyFileName);
 await writeFile(smokeKeyFile, "", { mode: 0o600 });
 const entrypointFile = path.join(
   repositoryRoot,
@@ -138,10 +145,6 @@ const sensitiveValues = [
   { name: "Data Service bearer token", value: process.env.DATA_SERVICE_TOKEN },
 ];
 let currentUploadUrl;
-const cleanupFailures = [];
-const failedKeys = [];
-let tracerFailure;
-let cleanupUnverified = false;
 let bffContainerStarted = false;
 let browserProfile;
 let bffServer;
@@ -150,296 +153,325 @@ let rejectedServer;
 let port;
 let tracerPhase = "initializing";
 
-try {
-  port = await availablePort();
-  allowedServer = await startPageServer(5173, () => currentUploadUrl);
-  rejectedServer = await startPageServer(5174, () => currentUploadUrl);
+await withTeardown(
+  async () => {
+    try {
+      port = await availablePort();
+      allowedServer = await startPageServer(5173, () => currentUploadUrl);
+      rejectedServer = await startPageServer(5174, () => currentUploadUrl);
 
-  tracerPhase = "building the BFF image";
-  await runDocker([...composeArguments, "build", "bff"]);
-  tracerPhase = "inspecting the BFF image";
-  await assertImageContents();
-  tracerPhase = "starting the isolated Data Service";
-  await runDocker([
-    ...composeArguments,
-    "up",
-    "--detach",
-    "--build",
-    "--wait",
-    "--wait-timeout",
-    "120",
-    "hono-data",
-  ]);
-  bffContainerStarted = true;
-  tracerPhase = "starting the test BFF container";
-  await runDocker([
-    ...composeArguments,
-    "run",
-    "--detach",
-    "--no-deps",
-    "--name",
-    containerName,
-    "--publish",
-    `127.0.0.1:${port}:3000`,
-    "--volume",
-    `${entrypointFile}:/tmp/test-live-s3-bff-entrypoint.mjs:ro`,
-    "--volume",
-    `${smokeKeyFile}:/tmp/ez-dk-citizen-live-s3-smoke-keys:rw`,
-    "bff",
-    "node",
-    "/tmp/test-live-s3-bff-entrypoint.mjs",
-  ]);
-  tracerPhase = "inspecting the test BFF container";
-  await assertRunningContainer();
-  tracerPhase = "checking the workload key mount";
-  await assertPrivateKeyReadable();
-  tracerPhase = "verifying the Roles Anywhere identity";
-  await assertRoleIdentity();
-  bffServer = `http://127.0.0.1:${port}`;
-  tracerPhase = "waiting for BFF readiness";
-  await waitForBff(bffServer);
-  browserProfile = await mkdtemp(path.join(tmpdir(), "ez-dk-s3-browser-"));
+      tracerPhase = "building the BFF image";
+      await runDocker([...composeArguments, "build", "bff"]);
+      tracerPhase = "inspecting the BFF image";
+      await assertImageContents();
+      tracerPhase = "starting the isolated Data Service";
+      await runDocker([
+        ...composeArguments,
+        "up",
+        "--detach",
+        "--build",
+        "--wait",
+        "--wait-timeout",
+        "120",
+        "hono-data",
+      ]);
+      bffContainerStarted = true;
+      tracerPhase = "starting the test BFF container";
+      await runDocker([
+        ...composeArguments,
+        "run",
+        "--detach",
+        "--no-deps",
+        "--name",
+        containerName,
+        "--publish",
+        `127.0.0.1:${port}:3000`,
+        "--volume",
+        `${entrypointFile}:/tmp/test-live-s3-bff-entrypoint.mjs:ro`,
+        "--volume",
+        `${smokeKeyFile}:/tmp/ez-dk-citizen-live-s3-smoke-keys:rw`,
+        "bff",
+        "node",
+        "/tmp/test-live-s3-bff-entrypoint.mjs",
+      ]);
+      tracerPhase = "inspecting the test BFF container";
+      await assertRunningContainer();
+      tracerPhase = "checking the workload key mount";
+      await assertPrivateKeyReadable();
+      tracerPhase = "verifying the Roles Anywhere identity";
+      await assertRoleIdentity();
+      bffServer = `http://127.0.0.1:${port}`;
+      tracerPhase = "waiting for BFF readiness";
+      await waitForBff(bffServer);
+      browserProfile = await mkdtemp(path.join(tmpdir(), "ez-dk-s3-browser-"));
 
-  tracerPhase = "exercising the live upload and playback flow";
-  const lesson = await requestBff(bffServer, "/api/admin/lessons", "POST", {
-    chapter: 1,
-    version: 1,
-  });
-  assert.equal(lesson.response.status, 201, "Tracer Lesson was not created.");
-  const lessonId = lesson.body.id;
-  const textBody = {
-    title: "Live S3 tracer",
-    content: "Temporary lesson used by the opt-in live S3 tracer.",
-  };
-  const text = await requestBff(
-    bffServer,
-    `/api/admin/lessons/${lessonId}/texts/${languageCode}`,
-    "PUT",
-    textBody,
-  );
-  assert.equal(text.response.status, 200, "Tracer Lesson Text was not saved.");
-  if (languageCode !== "th") {
-    const thaiText = await requestBff(
-      bffServer,
-      `/api/admin/lessons/${lessonId}/texts/th`,
-      "PUT",
-      textBody,
-    );
-    assert.equal(
-      thaiText.response.status,
-      200,
-      "Tracer Thai Lesson Text was not saved.",
-    );
-  }
-  const source = await requestBff(bffServer, "/api/admin/sources", "POST", {
-    url: "https://example.test/live-s3-tracer",
-    publishedAt: null,
-  });
-  assert.equal(source.response.status, 201, "Tracer Source was not created.");
-  const lessonSource = await requestBff(
-    bffServer,
-    `/api/admin/lessons/${lessonId}/sources/${source.body.id}`,
-    "PUT",
-    {},
-  );
-  assert.equal(
-    lessonSource.response.status,
-    200,
-    "Tracer Lesson Source was not attached.",
-  );
-  const published = await requestBff(
-    bffServer,
-    `/api/admin/lessons/${lessonId}`,
-    "PATCH",
-    { status: "PUBLISHED" },
-  );
-  assert.equal(
-    published.response.status,
-    200,
-    "Tracer Lesson was not published.",
-  );
+      tracerPhase = "exercising the live upload and playback flow";
+      const lesson = await requestBff(bffServer, "/api/admin/lessons", "POST", {
+        chapter: 1,
+        version: 1,
+      });
+      assert.equal(
+        lesson.response.status,
+        201,
+        "Tracer Lesson was not created.",
+      );
+      const lessonId = lesson.body.id;
+      const textBody = {
+        title: "Live S3 tracer",
+        content: "Temporary lesson used by the opt-in live S3 tracer.",
+      };
+      const text = await requestBff(
+        bffServer,
+        `/api/admin/lessons/${lessonId}/texts/${languageCode}`,
+        "PUT",
+        textBody,
+      );
+      assert.equal(
+        text.response.status,
+        200,
+        "Tracer Lesson Text was not saved.",
+      );
+      if (languageCode !== "th") {
+        const thaiText = await requestBff(
+          bffServer,
+          `/api/admin/lessons/${lessonId}/texts/th`,
+          "PUT",
+          textBody,
+        );
+        assert.equal(
+          thaiText.response.status,
+          200,
+          "Tracer Thai Lesson Text was not saved.",
+        );
+      }
+      const source = await requestBff(bffServer, "/api/admin/sources", "POST", {
+        url: "https://example.test/live-s3-tracer",
+        publishedAt: null,
+      });
+      assert.equal(
+        source.response.status,
+        201,
+        "Tracer Source was not created.",
+      );
+      const lessonSource = await requestBff(
+        bffServer,
+        `/api/admin/lessons/${lessonId}/sources/${source.body.id}`,
+        "PUT",
+        {},
+      );
+      assert.equal(
+        lessonSource.response.status,
+        200,
+        "Tracer Lesson Source was not attached.",
+      );
+      const published = await requestBff(
+        bffServer,
+        `/api/admin/lessons/${lessonId}`,
+        "PATCH",
+        { status: "PUBLISHED" },
+      );
+      assert.equal(
+        published.response.status,
+        200,
+        "Tracer Lesson was not published.",
+      );
 
-  const uploadBody = {
-    lessonId,
-    languageCode,
-    originalFilename: "smoke.mp3",
-    contentType: "audio/mpeg",
-    sizeBytes: bytes.byteLength,
-  };
-  const intent = await requestBff(
-    bffServer,
-    "/api/admin/media/upload-intents",
-    "POST",
-    uploadBody,
-  );
-  assert.equal(intent.response.status, 201, "Upload Intent was not created.");
-  assert.deepEqual(Object.keys(intent.body).sort(), [
-    "expiresAt",
-    "mediaAssetId",
-    "uploadHeaders",
-    "uploadUrl",
-  ]);
-  assert.deepEqual(intent.body.uploadHeaders, {
-    "Content-Length": String(bytes.byteLength),
-    "Content-Type": "audio/mpeg",
-    "If-None-Match": "*",
-  });
-  sensitiveValues.push({
-    name: "complete upload URL",
-    value: intent.body.uploadUrl,
-  });
-  currentUploadUrl = intent.body.uploadUrl;
-  const smokeKeys = await readSmokeKeys();
-  smokeKeys.forEach(assertSmokeKey);
-  assert.equal(smokeKeys.length, 1, "Tracer did not create one smoke key.");
+      const uploadBody = {
+        lessonId,
+        languageCode,
+        originalFilename: "smoke.mp3",
+        contentType: "audio/mpeg",
+        sizeBytes: bytes.byteLength,
+      };
+      const intent = await requestBff(
+        bffServer,
+        "/api/admin/media/upload-intents",
+        "POST",
+        uploadBody,
+      );
+      assert.equal(
+        intent.response.status,
+        201,
+        "Upload Intent was not created.",
+      );
+      assert.deepEqual(Object.keys(intent.body).sort(), [
+        "expiresAt",
+        "mediaAssetId",
+        "uploadHeaders",
+        "uploadUrl",
+      ]);
+      assert.deepEqual(intent.body.uploadHeaders, {
+        "Content-Length": String(bytes.byteLength),
+        "Content-Type": "audio/mpeg",
+        "If-None-Match": "*",
+      });
+      sensitiveValues.push({
+        name: "complete upload URL",
+        value: intent.body.uploadUrl,
+      });
+      currentUploadUrl = intent.body.uploadUrl;
+      const smokeKeys = await readSmokeKeys();
+      smokeKeys.forEach(assertSmokeKey);
+      assert.equal(smokeKeys.length, 1, "Tracer did not create one smoke key.");
 
-  await expectBrowserResult(
-    browser,
-    browserProfile,
-    `${rejectedOrigin}/?mode=disallowed`,
-    "rejected",
-  );
-  await expectBrowserResult(
-    browser,
-    browserProfile,
-    `${origin}/?mode=unapproved`,
-    "rejected",
-  );
-  for (const mode of [
-    "wrong-content-type",
-    "wrong-length",
-    "missing-condition",
-  ]) {
-    await expectBrowserResult(
-      browser,
-      browserProfile,
-      `${origin}/?mode=${mode}`,
-      "rejected",
-      `S3 accepted the ${mode} Upload Intent request.`,
-    );
-  }
-  await expectBrowserResult(
-    browser,
-    browserProfile,
-    `${origin}/?mode=upload`,
-    "uploaded",
-    "Allowed Admin origin CORS preflight or direct PUT failed.",
-  );
-  await expectBrowserResult(
-    browser,
-    browserProfile,
-    `${origin}/?mode=overwrite`,
-    "rejected",
-  );
+      await expectBrowserResult(
+        browser,
+        browserProfile,
+        `${rejectedOrigin}/?mode=disallowed`,
+        "rejected",
+      );
+      await expectBrowserResult(
+        browser,
+        browserProfile,
+        `${origin}/?mode=unapproved`,
+        "rejected",
+      );
+      for (const mode of [
+        "wrong-content-type",
+        "wrong-length",
+        "missing-condition",
+      ]) {
+        await expectBrowserResult(
+          browser,
+          browserProfile,
+          `${origin}/?mode=${mode}`,
+          "rejected",
+          `S3 accepted the ${mode} Upload Intent request.`,
+        );
+      }
+      await expectBrowserResult(
+        browser,
+        browserProfile,
+        `${origin}/?mode=upload`,
+        "uploaded",
+        "Allowed Admin origin CORS preflight or direct PUT failed.",
+      );
+      await expectBrowserResult(
+        browser,
+        browserProfile,
+        `${origin}/?mode=overwrite`,
+        "rejected",
+      );
 
-  const completed = await requestBff(
-    bffServer,
-    `/api/admin/media/${intent.body.mediaAssetId}/complete`,
-    "POST",
-    { lessonId, languageCode },
-  );
-  assert.equal(
-    completed.response.status,
-    200,
-    "Media Asset was not completed.",
-  );
-  assert.deepEqual(Object.keys(completed.body).sort(), [
-    "lessonAudio",
-    "mediaAsset",
-  ]);
-  assert.deepEqual(Object.keys(completed.body.mediaAsset).sort(), [
-    "contentType",
-    "durationMs",
-    "id",
-    "sizeBytes",
-    "status",
-    "uploadedAt",
-  ]);
-  assert.deepEqual(Object.keys(completed.body.lessonAudio).sort(), [
-    "audioVersion",
-    "createdAt",
-    "id",
-    "isCurrent",
-    "languageCode",
-    "lessonId",
-  ]);
+      const completed = await requestBff(
+        bffServer,
+        `/api/admin/media/${intent.body.mediaAssetId}/complete`,
+        "POST",
+        { lessonId, languageCode },
+      );
+      assert.equal(
+        completed.response.status,
+        200,
+        "Media Asset was not completed.",
+      );
+      assert.deepEqual(Object.keys(completed.body).sort(), [
+        "lessonAudio",
+        "mediaAsset",
+      ]);
+      assert.deepEqual(Object.keys(completed.body.mediaAsset).sort(), [
+        "contentType",
+        "durationMs",
+        "id",
+        "sizeBytes",
+        "status",
+        "uploadedAt",
+      ]);
+      assert.deepEqual(Object.keys(completed.body.lessonAudio).sort(), [
+        "audioVersion",
+        "createdAt",
+        "id",
+        "isCurrent",
+        "languageCode",
+        "lessonId",
+      ]);
 
-  const mobile = await fetch(
-    `${bffServer}/api/mobile/lessons/${lessonId}?language=${encodeURIComponent(languageCode)}`,
-  );
-  assert.equal(mobile.status, 200, "Mobile Lesson was not returned.");
-  const lessonResponse = await mobile.json();
-  assert.equal(mobile.headers.get("cache-control"), "no-store");
-  assert.deepEqual(Object.keys(lessonResponse).sort(), [
-    "audio",
-    "availableLanguageCodes",
-    "chapter",
-    "content",
-    "id",
-    "languageCode",
-    "lessonSources",
-    "title",
-    "version",
-  ]);
-  assert.deepEqual(Object.keys(lessonResponse.audio ?? {}).sort(), [
-    "audioVersion",
-    "contentType",
-    "durationMs",
-    "mediaAssetId",
-    "playbackExpiresAt",
-    "playbackUrl",
-    "sizeBytes",
-  ]);
-  assert.equal("storageContainer" in lessonResponse.audio, false);
-  assert.equal("objectKey" in lessonResponse.audio, false);
-  assert.equal("bucket" in lessonResponse.audio, false);
-  assertPublicResponse(lessonResponse, "Mobile Lesson");
+      const mobile = await fetch(
+        `${bffServer}/api/mobile/lessons/${lessonId}?language=${encodeURIComponent(languageCode)}`,
+      );
+      assert.equal(mobile.status, 200, "Mobile Lesson was not returned.");
+      const lessonResponse = await mobile.json();
+      assert.equal(mobile.headers.get("cache-control"), "no-store");
+      assert.deepEqual(Object.keys(lessonResponse).sort(), [
+        "audio",
+        "availableLanguageCodes",
+        "chapter",
+        "content",
+        "id",
+        "languageCode",
+        "lessonSources",
+        "title",
+        "version",
+      ]);
+      assert.deepEqual(Object.keys(lessonResponse.audio ?? {}).sort(), [
+        "audioVersion",
+        "contentType",
+        "durationMs",
+        "mediaAssetId",
+        "playbackExpiresAt",
+        "playbackUrl",
+        "sizeBytes",
+      ]);
+      assert.equal("storageContainer" in lessonResponse.audio, false);
+      assert.equal("objectKey" in lessonResponse.audio, false);
+      assert.equal("bucket" in lessonResponse.audio, false);
+      assertPublicResponse(lessonResponse, "Mobile Lesson");
 
-  const playbackUrl = lessonResponse.audio.playbackUrl;
-  sensitiveValues.push({ name: "complete playback URL", value: playbackUrl });
-  const playback = await fetch(playbackUrl);
-  assert.equal(playback.status, 200, "Playback URL did not fetch from S3.");
-  assert.deepEqual(new Uint8Array(await playback.arrayBuffer()), bytes);
+      const playbackUrl = lessonResponse.audio.playbackUrl;
+      sensitiveValues.push({
+        name: "complete playback URL",
+        value: playbackUrl,
+      });
+      const playback = await fetch(playbackUrl);
+      assert.equal(playback.status, 200, "Playback URL did not fetch from S3.");
+      assert.deepEqual(new Uint8Array(await playback.arrayBuffer()), bytes);
 
-  const unsigned = new URL(intent.body.uploadUrl);
-  unsigned.search = "";
-  const publicObject = await fetch(unsigned);
-  assert.equal(
-    publicObject.ok,
-    false,
-    "Unsigned public object access succeeded.",
-  );
-} catch (error) {
-  tracerFailure = new Error(
-    `Live S3 tracer failed while ${tracerPhase}: ${error instanceof Error ? error.message : String(error)}`,
-    { cause: error },
-  );
-} finally {
+      const unsigned = new URL(intent.body.uploadUrl);
+      unsigned.search = "";
+      const publicObject = await fetch(unsigned);
+      assert.equal(
+        publicObject.ok,
+        false,
+        "Unsigned public object access succeeded.",
+      );
+    } catch (error) {
+      throw new Error(
+        `Live S3 tracer failed while ${tracerPhase}: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
+  },
+  teardown,
+  {
+    interruptedHint: `Smoke keys that may remain in S3 are listed in ${smokeKeyFile}.`,
+  },
+);
+console.log("Live browser-to-S3 Roles Anywhere tracer passed.");
+
+async function teardown() {
+  const cleanupFailures = [];
+  let cleanupUnverified = false;
+  let teardownFailure;
   if (bffContainerStarted) {
+    const recordedKeys = [];
     try {
       const smokeKeys = await readSmokeKeys();
-      failedKeys.push(...smokeKeys);
+      recordedKeys.push(...smokeKeys);
       smokeKeys.forEach(assertSmokeKey);
       cleanupFailures.push(...(await deleteExactSmokeKeys(smokeKeys)));
     } catch {
-      if (failedKeys.length) cleanupFailures.push(...failedKeys);
-      else {
-        cleanupUnverified = true;
-        tracerFailure ??= new Error(
-          `Could not verify exact-key S3 cleanup; inspect ${smokeKeyFile} before rerunning.`,
-        );
-      }
+      if (recordedKeys.length) cleanupFailures.push(...recordedKeys);
+      else cleanupUnverified = true;
     }
 
     try {
       await assertSafeLogs(sensitiveValues);
     } catch (error) {
-      tracerFailure ??= error;
+      teardownFailure ??= error;
     }
     try {
       await runDocker(["rm", "--force", containerName]);
     } catch {
-      tracerFailure ??= new Error(
+      teardownFailure ??= new Error(
         "Could not remove the isolated BFF container.",
       );
     }
@@ -453,28 +485,27 @@ try {
       "--remove-orphans",
     ]);
   } catch {
-    tracerFailure ??= new Error(
+    teardownFailure ??= new Error(
       "Could not remove the isolated live-tracer stack.",
     );
   }
   await Promise.all([allowedServer, rejectedServer].filter(Boolean).map(close));
   if (browserProfile)
     await rm(browserProfile, { force: true, recursive: true });
-}
 
-if (cleanupFailures.length) {
-  throw new Error(
-    `Live S3 tracer cleanup failed for bucket ${process.env.S3_BUCKET}. Delete only these exact smoke keys manually: ${cleanupFailures.join(", ")}. Recorded keys remain in ${smokeKeyFile}.`,
-  );
+  if (cleanupFailures.length) {
+    throw new Error(
+      `Live S3 tracer cleanup failed for bucket ${process.env.S3_BUCKET}. Delete only these exact smoke keys manually: ${cleanupFailures.join(", ")}. Recorded keys remain in ${smokeKeyFile}.`,
+    );
+  }
+  if (cleanupUnverified) {
+    throw new Error(
+      `Could not verify exact-key S3 cleanup. Recorded keys remain in ${smokeKeyFile}.`,
+    );
+  }
+  await rm(smokeKeyFileDirectory, { force: true, recursive: true });
+  if (teardownFailure) throw teardownFailure;
 }
-if (cleanupUnverified) {
-  throw new Error(
-    `Could not verify exact-key S3 cleanup. Recorded keys remain in ${smokeKeyFile}.`,
-  );
-}
-await rm(smokeKeyFileDirectory, { force: true, recursive: true });
-if (tracerFailure) throw tracerFailure;
-console.log("Live browser-to-S3 Roles Anywhere tracer passed.");
 
 function randomSuffix() {
   return `${process.pid}_${Date.now().toString(36)}`;

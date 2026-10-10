@@ -1,6 +1,6 @@
-import { problemDetailsSchema } from "@ez-dk-citizen/api-contracts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { problemDetailsSchema } from "@ez-dk-citizen/api-contracts";
 
 import { createApp, createBffApp } from "./app.js";
 import { readBffConfig } from "./config.js";

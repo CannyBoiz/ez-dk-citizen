@@ -12,9 +12,10 @@ import { adminAuth } from "./middleware/admin-auth.js";
 import { adminCors } from "./middleware/cors.js";
 import { logging } from "./middleware/logging.js";
 import {
-  requestId,
   type RequestIdEnvironment,
+  requestId,
 } from "./middleware/request-id.js";
+import { createAdminLessonAudioRoutes } from "./routes/admin/lesson-audio.js";
 import { createAdminLessonSourceRoutes } from "./routes/admin/lesson-sources.js";
 import { createAdminLessonRoutes } from "./routes/admin/lessons.js";
 import { createAdminMediaRoutes } from "./routes/admin/media.js";
@@ -94,5 +95,6 @@ export function createBffApp(
     .route("/api/admin/lessons", createAdminLessonRoutes(options))
     .route("/api/admin/sources", createAdminSourceRoutes(options))
     .route("/api/admin/lessons", createAdminLessonSourceRoutes(options))
+    .route("/api/admin/lessons", createAdminLessonAudioRoutes(options))
     .route("/api/mobile/lessons", createMobileLessonRoutes(options));
 }

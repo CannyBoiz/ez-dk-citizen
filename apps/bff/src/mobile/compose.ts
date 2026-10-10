@@ -1,8 +1,8 @@
 import {
-  mobileLessonListResponseSchema,
   type LessonDetail,
   type MobileLessonDetail,
   type MobileLessonListResponse,
+  mobileLessonListResponseSchema,
   type PublishedLessonDetail,
 } from "@ez-dk-citizen/api-contracts";
 

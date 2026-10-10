@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { createProjectName, withTeardown } from "./lib/docker-test-stack.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const projectName = `ez-dk-citizen-roles-anywhere-${process.pid}-${Date.now().toString(36)}`;
+const projectName = createProjectName("ez-dk-citizen-roles-anywhere-");
 const preflightOnly = process.argv.includes("--preflight");
 const configFile = runtimeFile("AWS_ROLES_ANYWHERE_CONFIG_FILE", "config");
 const certificateFile = runtimeFile(
@@ -76,45 +78,33 @@ const config = JSON.parse(
 );
 assertTopology(config);
 
-let failure;
-try {
-  await runDocker([
-    ...composeArguments,
-    "up",
-    "--detach",
-    "--build",
-    "--wait",
-    "--wait-timeout",
-    "120",
-    "bff",
-  ]);
-  await assertImageContents();
-  await assertPrivateKeyReadable();
-  if (preflightOnly) {
-    console.log(
-      "Container preflight passed; STS identity exchange was skipped.",
-    );
-  } else {
-    await assertIdentity();
-  }
-  await assertLegacyVariableRejected("AWS_ACCESS_KEY_ID");
-  await assertLegacyVariableRejected("AWS_SECRET_ACCESS_KEY");
-} catch (error) {
-  failure = error;
-} finally {
-  try {
+await withTeardown(
+  async () => {
     await runDocker([
       ...composeArguments,
-      "down",
-      "--volumes",
-      "--remove-orphans",
+      "up",
+      "--detach",
+      "--build",
+      "--wait",
+      "--wait-timeout",
+      "120",
+      "bff",
     ]);
-  } catch (cleanupError) {
-    failure ??= cleanupError;
-  }
-}
-
-if (failure) throw failure;
+    await assertImageContents();
+    await assertPrivateKeyReadable();
+    if (preflightOnly) {
+      console.log(
+        "Container preflight passed; STS identity exchange was skipped.",
+      );
+    } else {
+      await assertIdentity();
+    }
+    await assertLegacyVariableRejected("AWS_ACCESS_KEY_ID");
+    await assertLegacyVariableRejected("AWS_SECRET_ACCESS_KEY");
+  },
+  () =>
+    runDocker([...composeArguments, "down", "--volumes", "--remove-orphans"]),
+);
 console.log(
   preflightOnly
     ? "Roles Anywhere container preflight passed."

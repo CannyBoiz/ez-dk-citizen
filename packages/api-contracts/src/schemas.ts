@@ -41,10 +41,12 @@ export const lessonSourceParamsSchema = z.strictObject({
   lessonId: positiveId,
   sourceId: positiveId,
 });
-export const lessonTextParamsSchema = z.strictObject({
+// One Lesson in one Language, as Lesson Text and Lesson Audio routes address it.
+export const lessonLanguageParamsSchema = z.strictObject({
   lessonId: positiveId,
   languageCode: z.string().min(1),
 });
+export const lessonTextParamsSchema = lessonLanguageParamsSchema;
 export const languageQuerySchema = z.strictObject({
   language: z.string().min(1).optional(),
 });
@@ -257,6 +259,24 @@ export const publishedLessonAudioSchema = z.strictObject({
   durationMs: safePositiveInteger.nullable(),
 });
 
+// The Data Service's current READY rendition for one Lesson and Language, in any Lesson status.
+export const currentLessonAudioSchema = publishedLessonAudioSchema.extend({
+  originalFilename: mp3Filename,
+});
+
+export const currentLessonAudioResponseSchema = z.strictObject({
+  audio: currentLessonAudioSchema.nullable(),
+});
+
+// The admin projection: storage identity replaced by a fresh Playback URL.
+export const adminLessonAudioSchema = currentLessonAudioSchema
+  .omit({ objectKey: true })
+  .extend({ playbackUrl: z.url(), playbackExpiresAt: timestamp });
+
+export const adminLessonAudioResponseSchema = z.strictObject({
+  audio: adminLessonAudioSchema.nullable(),
+});
+
 export const publishedLessonDetailSchema = z.strictObject({
   ...lessonDetailSchema.shape,
   currentAudio: publishedLessonAudioSchema.nullable(),
@@ -308,6 +328,13 @@ export type LessonDetailListResponse = z.infer<
 >;
 export type MobileLessonDetail = z.infer<typeof mobileLessonDetailSchema>;
 export type MobileLessonAudio = z.infer<typeof mobileLessonAudioSchema>;
+export type CurrentLessonAudioResponse = z.infer<
+  typeof currentLessonAudioResponseSchema
+>;
+export type AdminLessonAudio = z.infer<typeof adminLessonAudioSchema>;
+export type AdminLessonAudioResponse = z.infer<
+  typeof adminLessonAudioResponseSchema
+>;
 export type MobileLessonListResponse = z.infer<
   typeof mobileLessonListResponseSchema
 >;

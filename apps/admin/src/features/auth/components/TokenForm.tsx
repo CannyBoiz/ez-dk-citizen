@@ -1,6 +1,6 @@
 // Collects the admin token and verifies it with an authenticated read before accepting it.
 import { lessonListResponseSchema } from "@ez-dk-citizen/api-contracts/schemas";
-import { useState, type SubmitEvent } from "react";
+import { type SubmitEvent, useState } from "react";
 
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
 import { BffError, request } from "../../../shared/lib/bff";
@@ -40,7 +40,7 @@ export function TokenForm({
   }
 
   return (
-    <form onSubmit={submit}>
+    <form className="card" onSubmit={submit}>
       <label>
         Admin token
         <input

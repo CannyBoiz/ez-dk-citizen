@@ -6,19 +6,19 @@ The existing opt-in live-S3 tracer remains the automated proof of direct S3 tran
 
 See the spec section "Testing Decisions" (manual acceptance).
 
-**Blocked by:** 07 — Publish and archive from the Admin; 10 — Recover interrupted uploads
+**Blocked by:** 07 — Publish and archive from the Admin; 10 — Recover interrupted uploads; 12 — Escape and clarify upload recovery
 
-**Status:** ready-for-human
+**Status:** resolved
 
-- [ ] The opt-in live-S3 tracer passes against the current stack
-- [ ] Find and list existing Lessons, using both filters
-- [ ] Create a `DRAFT` Lesson and edit its chapter/version
-- [ ] Create and edit Thai Lesson Text, plus one other Language
-- [ ] Find an existing Source and create a new one
-- [ ] Attach and detach Sources and edit Lesson Source references
-- [ ] Select and upload a real ElevenLabs MP3, watching visible progress through Complete
-- [ ] Play the current Lesson Audio in the browser
-- [ ] Publish the Lesson, and confirm it appears in the mobile Lesson list API with its audio
-- [ ] Spot check: archive a Lesson through the confirmation and verify it is read-only with playable audio
-- [ ] Spot check: force a finalization failure (for example, stop the Data Service after the PUT), then recover with **Retry finalization** once it is back
-- [ ] Spot check: after a full page refresh, the token is required again
+- [x] The opt-in live-S3 tracer passes against the current stack
+- [x] Find and list existing Lessons, using both filters
+- [x] Create a `DRAFT` Lesson and edit its chapter/version
+- [x] Create and edit Thai Lesson Text, plus one other Language
+- [x] Find an existing Source and create a new one
+- [x] Attach and detach Sources and edit Lesson Source references
+- [x] Select and upload a real ElevenLabs MP3, watching visible progress through Complete
+- [x] Play the current Lesson Audio in the browser
+- [x] Publish the Lesson, and confirm it appears in the mobile Lesson list API with its audio
+- [x] Spot check: archive a Lesson through the confirmation and verify it is read-only with playable audio
+- [x] Spot check: finalization failure and **Retry finalization**: covered by the Admin whole-app upload-recovery tests instead of by hand
+- [x] Spot check: after a full page refresh, the token is required again

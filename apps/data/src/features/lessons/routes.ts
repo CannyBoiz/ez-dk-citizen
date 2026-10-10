@@ -1,25 +1,27 @@
 import {
+  type CreateLessonRequest,
   createLessonRequestSchema,
+  currentLessonAudioResponseSchema,
+  type LessonStatus,
+  lessonDetailListResponseSchema,
+  lessonDetailSchema,
   lessonIdParamsSchema,
+  lessonLanguageParamsSchema,
+  lessonListResponseSchema,
   lessonReadQuerySchema,
   lessonSourceParamsSchema,
   lessonTextParamsSchema,
-  lessonDetailSchema,
-  lessonDetailListResponseSchema,
-  lessonListResponseSchema,
-  patchLessonRequestSchema,
-  publishedLessonDetailSchema,
-  problem,
-  validateJson,
-  validateRequest,
-  upsertLessonSourceRequestSchema,
-  upsertLessonTextRequestSchema,
-  type CreateLessonRequest,
-  type LessonStatus,
   type PatchLessonRequest,
+  patchLessonRequestSchema,
+  problem,
+  publishedLessonDetailSchema,
   type RequestIdEnvironment,
   type UpsertLessonSourceRequest,
   type UpsertLessonTextRequest,
+  upsertLessonSourceRequestSchema,
+  upsertLessonTextRequestSchema,
+  validateJson,
+  validateRequest,
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
@@ -27,12 +29,17 @@ import type { DataDatabase } from "../../db/database.js";
 import { isPostgresError } from "../../db/errors.js";
 import {
   createLesson,
-  patchLesson,
-  upsertLessonText,
-  upsertLessonSource,
   deleteLessonSource,
+  patchLesson,
+  upsertLessonSource,
+  upsertLessonText,
 } from "./mutations.js";
-import { listLessons, loadLessonDetail, readLesson } from "./queries.js";
+import {
+  listLessons,
+  loadLessonDetail,
+  readCurrentLessonAudio,
+  readLesson,
+} from "./queries.js";
 
 export function createLessonRoutes(database?: DataDatabase) {
   const app = new Hono<RequestIdEnvironment>();
@@ -326,6 +333,34 @@ export function createLessonRoutes(database?: DataDatabase) {
           ? publishedLessonDetailSchema.parse(detail)
           : lessonDetailSchema.parse(detail),
       );
+    },
+  );
+
+  app.get(
+    "/:lessonId/audio/:languageCode",
+    validateRequest("param", lessonLanguageParamsSchema),
+    async (c) => {
+      const { lessonId: id, languageCode } = c.req.valid("param") as {
+        lessonId: number;
+        languageCode: string;
+      };
+      if (!database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
+
+      const outcome = await readCurrentLessonAudio(database, id, languageCode);
+      if (outcome === "unsupported_language") {
+        return problem(c, 422, outcome, "Language is not supported.");
+      }
+      if (outcome === "lesson_not_found") {
+        return problem(c, 404, outcome, "Lesson was not found.");
+      }
+      return c.json(currentLessonAudioResponseSchema.parse(outcome));
     },
   );
 

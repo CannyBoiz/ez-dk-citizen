@@ -1,14 +1,16 @@
-import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { createProjectName, withTeardown } from "./lib/docker-test-stack.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
 const composeFile = path.join(repositoryRoot, "docker-compose.yml");
-const projectName = `ez-dk-citizen-integration-${process.pid}-${Date.now().toString(36)}`;
+const projectName = createProjectName("ez-dk-citizen-integration-");
 const databaseName = "ez_dk_citizen_integration";
 const databaseUser = "ez_dk_citizen_integration";
 const databasePassword = "integration-only-password";
@@ -38,97 +40,91 @@ assertPrivateCompiledTopology(
   ),
 );
 
-let integrationFailure;
-
-try {
-  await runDocker([
-    ...composeArguments,
-    "up",
-    "--detach",
-    "--build",
-    "--wait",
-    "--wait-timeout",
-    "120",
-    endToEnd ? "bff" : "hono-data",
-  ]);
-  if (endToEnd) {
-    await verifyBffReadiness();
-    await verifyDistinctCredentials();
+await withTeardown(
+  async () => {
     await runDocker([
       ...composeArguments,
-      "exec",
-      "-T",
-      "bff",
-      "node",
-      "-e",
-      tracer(),
+      "up",
+      "--detach",
+      "--build",
+      "--wait",
+      "--wait-timeout",
+      "120",
+      endToEnd ? "bff" : "hono-data",
     ]);
-    await runDocker([
-      ...composeArguments,
-      "exec",
-      "-T",
-      "bff",
-      "node",
-      "--input-type=module",
-      "-e",
-      completionTracer(),
-    ]);
-    await verifyTracerLogs();
-  } else {
-    await runDocker([
+    if (endToEnd) {
+      await verifyBffReadiness();
+      await verifyDistinctCredentials();
+      await runDocker([
+        ...composeArguments,
+        "exec",
+        "-T",
+        "bff",
+        "node",
+        "-e",
+        tracer(),
+      ]);
+      await runDocker([
+        ...composeArguments,
+        "exec",
+        "-T",
+        "bff",
+        "node",
+        "--input-type=module",
+        "-e",
+        completionTracer(),
+      ]);
+      await verifyTracerLogs();
+    } else {
+      await runDocker([
+        ...composeArguments,
+        "--profile",
+        "integration",
+        "run",
+        "--no-deps",
+        "--rm",
+        "postgres-check",
+      ]);
+      await runDocker([
+        ...composeArguments,
+        "--profile",
+        "integration",
+        "run",
+        "--no-deps",
+        "--rm",
+        "postgres-test",
+      ]);
+      await runDocker([
+        ...composeArguments,
+        "run",
+        "--no-deps",
+        "--rm",
+        "migrate",
+      ]);
+      await runDocker([
+        ...composeArguments,
+        "--profile",
+        "integration",
+        "run",
+        "--no-deps",
+        "--rm",
+        "postgres-check",
+      ]);
+      await verifyFailedMigrationBlocksDataService();
+    }
+  },
+  // A plain `down` skips containers from inactive profiles, such as
+  // `integration-failure`, so enable every profile for teardown.
+  () =>
+    runDocker([
       ...composeArguments,
       "--profile",
-      "integration",
-      "run",
-      "--no-deps",
-      "--rm",
-      "postgres-check",
-    ]);
-    await runDocker([
-      ...composeArguments,
-      "--profile",
-      "integration",
-      "run",
-      "--no-deps",
-      "--rm",
-      "postgres-test",
-    ]);
-    await runDocker([
-      ...composeArguments,
-      "run",
-      "--no-deps",
-      "--rm",
-      "migrate",
-    ]);
-    await runDocker([
-      ...composeArguments,
-      "--profile",
-      "integration",
-      "run",
-      "--no-deps",
-      "--rm",
-      "postgres-check",
-    ]);
-    await verifyFailedMigrationBlocksDataService();
-  }
-} catch (error) {
-  integrationFailure = error;
-} finally {
-  try {
-    await runDocker([
-      ...composeArguments,
+      "*",
       "down",
       "--volumes",
       "--remove-orphans",
-    ]);
-  } catch (cleanupError) {
-    integrationFailure ??= cleanupError;
-  }
-}
-
-if (integrationFailure) {
-  throw integrationFailure;
-}
+    ]),
+);
 
 console.log(
   endToEnd
@@ -194,6 +190,11 @@ const completed = await call('/api/admin/media/' + intent.body.mediaAssetId + '/
 if (completed.response.status !== 200 || completed.body.mediaAsset.status !== 'READY' || completed.body.lessonAudio.audioVersion !== 1 || completed.body.lessonAudio.isCurrent !== true || 'objectKey' in completed.body.mediaAsset) throw new Error('Completion tracer did not promote safe current audio.');
 const retry = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (retry.response.status !== 200 || JSON.stringify(retry.body) !== JSON.stringify(completed.body)) throw new Error('Completion retry was not idempotent.');
+const adminAudioKeys = 'audioVersion,contentType,durationMs,mediaAssetId,originalFilename,playbackExpiresAt,playbackUrl,sizeBytes';
+const readAdminAudio = () => call('/api/admin/lessons/' + lesson.body.id + '/audio/th', 'GET');
+const draftAudio = await readAdminAudio();
+if (draftAudio.response.status !== 200 || draftAudio.response.headers.get('cache-control') !== 'no-store' || draftAudio.body.audio?.audioVersion !== 1 || draftAudio.body.audio?.originalFilename !== 'lesson.mp3' || Object.keys(draftAudio.body.audio ?? {}).sort().join(',') !== adminAudioKeys || storage.playbackAuthorizations.at(-1) !== storage.uploads[0].key) throw new Error('Admin audio read failed on a Draft.');
+if (JSON.stringify((await call('/api/admin/lessons/' + lesson.body.id + '/audio/da', 'GET')).body) !== JSON.stringify({ audio: null })) throw new Error('Admin audio read returned audio for a Language without any.');
 await call('/api/admin/lessons/' + lesson.body.id + '/texts/da', 'PUT', { title: 'Dansk', content: 'Indhold' });
 const rebind = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'da' });
 if (rebind.response.status !== 409 || rebind.body.code !== 'media_asset_rebind_conflict') throw new Error('Completed media was rebound.');
@@ -209,6 +210,8 @@ const correctedRetry = await call('/api/admin/media/' + correctionIntent.body.me
 if (correctedRetry.response.status !== 200 || JSON.stringify(correctedRetry.body) !== JSON.stringify(corrected.body)) throw new Error('Corrected audio retry created a new version.');
 const supersededRetry = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (supersededRetry.response.status !== 200 || supersededRetry.body.mediaAsset.id !== intent.body.mediaAssetId || supersededRetry.body.lessonAudio.audioVersion !== 1 || supersededRetry.body.lessonAudio.isCurrent !== false) throw new Error('Superseded audio retry did not report its original version as not current.');
+const supersedingAudio = await readAdminAudio();
+if (supersedingAudio.body.audio?.audioVersion !== 2 || supersedingAudio.body.audio?.originalFilename !== 'correction.mp3') throw new Error('Admin audio read did not follow the superseding upload.');
 const playbackStart = storage.playbackAuthorizations.length;
 const playback = await call('/api/mobile/lessons/' + lesson.body.id, 'GET');
 if (playback.response.status !== 200 || playback.response.headers.get('cache-control') !== 'no-store' || playback.body.audio?.audioVersion !== 2 || playback.body.audio?.mediaAssetId !== correctionIntent.body.mediaAssetId || Object.keys(playback.body.audio ?? {}).sort().join(',') !== 'audioVersion,contentType,durationMs,mediaAssetId,playbackExpiresAt,playbackUrl,sizeBytes') throw new Error('Mobile playback projection failed.');
@@ -248,6 +251,10 @@ storage.putObject(cleanupKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
 storage.deleteObject = async (key) => key === cleanupKey ? Promise.reject(Object.assign(new Error('cleanup failed'), { name: 'AccessDenied' })) : deleteObject(key);
 const cleanup = await call('/api/admin/media/' + cleanupIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (cleanup.response.status !== 422 || (await dataServiceClient.getMediaAsset(cleanupIntent.body.mediaAssetId, requestId)).status !== 'FAILED') throw new Error('Cleanup failure restored invalid media.');
+const archived = await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'ARCHIVED' });
+if (archived.response.status !== 200 || archived.body.status !== 'ARCHIVED') throw new Error('Completion tracer archive failed.');
+const archivedAudio = await readAdminAudio();
+if (archivedAudio.response.status !== 200 || archivedAudio.body.audio?.audioVersion !== 4 || Object.keys(archivedAudio.body.audio ?? {}).sort().join(',') !== adminAudioKeys) throw new Error('Admin audio read failed after archiving.');
 `;
 }
 

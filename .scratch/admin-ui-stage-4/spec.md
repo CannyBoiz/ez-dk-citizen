@@ -140,7 +140,7 @@ remains Stage 6 work.
 58. As the admin, I want retries to reuse the same Media Asset and original Lesson and Language, so that a retry never creates a second Upload Intent or a second pending Media Asset.
 59. As the admin, I want the Admin never to report success until completion succeeds, so that a green state always means the audio is really current.
 60. As the admin, I want terminal failures such as a metadata mismatch explained as requiring a new upload, so that I don't retry something that cannot succeed.
-61. As the admin, I want an explicit **Start new upload** action when recovery cannot succeed, so that starting over is always my decision.
+61. As the admin, I want an explicit **Start new upload** action when recovery cannot succeed or I choose to give up on it, so that starting over is always my decision.
 62. As the admin, I want a warning before leaving the page during an upload or with recoverable upload state, so that I don't lose recovery by accident.
 63. As the admin, I want confirmation before navigating to another Lesson with recoverable upload state, telling me that page-local recovery will be discarded, so that I leave knowingly.
 
@@ -255,8 +255,9 @@ The upload panel is a small state machine owned by the Admin page. It is not a d
 - **Uploading**: after a `201` Upload Intent, the Admin keeps the Media Asset ID together with the original Lesson and Language, then PUTs to S3 while showing progress.
 - **Finalizing**: after a successful PUT, the Admin calls completion with the original Lesson and Language.
 - **Complete**: completion returned `200`; the audio panel reloads current audio from the backend.
-- **Failed, retryable**: completion failed with a transient outcome (Data Service or storage `502`/`503`/`504`, network failure, or `401` followed by token re-entry). **Retry finalization** calls completion again with the same Media Asset ID and target.
+- **Failed, retryable**: completion failed with a transient outcome (Data Service or storage `502`/`503`/`504`, network failure, or `401` followed by token re-entry). **Retry finalization** calls completion again with the same Media Asset ID and target. A `500` is also retried, but the Admin says the server failed unexpectedly and the request ID needs investigating in the backend logs.
 - **Failed, uncertain PUT**: the PUT errored or its outcome is unknown. **Check upload / Retry finalization** calls completion with the same Media Asset ID, letting the existing object validation decide. `409 upload_incomplete` means the object did not land, so recovery cannot succeed and the Admin offers **Start new upload**.
+- Both recoverable failures also offer **Start new upload**, so a backend that keeps failing transiently never leaves the admin stuck. Starting over discards the page-local recovery. Once an attempt has started, the panel names the Language that attempt targets, even if another Language is selected.
 - **Failed, terminal**: `422 invalid_uploaded_media`, `409 media_asset_failed`, or a failed Upload Intent request. The Admin explains that a new upload is required and offers only **Start new upload**; it does not offer repeated finalization.
 - The Admin never reports success before completion succeeds and never creates a second Upload Intent except through the explicit **Start new upload** action. At most one upload is active.
 - During Uploading and Finalizing, the Lesson and Language are locked, and publishing or archiving that Lesson is disabled until Complete or a settled Failed state. Before-unload warns during an upload and while recoverable state exists; navigating to another Lesson with recoverable state requires confirmation that page-local recovery will be discarded.

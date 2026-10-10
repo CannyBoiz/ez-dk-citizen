@@ -94,6 +94,11 @@ Dedicated-CA rotation is the emergency fallback. Replacing only the certificate
 while retaining the trusted identity does not revoke the compromised certificate.
 Hetzner VPS reconciliation remains deferred to Stage 6.
 
+`pnpm dev:live-s3` adds `docker-compose.roles-anywhere.yml` to the development
+stack. It needs `S3_BUCKET`, `AWS_REGION`, `ADMIN_API_TOKEN`, and
+`DATA_SERVICE_TOKEN` from `.env` or the shell, and it blanks the default
+`ADMIN_ORIGINS`, so set that too (normally `http://127.0.0.1:5173`).
+
 `pnpm test:roles-anywhere` and `pnpm test:live-s3` load the optional root `.env`;
 exported shell variables take precedence. The identity smoke test requires
 `AWS_REGION` and `S3_BUCKET`. The live S3 tracer additionally requires distinct
@@ -137,6 +142,7 @@ workspaces. Both application containers listen on configurable `PORT=3000`.
 | Command                    | Purpose                                                                      |
 | -------------------------- | ---------------------------------------------------------------------------- |
 | `pnpm dev`                 | Run the complete local stack through Docker Compose Watch.                   |
+| `pnpm dev:live-s3`         | Run `pnpm dev` with the BFF's mounted Roles Anywhere identity and real S3.   |
 | `pnpm typecheck`           | Type-check every workspace without emitting files.                           |
 | `pnpm build`               | Compile every workspace to JavaScript.                                       |
 | `pnpm db:generate`         | Generate a Drizzle migration from the schema.                                |
@@ -149,9 +155,12 @@ workspaces. Both application containers listen on configurable `PORT=3000`.
 | `pnpm test:e2e`            | Run the isolated BFF-to-PostgreSQL Stage 2 tracer.                           |
 | `pnpm test:roles-anywhere` | Build the production-like BFF and prove its mounted Roles Anywhere identity. |
 | `pnpm test:live-s3`        | Run credential-free regressions, then the opt-in browser-to-S3 tracer.       |
+| `pnpm test:clean`          | Remove Docker resources that interrupted test runs left behind.              |
 
 Both container workflows create a temporary Compose project and volume, then
-remove both. `pnpm test:e2e` proves the admin-to-mobile flow; neither command
+remove both, also when you stop the run with Ctrl+C. A second Ctrl+C aborts that
+teardown; then run `pnpm test:clean`, which never touches the development stack,
+images, or S3. `pnpm test:e2e` proves the admin-to-mobile flow; neither command
 uses the persistent development database. Use `pnpm db:down` to stop development
 services; add `--volumes` manually only when intentionally discarding local
 development data.

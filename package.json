@@ -5,20 +5,24 @@
   "packageManager": "pnpm@11.24.0",
   "scripts": {
     "dev": "docker compose watch",
+    "dev:live-s3": "docker compose --file docker-compose.yml --file docker-compose.override.yml --file docker-compose.roles-anywhere.yml watch",
     "typecheck": "pnpm --recursive --if-present typecheck",
     "build": "pnpm --recursive --if-present build",
     "db:generate": "pnpm --filter @ez-dk-citizen/data db:generate",
     "db:migrate": "docker compose exec hono-data pnpm --filter @ez-dk-citizen/data db:migrate",
     "db:up": "docker compose up --detach --wait postgres",
     "db:down": "docker compose down",
-    "test": "pnpm --recursive --if-present test && bash scripts/test-setup-aws-s3-certificate.sh",
+    "test": "pnpm --recursive --if-present test && bash scripts/test-setup-aws-s3-certificate.sh && node --test scripts/lib/docker-test-stack.test.mjs",
+    "test:clean": "node scripts/test-clean.mjs",
     "test:dev": "node scripts/test-container-development.mjs",
     "test:integration": "node scripts/test-postgres-integration.mjs",
     "test:e2e": "node scripts/test-postgres-integration.mjs --end-to-end",
     "test:roles-anywhere": "node --env-file-if-exists=.env scripts/test-roles-anywhere-container.mjs",
-    "test:live-s3": "node --env-file-if-exists=.env scripts/test-live-s3-browser.mjs --preflight && pnpm typecheck && pnpm test && pnpm test:dev && pnpm test:integration && pnpm test:e2e && pnpm build && node --env-file-if-exists=.env scripts/test-live-s3-browser.mjs"
+    "test:live-s3": "node --env-file-if-exists=.env scripts/test-live-s3-browser.mjs --preflight && pnpm typecheck && pnpm test && pnpm test:dev && pnpm test:integration && pnpm test:e2e && pnpm build && node --env-file-if-exists=.env scripts/test-live-s3-browser.mjs",
+    "lint": "biome check",
+    "lint:fix": "biome check --write"
   },
   "devDependencies": {
-    "prettier": "^3.9.6"
+    "@biomejs/biome": "2.5.15"
   }
 }

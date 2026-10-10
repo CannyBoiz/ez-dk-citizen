@@ -1,17 +1,17 @@
 import {
+  type CreateLessonRequest,
   createLessonRequestSchema,
-  lessonIdParamsSchema,
-  lessonTextParamsSchema,
   lessonDetailSchema,
+  lessonIdParamsSchema,
   lessonListResponseSchema,
+  lessonTextParamsSchema,
+  type PatchLessonRequest,
   patchLessonRequestSchema,
+  type RequestIdEnvironment,
+  type UpsertLessonTextRequest,
+  upsertLessonTextRequestSchema,
   validateJson,
   validateRequest,
-  upsertLessonTextRequestSchema,
-  type RequestIdEnvironment,
-  type CreateLessonRequest,
-  type PatchLessonRequest,
-  type UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 

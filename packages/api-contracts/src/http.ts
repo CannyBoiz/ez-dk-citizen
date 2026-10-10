@@ -1,5 +1,5 @@
-import { sValidator } from "@hono/standard-validator";
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { sValidator } from "@hono/standard-validator";
 import type { Input, MiddlewareHandler } from "hono";
 import type { ZodType } from "zod";
 

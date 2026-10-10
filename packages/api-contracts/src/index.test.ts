@@ -2,25 +2,27 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  createSourceRequestSchema,
-  createLessonRequestSchema,
-  createPendingMediaAssetRequestSchema,
-  createUploadIntentRequestSchema,
+  adminLessonAudioResponseSchema,
   completeMediaAssetRequestSchema,
   completeMediaAssetResponseSchema,
+  createLessonRequestSchema,
+  createPendingMediaAssetRequestSchema,
+  createSourceRequestSchema,
+  createUploadIntentRequestSchema,
+  currentLessonAudioResponseSchema,
   lessonDetailSchema,
   lessonIdParamsSchema,
-  mediaAssetIdParamsSchema,
   lessonReadQuerySchema,
   livenessResponseSchema,
+  mediaAssetIdParamsSchema,
   mobileLessonDetailSchema,
-  publishedLessonDetailSchema,
-  readinessResponseSchema,
   patchLessonRequestSchema,
   problemDetailsSchema,
+  publishedLessonDetailSchema,
+  readinessResponseSchema,
+  uploadIntentResponseSchema,
   upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
-  uploadIntentResponseSchema,
 } from "./index.js";
 
 test("health contracts reject response drift", () => {
@@ -243,6 +245,61 @@ test("Published Lesson audio stays private until the mobile projection", () => {
         playbackExpiresAt: "2026-01-01T01:00:00.000Z",
       },
     },
+  );
+});
+
+test("admin current audio keeps storage identity internal and requires fresh playback", () => {
+  const current = {
+    mediaAssetId: 2,
+    audioVersion: 3,
+    originalFilename: "chapter-1-th.mp3",
+    objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
+    contentType: "audio/mpeg" as const,
+    sizeBytes: 1024,
+    durationMs: null,
+  };
+  assert.deepEqual(currentLessonAudioResponseSchema.parse({ audio: current }), {
+    audio: current,
+  });
+  assert.deepEqual(currentLessonAudioResponseSchema.parse({ audio: null }), {
+    audio: null,
+  });
+  assert.throws(() =>
+    currentLessonAudioResponseSchema.parse({
+      audio: { ...current, storageContainer: "bucket" },
+    }),
+  );
+
+  const { objectKey: _objectKey, ...visible } = current;
+  const audio = {
+    ...visible,
+    durationMs: 61_000,
+    playbackUrl: "https://storage.example/play",
+    playbackExpiresAt: "2026-01-01T01:00:00.000Z",
+  };
+  assert.deepEqual(adminLessonAudioResponseSchema.parse({ audio }), { audio });
+  assert.deepEqual(adminLessonAudioResponseSchema.parse({ audio: null }), {
+    audio: null,
+  });
+  for (const leaked of [
+    { objectKey: current.objectKey },
+    { storageProvider: "s3" },
+    { storageContainer: "bucket" },
+    { unexpected: true },
+  ]) {
+    assert.throws(() =>
+      adminLessonAudioResponseSchema.parse({ audio: { ...audio, ...leaked } }),
+    );
+  }
+  for (const required of ["playbackUrl", "playbackExpiresAt"] as const) {
+    const { [required]: _omitted, ...incomplete } = audio;
+    assert.throws(() =>
+      adminLessonAudioResponseSchema.parse({ audio: incomplete }),
+    );
+  }
+  assert.throws(() => adminLessonAudioResponseSchema.parse({}));
+  assert.throws(() =>
+    adminLessonAudioResponseSchema.parse({ audio: null, extra: true }),
   );
 });
 

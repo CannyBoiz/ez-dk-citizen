@@ -1,10 +1,10 @@
 // The Lesson catalogue: every Lesson filtered in the browser, plus the New Draft Lesson form.
 import {
+  type CreateLessonRequest,
+  type LessonSummary,
   lessonDetailSchema,
   lessonListResponseSchema,
   lessonStatusSchema,
-  type CreateLessonRequest,
-  type LessonSummary,
 } from "@ez-dk-citizen/api-contracts/schemas";
 import { useEffect, useState } from "react";
 
@@ -49,9 +49,12 @@ export function Catalogue({
   }
 
   // Load once on connect; re-entering the token must not reset this screen.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount only
   useEffect(() => void load(), []);
 
-  const chapters = [...new Set(lessons?.map((lesson) => lesson.chapter))].sort((a, b) => a - b);
+  const chapters = [...new Set(lessons?.map((lesson) => lesson.chapter))].sort(
+    (a, b) => a - b,
+  );
   // A chapter that vanished on reload falls back to all chapters, matching what the select shows.
   const chapterFilter = chapters.includes(Number(chapter)) ? chapter : "";
   const visibleLessons = lessons?.filter(
@@ -62,12 +65,15 @@ export function Catalogue({
 
   return (
     <section>
-      <p>
-        Connected. {lessons === null ? "Loading Lessons…" : `${lessons.length} Lessons`}
-      </p>
-      <button type="button" onClick={load}>
-        Refresh
-      </button>
+      <div className="toolbar">
+        <p>
+          Connected.{" "}
+          {lessons === null ? "Loading Lessons…" : `${lessons.length} Lessons`}
+        </p>
+        <button type="button" onClick={load}>
+          Refresh
+        </button>
+      </div>
       {error !== null && <ErrorMessage error={error} onRetry={load} />}
       <EditForm
         name="New Draft Lesson"
@@ -78,6 +84,7 @@ export function Catalogue({
         value={newDraft}
         onChange={changeNewDraft}
         submitLabel="Create Draft"
+        className="inline-form"
         onSave={async ({ chapter, version }) => {
           const created = await call(
             {
@@ -97,67 +104,82 @@ export function Catalogue({
       {lessons?.length === 0 && <p>No Lessons yet.</p>}
       {!!lessons?.length && (
         <>
-          <label>
-            Chapter
-            <select
-              value={chapterFilter}
-              onChange={(event) => onFiltersChange({ chapter: event.target.value, status })}
-            >
-              <option value="">All chapters</option>
-              {chapters.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Status
-            <select
-              value={status}
-              onChange={(event) => onFiltersChange({ chapter, status: event.target.value })}
-            >
-              <option value="">All statuses</option>
-              {lessonStatusSchema.options.map((value) => (
-                <option key={value} value={value}>
-                  {statusLabels[value]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="toolbar">
+            <label>
+              Chapter
+              <select
+                value={chapterFilter}
+                onChange={(event) =>
+                  onFiltersChange({ chapter: event.target.value, status })
+                }
+              >
+                <option value="">All chapters</option>
+                {chapters.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Status
+              <select
+                value={status}
+                onChange={(event) =>
+                  onFiltersChange({ chapter, status: event.target.value })
+                }
+              >
+                <option value="">All statuses</option>
+                {lessonStatusSchema.options.map((value) => (
+                  <option key={value} value={value}>
+                    {statusLabels[value]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           {visibleLessons!.length === 0 ? (
             <p>No Lessons match these filters.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Chapter</th>
-                  <th>Version</th>
-                  <th>Status</th>
-                  <th>Languages</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleLessons!.map((lesson) => (
-                  <tr key={lesson.id}>
-                    <td>{lesson.chapter}</td>
-                    <td>{lesson.version}</td>
-                    <td>{statusLabels[lesson.status]}</td>
-                    <td>{lesson.availableLanguageCodes.join(", ") || "None"}</td>
-                    <td>
-                      <button
-                        type="button"
-                        aria-label={`Open chapter ${lesson.chapter}, version ${lesson.version}`}
-                        onClick={() => onOpen(lesson.id)}
-                      >
-                        Open
-                      </button>
-                    </td>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Chapter</th>
+                    <th>Version</th>
+                    <th>Status</th>
+                    <th>Languages</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {visibleLessons!.map((lesson) => (
+                    <tr key={lesson.id}>
+                      <td>{lesson.chapter}</td>
+                      <td>{lesson.version}</td>
+                      <td>
+                        <span className="badge" data-status={lesson.status}>
+                          {statusLabels[lesson.status]}
+                        </span>
+                      </td>
+                      <td>
+                        {lesson.availableLanguageCodes.join(", ") || "None"}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="primary"
+                          aria-label={`Open chapter ${lesson.chapter}, version ${lesson.version}`}
+                          onClick={() => onOpen(lesson.id)}
+                        >
+                          Open
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}
@@ -172,7 +194,10 @@ const newDraftKey = "ez-dk-citizen.admin.newDraft";
 function readNewDraft(): Values {
   try {
     const stored = JSON.parse(localStorage.getItem(newDraftKey) ?? "{}");
-    return { chapter: String(stored.chapter ?? ""), version: String(stored.version ?? "") };
+    return {
+      chapter: String(stored.chapter ?? ""),
+      version: String(stored.version ?? ""),
+    };
   } catch {
     return { chapter: "", version: "" };
   }
@@ -180,7 +205,8 @@ function readNewDraft(): Values {
 
 function storeNewDraft(value: Values) {
   try {
-    if (Object.values(value).some(Boolean)) localStorage.setItem(newDraftKey, JSON.stringify(value));
+    if (Object.values(value).some(Boolean))
+      localStorage.setItem(newDraftKey, JSON.stringify(value));
     else localStorage.removeItem(newDraftKey);
   } catch {}
 }

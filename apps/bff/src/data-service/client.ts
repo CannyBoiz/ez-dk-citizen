@@ -1,37 +1,39 @@
 import {
-  completeMediaAssetRequestSchema,
-  completeMediaAssetResponseSchema,
-  createSourceRequestSchema,
-  createPendingMediaAssetRequestSchema,
-  createLessonRequestSchema,
-  lessonDetailSchema,
-  lessonDetailListResponseSchema,
-  lessonListResponseSchema,
-  mediaAssetResponseSchema,
-  mediaAssetLookupResponseSchema,
-  patchLessonRequestSchema,
-  publishedLessonDetailSchema,
-  problemDetailsSchema,
-  sourceListResponseSchema,
-  sourceResponseSchema,
-  upsertLessonSourceRequestSchema,
-  upsertLessonTextRequestSchema,
-  type CreateLessonRequest,
   type CompleteMediaAssetRequest,
   type CompleteMediaAssetResponse,
-  type CreateSourceRequest,
+  type CreateLessonRequest,
   type CreatePendingMediaAssetRequest,
+  type CreateSourceRequest,
+  type CurrentLessonAudioResponse,
+  completeMediaAssetRequestSchema,
+  completeMediaAssetResponseSchema,
+  createLessonRequestSchema,
+  createPendingMediaAssetRequestSchema,
+  createSourceRequestSchema,
+  currentLessonAudioResponseSchema,
   type LessonDetail,
   type LessonDetailListResponse,
   type LessonListResponse,
+  lessonDetailListResponseSchema,
+  lessonDetailSchema,
+  lessonListResponseSchema,
   type MediaAssetResponse,
+  mediaAssetLookupResponseSchema,
+  mediaAssetResponseSchema,
   type PatchLessonRequest,
-  type PublishedLessonDetail,
   type ProblemDetails,
+  type PublishedLessonDetail,
+  patchLessonRequestSchema,
+  problemDetailsSchema,
+  publishedLessonDetailSchema,
   type SourceListResponse,
   type SourceResponse,
+  sourceListResponseSchema,
+  sourceResponseSchema,
   type UpsertLessonSourceRequest,
   type UpsertLessonTextRequest,
+  upsertLessonSourceRequestSchema,
+  upsertLessonTextRequestSchema,
 } from "@ez-dk-citizen/api-contracts";
 
 export interface DataServiceClient {
@@ -88,6 +90,11 @@ export interface DataServiceClient {
     languageCode: string,
     requestId: string,
   ): Promise<PublishedLessonDetail>;
+  getCurrentLessonAudio(
+    lessonId: number,
+    languageCode: string,
+    requestId: string,
+  ): Promise<CurrentLessonAudioResponse>;
 }
 
 export class DataServiceError extends Error {
@@ -243,6 +250,14 @@ export function createDataServiceClient(
         requestId,
         undefined,
         publishedLessonDetailSchema.parse,
+      ),
+    getCurrentLessonAudio: (lessonId, languageCode, requestId) =>
+      call(
+        `/internal/lessons/${lessonId}/audio/${encodeURIComponent(languageCode)}`,
+        "GET",
+        requestId,
+        undefined,
+        currentLessonAudioResponseSchema.parse,
       ),
   };
 }

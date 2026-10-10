@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { createDataApp } from "../app.js";
 import { useIntegrationDatabase } from "./integration-test-database.js";
-import { lesson as lessonTable, lessonAudio, mediaAsset } from "./schema.js";
+import { lessonAudio, lesson as lessonTable, mediaAsset } from "./schema.js";
 
 const database = useIntegrationDatabase();
 const app = createDataApp(async () => undefined, {
@@ -1452,4 +1452,126 @@ test("internal Lesson publication requires a Thai Lesson Text and a Lesson Sourc
     ).length,
     0,
   );
+});
+
+test("internal current Lesson Audio reads the current ready rendition in every Lesson status", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const created = await app.request("/internal/lessons", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ chapter: 76, version: 1 }),
+  });
+  const lesson = await created.json();
+  const readAudio = (languageCode: string, id = lesson.id) =>
+    app.request(`/internal/lessons/${id}/audio/${languageCode}`, { headers });
+  for (const languageCode of ["th", "da"]) {
+    await app.request(`/internal/lessons/${lesson.id}/texts/${languageCode}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ title: "Title", content: "Content" }),
+    });
+  }
+  const upload = async (key: string, originalFilename: string) => {
+    const asset = await (
+      await app.request("/internal/media-assets", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          languageCode: "th",
+          storageProvider: "s3",
+          storageContainer: "citizenship-audio",
+          objectKey: key,
+          originalFilename,
+          contentType: "audio/mpeg",
+          sizeBytes: 2048,
+        }),
+      })
+    ).json();
+    const completed = await app.request(
+      `/internal/media-assets/${asset.id}/complete`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ lessonId: lesson.id, languageCode: "th" }),
+      },
+    );
+    assert.equal(completed.status, 200);
+    return asset.id as number;
+  };
+
+  const none = await readAudio("th");
+  assert.equal(none.status, 200);
+  assert.deepEqual(await none.json(), { audio: null });
+  assert.deepEqual(await (await readAudio("en")).json(), { audio: null });
+
+  const unsupported = await readAudio("zz");
+  assert.equal(unsupported.status, 422);
+  assert.equal((await unsupported.json()).code, "unsupported_language");
+  const missing = await readAudio("th", 987654);
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).code, "lesson_not_found");
+
+  const firstKey = "audio/123e4567-e89b-12d3-a456-426614174076.mp3";
+  const first = await upload(firstKey, "first.mp3");
+  assert.deepEqual(await (await readAudio("th")).json(), {
+    audio: {
+      mediaAssetId: first,
+      audioVersion: 1,
+      originalFilename: "first.mp3",
+      objectKey: firstKey,
+      contentType: "audio/mpeg",
+      sizeBytes: 2048,
+      durationMs: null,
+    },
+  });
+
+  const secondKey = "audio/123e4567-e89b-12d3-a456-426614174077.mp3";
+  const second = await upload(secondKey, "second.mp3");
+  const current = {
+    audio: {
+      mediaAssetId: second,
+      audioVersion: 2,
+      originalFilename: "second.mp3",
+      objectKey: secondKey,
+      contentType: "audio/mpeg",
+      sizeBytes: 2048,
+      durationMs: null,
+    },
+  };
+  assert.deepEqual(await (await readAudio("th")).json(), current);
+  assert.deepEqual(await (await readAudio("da")).json(), { audio: null });
+
+  const source = await (
+    await app.request("/internal/sources", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        url: "https://example.com/admin-current-audio",
+        publishedAt: null,
+      }),
+    })
+  ).json();
+  await app.request(`/internal/lessons/${lesson.id}/sources/${source.id}`, {
+    method: "PUT",
+    headers,
+    body: "{}",
+  });
+  for (const status of ["PUBLISHED", "ARCHIVED"]) {
+    const patched = await app.request(`/internal/lessons/${lesson.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ status }),
+    });
+    assert.equal(patched.status, 200);
+    assert.deepEqual(await (await readAudio("th")).json(), current);
+  }
+
+  await database
+    .update(mediaAsset)
+    .set({ status: "DELETED" })
+    .where(eq(mediaAsset.id, second));
+  assert.deepEqual(await (await readAudio("th")).json(), { audio: null });
 });
