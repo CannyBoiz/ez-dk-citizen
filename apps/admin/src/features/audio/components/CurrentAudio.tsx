@@ -52,7 +52,7 @@ export function CurrentAudio({
   useEffect(() => void load(), []);
 
   return (
-    <section aria-label="Current audio">
+    <section className="card" aria-label="Current audio">
       <h4>Current audio ({languageCode})</h4>
       {audio === undefined && error === null && <p>Loading audio…</p>}
       {audio === null && <p>No audio yet for this Language.</p>}

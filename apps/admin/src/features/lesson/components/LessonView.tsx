@@ -182,10 +182,12 @@ export function LessonView({
 
   if (lesson === null)
     return (
-      <section>
-        <button type="button" onClick={onBack}>
-          Back to catalogue
-        </button>
+      <section className="lesson">
+        <div className="toolbar">
+          <button type="button" onClick={onBack}>
+            Back to catalogue
+          </button>
+        </div>
         {error !== null && <ErrorMessage error={error} onRetry={load} />}
         {error === null && <p>Loading Lesson…</p>}
       </section>
@@ -270,15 +272,21 @@ export function LessonView({
           : undefined;
 
   return (
-    <section>
-      <button type="button" disabled={uploading} onClick={onBack}>
-        Back to catalogue
-      </button>
+    <section className="lesson">
+      <div className="toolbar">
+        <button type="button" disabled={uploading} onClick={onBack}>
+          Back to catalogue
+        </button>
+      </div>
       {error !== null && <ErrorMessage error={error} onRetry={load} />}
       <h2>
         Chapter {lesson.chapter}, version {lesson.version}
       </h2>
-      <p>{statusLabels[lesson.status]}</p>
+      <p>
+        <span className="badge" data-status={lesson.status}>
+          {statusLabels[lesson.status]}
+        </span>
+      </p>
       <EditForm
         name="Structure"
         fields={[
@@ -394,11 +402,11 @@ export function LessonView({
       />
       <h3>Lesson Sources</h3>
       {lesson.lessonSources.length === 0 && <p>No Lesson Sources.</p>}
-      <ul>
+      <ul className="lesson-sources">
         {lesson.lessonSources.map((source) => {
           const form = sourceForm(source.id);
           return (
-            <li key={source.id}>
+            <li key={source.id} className="card">
               <SourceLabel {...source} />
               <EditForm
                 name={`Lesson Source ${source.url}`}
@@ -416,6 +424,7 @@ export function LessonView({
               />
               <button
                 type="button"
+                className="danger"
                 aria-label={`Detach ${source.url}`}
                 disabled={readOnly || detachingNow || writes > 0}
                 onClick={() => detach(source.id)}

@@ -40,7 +40,7 @@ export function TokenForm({
   }
 
   return (
-    <form onSubmit={submit}>
+    <form className="card" onSubmit={submit}>
       <label>
         Admin token
         <input

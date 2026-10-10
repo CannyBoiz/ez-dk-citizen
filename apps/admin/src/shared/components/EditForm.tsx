@@ -26,6 +26,7 @@ export function EditForm({
   readOnly = false,
   submitLabel = "Save",
   status,
+  className,
 }: {
   name: string;
   fields: Field[];
@@ -37,6 +38,8 @@ export function EditForm({
   readOnly?: boolean;
   submitLabel?: string;
   status?: string;
+  // Extra layout class for the form, such as "inline-form".
+  className?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -70,8 +73,17 @@ export function EditForm({
   }
 
   return (
-    <form aria-label={name} noValidate onSubmit={submit}>
-      {status && <p>{status}</p>}
+    <form
+      aria-label={name}
+      className={className ? `card ${className}` : "card"}
+      noValidate
+      onSubmit={submit}
+    >
+      {status && (
+        <p className="form-status" data-state={status}>
+          {status}
+        </p>
+      )}
       {fields.map((field) => {
         const message =
           invalid[field.name] ??
@@ -100,7 +112,9 @@ export function EditForm({
               )}
             </label>
             {message !== undefined && (
-              <span id={`${id}-${field.name}`}>{message}</span>
+              <span className="field-error" id={`${id}-${field.name}`}>
+                {message}
+              </span>
             )}
           </div>
         );

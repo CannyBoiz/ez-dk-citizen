@@ -65,13 +65,15 @@ export function Catalogue({
 
   return (
     <section>
-      <p>
-        Connected.{" "}
-        {lessons === null ? "Loading Lessons…" : `${lessons.length} Lessons`}
-      </p>
-      <button type="button" onClick={load}>
-        Refresh
-      </button>
+      <div className="toolbar">
+        <p>
+          Connected.{" "}
+          {lessons === null ? "Loading Lessons…" : `${lessons.length} Lessons`}
+        </p>
+        <button type="button" onClick={load}>
+          Refresh
+        </button>
+      </div>
       {error !== null && <ErrorMessage error={error} onRetry={load} />}
       <EditForm
         name="New Draft Lesson"
@@ -82,6 +84,7 @@ export function Catalogue({
         value={newDraft}
         onChange={changeNewDraft}
         submitLabel="Create Draft"
+        className="inline-form"
         onSave={async ({ chapter, version }) => {
           const created = await call(
             {
@@ -101,73 +104,82 @@ export function Catalogue({
       {lessons?.length === 0 && <p>No Lessons yet.</p>}
       {!!lessons?.length && (
         <>
-          <label>
-            Chapter
-            <select
-              value={chapterFilter}
-              onChange={(event) =>
-                onFiltersChange({ chapter: event.target.value, status })
-              }
-            >
-              <option value="">All chapters</option>
-              {chapters.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Status
-            <select
-              value={status}
-              onChange={(event) =>
-                onFiltersChange({ chapter, status: event.target.value })
-              }
-            >
-              <option value="">All statuses</option>
-              {lessonStatusSchema.options.map((value) => (
-                <option key={value} value={value}>
-                  {statusLabels[value]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="toolbar">
+            <label>
+              Chapter
+              <select
+                value={chapterFilter}
+                onChange={(event) =>
+                  onFiltersChange({ chapter: event.target.value, status })
+                }
+              >
+                <option value="">All chapters</option>
+                {chapters.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Status
+              <select
+                value={status}
+                onChange={(event) =>
+                  onFiltersChange({ chapter, status: event.target.value })
+                }
+              >
+                <option value="">All statuses</option>
+                {lessonStatusSchema.options.map((value) => (
+                  <option key={value} value={value}>
+                    {statusLabels[value]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           {visibleLessons!.length === 0 ? (
             <p>No Lessons match these filters.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Chapter</th>
-                  <th>Version</th>
-                  <th>Status</th>
-                  <th>Languages</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleLessons!.map((lesson) => (
-                  <tr key={lesson.id}>
-                    <td>{lesson.chapter}</td>
-                    <td>{lesson.version}</td>
-                    <td>{statusLabels[lesson.status]}</td>
-                    <td>
-                      {lesson.availableLanguageCodes.join(", ") || "None"}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        aria-label={`Open chapter ${lesson.chapter}, version ${lesson.version}`}
-                        onClick={() => onOpen(lesson.id)}
-                      >
-                        Open
-                      </button>
-                    </td>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Chapter</th>
+                    <th>Version</th>
+                    <th>Status</th>
+                    <th>Languages</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {visibleLessons!.map((lesson) => (
+                    <tr key={lesson.id}>
+                      <td>{lesson.chapter}</td>
+                      <td>{lesson.version}</td>
+                      <td>
+                        <span className="badge" data-status={lesson.status}>
+                          {statusLabels[lesson.status]}
+                        </span>
+                      </td>
+                      <td>
+                        {lesson.availableLanguageCodes.join(", ") || "None"}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="primary"
+                          aria-label={`Open chapter ${lesson.chapter}, version ${lesson.version}`}
+                          onClick={() => onOpen(lesson.id)}
+                        >
+                          Open
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}

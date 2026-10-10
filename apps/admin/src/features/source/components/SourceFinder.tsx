@@ -111,7 +111,7 @@ export function SourceFinder({
   const visibleSources = sources?.filter((source) => matches(source.url));
 
   return (
-    <section aria-label="Source finder">
+    <section className="card" aria-label="Source finder">
       <h3>Find or create a Source</h3>
       <label>
         Find Sources by URL
@@ -128,7 +128,7 @@ export function SourceFinder({
       {!!sources?.length && visibleSources!.length === 0 && (
         <p>No Sources match this search.</p>
       )}
-      <ul aria-label="Sources">
+      <ul className="rows" aria-label="Sources">
         {visibleSources?.map((source) => {
           const attached = attach?.attachedIds.includes(source.id);
           return (

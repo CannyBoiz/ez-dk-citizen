@@ -58,7 +58,7 @@ export function Publication({
         : archiveWarning,
     );
   return (
-    <section aria-label="Publication">
+    <section className="card" aria-label="Publication">
       <h3>Publication</h3>
       <ul>
         <li>
@@ -85,6 +85,7 @@ export function Publication({
       {lesson.status === "DRAFT" && (
         <button
           type="button"
+          className="primary"
           disabled={dirty || waiting}
           onClick={() => transition("PUBLISHED")}
         >
@@ -94,6 +95,7 @@ export function Publication({
       {lesson.status !== "ARCHIVED" && (
         <button
           type="button"
+          className="danger"
           disabled={waiting}
           onClick={() => confirmArchive() && transition("ARCHIVED")}
         >

@@ -234,7 +234,7 @@ export function AudioUpload({
   // Once an attempt has started, the panel is about that attempt and its Language.
   const shown = "target" in state ? state.target : target;
   return (
-    <section aria-label="Upload audio">
+    <section className="card" aria-label="Upload audio">
       <h4>Upload audio ({shown.languageCode})</h4>
       {unavailable && <p>{unavailable}</p>}
       <label>
@@ -250,6 +250,7 @@ export function AudioUpload({
       {fileError && <p role="alert">{fileError}</p>}
       <button
         type="button"
+        className="primary"
         disabled={!file || !!unavailable || active || failed}
         onClick={() => file && upload(file)}
       >
