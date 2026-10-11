@@ -97,9 +97,13 @@ Contains structural data such as chapter, version, status, and timestamps.
 A Lesson is not translated text and is not an audio file.
 
 A chapter may have many Lessons but at most one Published Lesson. A Lesson's
-**version** is given when it is published: a `major.minor.patch` label, compared
-part by part, higher than every Published or Archived version of its chapter.
-A Draft has no version yet. The parts carry no enforced meaning.
+**version** is given when it is published and is written `major.patch`, for
+example 2.1. A chapter's first publication is 1.0. After that, the admin names
+the kind of change, counted from the chapter's highest Published or Archived
+version: a **content change** raises major and resets patch (2.1 → 3.0), and a
+**fix** raises patch (2.1 → 2.2). The kind is the admin's judgement and is not
+checked. A Draft has no version yet. The version is for the admin; the learner
+is shown when a Lesson was last updated instead.
 
 A **new version** is a Draft Lesson of the same chapter, created from a
 Published or Archived Lesson by copying its Lesson Texts, Lesson Sources, and
@@ -282,8 +286,7 @@ one database writer and does not require distributed or offline ID generation.
 lesson
 - id [PK]
 - chapter
-- version_major [nullable]
-- version_minor [nullable]
+- version [nullable]
 - version_patch [nullable]
 - status
 - created_at
@@ -294,14 +297,15 @@ Constraints:
 
 ```text
 chapter > 0
-version_major >= 1, version_minor >= 0, version_patch >= 0
-version parts absent exactly when status = 'DRAFT'
-UNIQUE(chapter, version_major, version_minor, version_patch)
+version >= 1, version_patch >= 0
+version and version_patch absent exactly when status = 'DRAFT'
+UNIQUE(chapter, version, version_patch)
 ```
 
-Stage 4b replaces the earlier integer `version` (migrated as N → N.0.0;
-Drafts lose theirs). APIs carry the version as a `"major.minor.patch"`
-string, and versions compare part by part.
+`version` is the major part and `version_patch` the patch part of a
+`major.patch` version. Stage 4b adds `version_patch` (existing versions N
+become N.0; Drafts lose theirs). APIs carry both as integers, and versions
+compare major first, then patch.
 
 Statuses:
 
@@ -325,8 +329,9 @@ DRAFT -> PUBLISHED
 PUBLISHED -> ARCHIVED
 ```
 
-Publication gives the Lesson its version, which must be higher than every
-Published or Archived version of its chapter. A replacement archives the
+Publication gives the Lesson its version: 1.0 for the chapter's first
+publication, and otherwise the chapter's highest Published or Archived version
+raised by the admin's chosen kind of change (content change or fix). A replacement archives the
 chapter's Published Lesson and publishes the new one in one transaction; it is
 refused when the Draft's Lesson Texts and Lesson Source associations are
 identical to the Published Lesson's. A Draft that is no longer wanted is
@@ -1712,9 +1717,10 @@ runs before Stage 5 so that mobile builds on the final contracts.
   version**, which copies Lesson Texts, Lesson Sources, and current Lesson
   Audio (sharing its Media Assets, ADR-0008) into a new Draft of the same
   chapter.
-- Drafts have no version. Publishing asks for a `major.minor.patch` version,
-  pre-filled one patch above the chapter's highest Published or Archived
-  version, and refuses anything not higher.
+- Drafts have no version. Publishing gives one automatically, written
+  `major.patch`: 1.0 for a chapter's first publication, and otherwise the admin
+  picks **content change** (2.1 → 3.0) or **fix** (2.1 → 2.2), counted from
+  the chapter's highest Published or Archived version.
 - Publishing over an existing Published version is a replacement: one
   confirmation and one transaction. It is refused when Lesson Texts and
   citations are unchanged. There is no undo; roll back by copying the Archived
@@ -1725,8 +1731,9 @@ runs before Stage 5 so that mobile builds on the final contracts.
   Published or Archived Lessons cite them. Sources are still never deleted.
 - Every Admin confirmation is shown in the page; only tab close and refresh
   keep the browser's warning.
-- The learner will see both the version and an "Updated" date. Stage 5 adds the
-  date to the mobile contract.
+- The learner sees an "Updated" date (the Lesson's last change: publication or
+  audio replacement), never the version. Stage 5 adds the date to the mobile
+  contract.
 
 ## Stage 5 — Mobile
 

@@ -35,9 +35,12 @@ written until the admin confirms. A Published or Archived Lesson offers
 current audio into a new Draft of the same chapter. The copied audio shares the
 original Media Asset instead of duplicating the S3 object (ADR-0008).
 
-A Draft has no version. The admin gives it a `major.minor.patch` version when
-publishing, pre-filled one patch above the chapter's highest Published or
-Archived version, and the backend refuses anything not higher. When the chapter
+A Draft has no version. Publishing gives it one automatically, written
+`major.patch`. A chapter's first publication is 1.0. After that, the admin
+chooses whether the change is a **content change** (2.1 → 3.0) or a **fix**
+(2.1 → 2.2), counted from the chapter's highest Published or Archived version.
+The learner never sees the version; Stage 5 shows when a Lesson was last
+updated instead. When the chapter
 already has a Published version, Publish becomes **Replace**: one confirmation
 and one Data Service transaction archive the old version and publish the new
 one. A replacement that changes no Lesson Text or citation is refused. There is
@@ -76,11 +79,11 @@ the page.
 ### Versions
 
 15. As the admin, I want Drafts to have no version until I publish them, so that versions follow the order in which Lessons actually reach the learner.
-16. As the admin, I want the version in the publish confirmation pre-filled one patch above the chapter's highest Published or Archived version (or 1.0.0 for a new chapter), so that a routine correction needs no typing.
-17. As the admin, I want to raise the minor or major part instead, so that the version can signal a larger change.
-18. As the admin, I want a version that is not higher than every Published and Archived version of the chapter refused with a message naming the highest one, so that a chapter can never go backwards.
+16. As the admin, I want a chapter's first publication to become version 1.0 without any choice, so that publishing new content needs no thought about numbering.
+17. As the admin, I want later publications to ask whether this is a content change or a fix, with nothing pre-selected and each option showing the version it produces, so that the version records what kind of change I made.
+18. As the admin, I want the backend to compute the version from the chapter's highest Published or Archived version, so that a chapter can never go backwards or skip numbers.
 19. As the admin, I want Drafts shown in the catalogue as "Draft" with their creation date, so that I can tell several Drafts of one chapter apart.
-20. As the admin, I want Published and Archived Lessons shown with their `major.minor.patch` version, so that the version reads the way the learner will see it.
+20. As the admin, I want Published and Archived Lessons shown with their `major.patch` version, so that I can tell a chapter's versions apart and see which were content changes and which were fixes.
 
 ### Publishing and replacement
 
@@ -123,10 +126,11 @@ the page.
 
 ### Lesson versions
 
-- `lesson` replaces the integer `version` with `version_major`, `version_minor`, and `version_patch`, all absent while the Lesson is `DRAFT` and all present otherwise. Checks: major ≥ 1, minor ≥ 0, patch ≥ 0, and absence exactly when `status = 'DRAFT'`. Uniqueness becomes `UNIQUE(chapter, version_major, version_minor, version_patch)`; Drafts never collide because absent parts are distinct. The one-Published-per-chapter partial index is unchanged.
-- The migration maps every existing version N to N.0.0 on Published and Archived Lessons and clears it on Drafts. Lessons archived as Drafts before this stage keep their version and their status.
-- Contracts carry the version as a string, `"1.2.3"`, with no leading zeros and major ≥ 1. The admin Lesson summary and detail return `null` for Drafts; the mobile summary always has a version, because it lists Published Lessons only.
-- Versions compare part by part (1.10.0 > 1.2.0). The parts carry no enforced meaning.
+- `lesson` keeps its integer `version` as the major part and gains an integer `version_patch`. Both are absent while the Lesson is `DRAFT` and present otherwise. Checks: `version` ≥ 1, `version_patch` ≥ 0, both present or both absent, and absence exactly when `status = 'DRAFT'`. Uniqueness becomes `UNIQUE(chapter, version, version_patch)`; Drafts never collide because absent parts are distinct. The one-Published-per-chapter partial index is unchanged.
+- The migration keeps every existing version N as N.0 on Published and Archived Lessons and clears it on Drafts. Lessons archived as Drafts before this stage keep their version and their status.
+- Contracts carry `version` and `versionPatch` as integers. The admin Lesson summary and detail return `null` for both on Drafts. The mobile summary gains `versionPatch` and always has both, because it lists Published Lessons only. Screens show the version as "2.1".
+- Versions compare major first, then patch. A **content change** raises major and resets patch to 0; a **fix** raises patch. The kind is the admin's judgement, and the backend does not check it against what changed.
+- A double-precision version was rejected: 1.10 and 1.1 are the same number, and a fix after 1.9 becomes 2.0.
 
 ### The Lesson command
 
@@ -135,7 +139,7 @@ the page.
 - `chapter`: Draft only.
 - `text: { languageCode, title, content }`: upserts that Language's Lesson Text in the same transaction. Draft only. Blank fields are `422` with field errors; an unsupported Language is `422 unsupported_language`.
 - `status`: `PUBLISHED` (from `DRAFT`) or `ARCHIVED` (from `PUBLISHED`). `DRAFT -> ARCHIVED` is now `409 lesson_lifecycle_conflict`.
-- `version`: required with `status: "PUBLISHED"` and rejected otherwise (`422`).
+- `changeKind`: `"content"` or `"fix"`, allowed only with `status: "PUBLISHED"` (`422` otherwise).
 - `replacesLessonId`: allowed only with `status: "PUBLISHED"`.
 
 Everything in one command is applied atomically or not at all. Editing a non-Draft is `409 lesson_not_editable`, as today. The separate Lesson Text `PUT` route stays for API clients; the Admin stops using it.
@@ -143,9 +147,9 @@ Everything in one command is applied atomically or not at all. Editing a non-Dra
 Publication rules, all checked in the transaction that applies the change and evaluated on the final state:
 
 - The Stage 4 prerequisites are unchanged: a Thai Lesson Text and at least one Lesson Source (`409 lesson_publication_incomplete`).
-- The version must be higher than every Published and Archived version of the chapter, otherwise `409 lesson_version_conflict`, with a detail naming the highest version.
+- The Data Service computes the version in the publication transaction. A chapter with no Published or Archived Lesson gets 1.0, and `changeKind` is ignored. Otherwise `changeKind` is required (`422` with a field error on `changeKind` when it is missing), and the version is the chapter's highest Published or Archived version raised by that kind. A concurrent publication that takes the same number fails on uniqueness as `409 lesson_version_conflict`.
 - If the chapter has a Published Lesson and `replacesLessonId` is missing, or names any other Lesson, the result is `409 published_lesson_conflict`, as today. The admin sends the ID it expects to replace, so a stale page never archives the wrong Lesson.
-- With a matching `replacesLessonId`, the command is a **replacement**. It is refused with a new `409 lesson_unchanged` when the Draft's Lesson Texts (Language, title, content) and Lesson Sources (Source, page from, page to, section reference) are identical to the Published Lesson's. Audio is not compared. Otherwise the Published Lesson becomes `ARCHIVED` and the Draft becomes `PUBLISHED` with its version, both in this transaction.
+- With a matching `replacesLessonId`, the command is a **replacement**. It is refused with a new `409 lesson_unchanged` when the Draft's Lesson Texts (Language, title, content) and Lesson Sources (Source, page from, page to, section reference) are identical to the Published Lesson's. Audio is not compared. Otherwise the Published Lesson becomes `ARCHIVED` and the Draft becomes `PUBLISHED` with its computed version, both in this transaction.
 - `replacesLessonId` when the chapter has no Published Lesson is also `409 published_lesson_conflict`.
 
 The BFF adds `lesson_unchanged` to its known-conflict translations.
@@ -179,10 +183,10 @@ The BFF adds `lesson_unchanged` to its known-conflict translations.
 ### Admin
 
 - **Editor.** On Drafts, the chapter field sits above the Language tabs without its own button and shows its own Unsaved marker. Each tab's Save sends one `PATCH` containing the dirty chapter (if any) and that tab's Lesson Text (if dirty and not entirely blank). The leave warning names "Chapter" and each "Lesson Text (code)" separately. The audio-mismatch warning, the upload gate on saved Lesson Text, and Publish being disabled while anything is dirty are unchanged.
-- **Heading and catalogue.** Published and Archived Lessons read "Chapter 3, version 1.0.2". Drafts read "Chapter 3 · Draft, created 11 Oct 2026". The catalogue shows the same, with the existing chapter and status filters.
+- **Heading and catalogue.** Published and Archived Lessons read "Chapter 3, version 2.1". Drafts read "Chapter 3 · Draft, created 11 Oct 2026". The catalogue shows the same, with the existing chapter and status filters.
 - **Create form.** **Create draft** opens a form asking for the chapter. It shows the chapter's highest Published or Archived version and its status, computed in the browser from the existing unpaginated Lesson list, or says the chapter has none yet. Confirm shows an in-page confirmation and then creates the Draft and opens its editor. Cancel closes at once when the form is empty and asks first otherwise.
 - **New version.** Published and Archived editors offer **Create new version**. It opens the same form with the chapter fixed and a list of what will be copied: the Languages with Lesson Text, the number of Lesson Sources, and the Languages with current audio. Confirm creates the copy and opens its editor.
-- **Publication.** Publish opens an in-page confirmation with a version input pre-filled one patch above the highest Published or Archived version (1.0.0 if none). When the chapter has a Published Lesson, read fresh from the Lesson list when the confirmation opens, the action is labelled **Replace**, the confirmation names both versions, and the request carries `replacesLessonId`. Backend `409`s appear inside the confirmation. Archive is offered only on Published Lessons; Delete only on Drafts.
+- **Publication.** Publish opens an in-page confirmation, which reads the Lesson list fresh when it opens. A chapter's first publication says "Publish as version 1.0" and offers no choice. Otherwise it shows a required choice between **Content change** and **Fix**, with nothing pre-selected, each labelled with the version it produces (for example "Content change → 3.0" and "Fix → 2.2"). The confirm button stays disabled until one is chosen. When the chapter has a Published Lesson, the action is labelled **Replace**, the confirmation names both versions, and the request carries `replacesLessonId`. Backend errors appear inside the confirmation. Archive is offered only on Published Lessons; Delete only on Drafts.
 - **Uploads.** Delete joins Publish and Archive in being disabled while an upload is Uploading or Finalizing. The other upload rules are unchanged.
 - **Sources.** Each Source in the Source finder gets Edit, which opens an inline URL and date form whose dirty state counts in the leave warnings. Saving shows the in-page confirmation from story 35.
 - **Confirmations.** One small in-page confirmation replaces every `window.confirm`: archive, detach, leaving with unsaved forms, and discarding upload recovery, plus the new create, cancel, publish, replace, delete, and Source-correction confirmations. The before-unload warning stays native.
@@ -190,30 +194,30 @@ The BFF adds `lesson_unchanged` to its known-conflict translations.
 ## Testing Decisions
 
 - Good tests assert externally observable behavior, as in Stage 4: status codes, response bodies, and persisted state for the backend, and what the admin can see and do in the rendered Admin. Prior art for each seam is the corresponding Stage 4 suite.
-- **Shared contracts**: version strings accept `1.0.0` and `12.3.45` and reject `0.1.0`, `1.01.0`, `1.0`, and non-numeric parts. The admin summary accepts a `null` version and the mobile summary rejects one. The Lesson command accepts `text`, `version`, and `replacesLessonId` only in their valid combinations. Both create forms and the Source update request are covered.
+- **Shared contracts**: `version` is a positive integer and `versionPatch` a non-negative one. The admin summary accepts both `null` or both present, and the mobile summary requires both. The Lesson command accepts `text`, `changeKind`, and `replacesLessonId` only in their valid combinations, and rejects a kind other than `content` or `fix`. Both create forms and the Source update request are covered.
 - **Data Service HTTP against real PostgreSQL**:
   - Combined save: a blank text leaves the chapter unchanged.
-  - Publication: refused without a version, or with a version not higher than every Published and Archived one, and succeeds otherwise.
+  - Publication: a chapter's first publication becomes 1.0 whatever kind is sent. Later publications require a kind, and `content` and `fix` produce the next major or patch from the highest Published or Archived version, including Lessons archived as Drafts before this stage.
   - Replacement: archives and publishes together. It is refused as `lesson_unchanged` when nothing differs, and as `published_lesson_conflict` when `replacesLessonId` is missing or stale. Audio differences alone do not count as changes.
   - Archiving a Draft is refused.
   - New version: copies texts, sources, and current audio at version 1 on the same Media Asset, and refuses a Draft source.
   - Delete: cascades. It marks only unshared Media Assets `DELETED`, leaves shared ones `READY` with the other Lesson's audio intact, returns only unshared keys, and refuses non-Drafts.
   - Completion: still idempotent with shared Media Assets.
   - Source update: covers the URL conflict and works on Sources cited by Published Lessons without advancing their timestamps.
-  - Migration: maps N to N.0.0 and clears Draft versions.
+  - Migration: keeps N as N.0 and clears Draft versions.
 - **BFF route tests with fake Data Service and fake storage**: Delete deletes exactly the returned keys, still returns `204` when storage fails, logs the failure safely, and never exposes keys. Source update passes through its outcomes. `lesson_unchanged` and `lesson_not_copyable` pass through as `409`.
 - **Fake-storage end-to-end tracer at the BFF boundary**: extend the Stage 4 tracer so a Published Lesson with audio is copied, and the copy's audio plays without an upload. The copy is published as a replacement, so the old version becomes Archived. Then a Draft with its own uploaded audio is deleted: its object leaves fake storage, while an object it shared stays.
 - **Admin whole-app tests** cover:
   - the per-tab Save, including the chapter riding along from another tab and all-or-nothing failure;
   - the Create form, latest-version display, in-page create confirmation, and cancel with and without content;
   - Create new version with its copy list;
-  - the publish confirmation's pre-filled and edited version, Replace naming both versions with `replacesLessonId`, and backend `409`s inside the confirmation;
+  - the publish confirmation's first-publication 1.0, the required content/fix choice with its resulting versions and the disabled confirm until one is chosen, Replace naming both versions with `replacesLessonId`, and backend errors inside the confirmation;
   - Archive only on Published and Delete only on Drafts, with the delete confirmation and disabled Delete during uploads;
   - Source editing with its confirmation and URL conflict;
   - every confirmation rendered in the page, with no `window.confirm` left.
 - **Live S3 tracer** (opt-in): after the existing upload path, delete the Draft and assert that the object no longer exists in the bucket.
 - **Manual acceptance** is a separate human ticket on real S3. The walkthrough covers:
-  - create a Draft through the form, save chapter and text with one Save, upload, and publish with a version;
+  - create a Draft through the form, save chapter and text with one Save, upload, and publish as version 1.0;
   - create a new version, change a text, and replace;
   - roll back by copying the Archived version and replacing;
   - delete a Draft with uploaded audio and confirm the object is gone from the bucket;
@@ -225,7 +229,7 @@ The BFF adds `lesson_unchanged` to its known-conflict translations.
 - Undo or reversal of a replacement, `ARCHIVED -> PUBLISHED`, `PUBLISHED -> DRAFT`, and anything else that makes `ARCHIVED` non-terminal.
 - Deleting Published or Archived Lessons, including Lessons archived as Drafts before this stage.
 - Change notes, the learner-facing "Updated" date, and `updatedAt` in the mobile contract. Stage 5 adds these when the learner screen is designed.
-- Enforced meaning for version parts, automatic renumbering, and versions on Drafts.
+- Checking the change kind against what changed, typed or skipped version numbers, renumbering, versions on Drafts, and showing the version to the learner.
 - Copying from Drafts, copying audio history, and copying S3 objects.
 - Retrying or sweeping objects left behind after a failed storage delete, and discovering abandoned `PENDING` Media Assets.
 - Source delete, Source deduplication beyond exact URL uniqueness, and counting the Lessons that cite a Source.
@@ -238,5 +242,6 @@ The BFF adds `lesson_unchanged` to its known-conflict translations.
 - This stage reverses these Stage 4 decisions: version editing on Drafts and the version conflict on creation (stories 15–16); separate structure and text saves and no overall Save (stories 20 and 66, in part); archiving Drafts (story 72); replacement as two actions (story 73); new Drafts without cloning or automatic versions (story 75); and Source update being out of scope.
 - The decisions come from the interview on 2026-10-11. The Lesson, version, new version, replacement, and Source definitions are already updated in `docs/product/poc-context.md` §4, and §5, §6, and §23 describe the target model. ADR-0008 records the shared Media Assets.
 - Mobile keeps identifying Lessons by ID. A replacement publishes a different Lesson ID for the chapter, so if Stage 5 wants resume position to survive a replacement it can key it by chapter. Nothing in this stage changes mobile identity.
-- Fixture churn is expected and is not a regression: every test that creates a Lesson with a version, or publishes without one, must change. The admin's local database loses its Draft versions in the migration.
+- Fixture churn is expected and is not a regression: every test that creates a Lesson with a version, or publishes a chapter's later version without a change kind, must change. The admin's local database loses its Draft versions in the migration.
 - Suggested ticket order: versions and the Lesson command (migration, contracts, publication rules, replacement) come first, because everything else depends on them. Shared Media Assets with new versions, Draft deletion, and Source update can then proceed in parallel. The Admin slices follow their backend: per-tab Save, Create form and new version, publication and replacement, delete, Source editing, and in-page confirmations. Then the tracer extensions, and manual acceptance last.
+- Revised on 2026-10-12: the version was first planned as a learner-facing `major.minor.patch` label chosen at publication. A follow-up interview settled that the learner sees only an "Updated" date, so the version became an admin-side `major.patch` computed from the change kind, keeping the existing integer column.

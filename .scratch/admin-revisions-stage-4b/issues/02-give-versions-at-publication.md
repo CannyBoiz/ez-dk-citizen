@@ -1,22 +1,30 @@
 # 02: Give versions at publication
 
-**What to build:** Drafts stop carrying a version. A Lesson gets a `major.minor.patch` version when it is published, and that version must be higher than every Published and Archived version of its chapter.
+**What to build:** Drafts stop carrying a version. Publishing gives a Lesson a version automatically, written `major.patch`. A chapter's first publication is 1.0. After that, the admin says whether the change is a **content change** (major + 1, patch reset: 2.1 → 3.0) or a **fix** (patch + 1: 2.1 → 2.2), counted from the chapter's highest Published or Archived version. The version is for the admin only; the learner will see an "Updated" date in Stage 5.
 
-The migration maps every existing integer version N to N.0.0 on Published and Archived Lessons and clears it on Drafts. Lessons archived as Drafts before this stage keep their version and status. The version is stored as three parts, so ordering compares part by part (1.10.0 > 1.2.0).
+Storage and contracts:
 
-Contracts carry the version as a string such as `"1.2.3"`, with no leading zeros and major ≥ 1. The admin Lesson summary and detail return `null` for Drafts; the mobile summary always has one.
+- The existing integer `version` column stays as the major part, and an integer `version_patch` column is added. Both are absent on Drafts and present otherwise. Uniqueness becomes (chapter, version, version_patch).
+- The migration keeps every existing version N as N.0 on Published and Archived Lessons and clears it on Drafts. Lessons archived as Drafts before this stage keep their version and status.
+- Contracts carry `version` and `versionPatch` as integers, both `null` on Drafts in the admin contracts. The mobile summary gains `versionPatch` and always has both.
+
+Backend:
 
 - Creating a Lesson takes only a chapter, and editing a Draft's structure takes only a chapter.
-- Publication requires a version, and the version is rejected with any other change. A version that is not higher than every Published and Archived version of the chapter is `409 lesson_version_conflict`, with a detail naming the highest version. This is checked in the transaction that applies the transition.
+- Publication accepts `changeKind: "content" | "fix"`, which is rejected (`422`) with any other status change.
+- The Data Service computes the version in the publication transaction. With no Published or Archived Lesson in the chapter, the result is 1.0 and the kind is ignored. Otherwise the kind is required (`422` with a field error on `changeKind`), and the version is the highest one raised by that kind. A concurrent publication that takes the same number fails on uniqueness as `409 lesson_version_conflict`.
+- The kind is not checked against what changed.
 - The Stage 4 publication prerequisites and `published_lesson_conflict` are unchanged. Replacement comes in ticket 06.
 
 In the Admin:
 
-- The catalogue and the editor heading show Drafts as "Chapter 3 · Draft, created 11 Oct 2026" and other Lessons as "Chapter 3, version 1.0.2".
+- The catalogue and the editor heading show Drafts as "Chapter 3 · Draft, created 11 Oct 2026" and other Lessons as "Chapter 3, version 2.1".
 - The new-Draft form and the Draft structure form ask for the chapter only. They keep their current behavior otherwise; tickets 05 and 07 change them.
-- Publish opens the in-page confirmation from ticket 01 with a version input. It is pre-filled one patch above the chapter's highest Published or Archived version (1.0.0 if there is none), computed from the Lesson list, and the admin may raise it. Backend `409`s appear inside the confirmation.
+- Publish opens the in-page confirmation from ticket 01, which reads the Lesson list fresh when it opens. A chapter's first publication says "Publish as version 1.0", with no choice.
+- Otherwise the confirmation shows a required choice between **Content change** and **Fix**, with nothing pre-selected, each labelled with the version it produces (for example "Content change → 3.0" and "Fix → 2.2"). The confirm button stays disabled until one is chosen.
+- Backend errors appear inside the confirmation.
 
-This is the widest ticket: most of the change is test fixtures that create Lessons with a version or publish without one. Update them all, including the fake-storage end-to-end tracer and the live S3 tracer.
+Update every fixture that creates a Lesson with a version or publishes a chapter's later version without a kind, including the fake-storage end-to-end tracer and the live S3 tracer.
 
 See the spec sections "Lesson versions", "The Lesson command", and "Admin" (Heading and catalogue, Publication), and user stories 15–20.
 
@@ -24,12 +32,13 @@ See the spec sections "Lesson versions", "The Lesson command", and "Admin" (Head
 
 **Status:** ready-for-agent
 
-- [ ] The migration turns integer versions into N.0.0 on Published and Archived Lessons and clears Draft versions; Lessons archived as Drafts keep theirs
-- [ ] Contracts accept `1.0.0` and `12.3.45` and reject `0.1.0`, `1.01.0`, `1.0`, and non-numeric parts; the admin summary accepts `null` and the mobile summary rejects it
-- [ ] Creating a Lesson with only a chapter returns a Draft with a `null` version
-- [ ] Publishing without a version, or with a version alongside any status other than `PUBLISHED`, is `422`
-- [ ] Publishing with a version not higher than every Published and Archived version of the chapter is `409 lesson_version_conflict` naming the highest version, and the Lesson stays `DRAFT` with an unchanged timestamp
-- [ ] Publishing with a higher version succeeds, and the mobile list and detail show that version
-- [ ] The catalogue and heading show Drafts with their creation date and other Lessons with `major.minor.patch`
-- [ ] The publish confirmation is pre-filled correctly, accepts a raised version, sends it, and shows backend `409`s inside the confirmation; cancelling makes no request
+- [ ] The migration keeps integer versions as N.0 on Published and Archived Lessons and clears Draft versions; Lessons archived as Drafts keep theirs
+- [ ] Contracts accept a positive `version` with a non-negative `versionPatch`; the admin summary accepts both `null` or both present, and the mobile summary requires both
+- [ ] Creating a Lesson with only a chapter returns a Draft with `null` version parts
+- [ ] A chapter's first publication becomes 1.0 whatever kind is sent, or with none
+- [ ] A later publication without a kind is `422` with a `changeKind` field error, and the Lesson stays `DRAFT` with an unchanged timestamp
+- [ ] `content` and `fix` produce the next major or patch from the highest Published or Archived version, including Lessons archived as Drafts before this stage
+- [ ] `changeKind` alongside any status other than `PUBLISHED`, or with a value other than `content` or `fix`, is `422`
+- [ ] The catalogue and heading show Drafts with their creation date and other Lessons as `major.patch`
+- [ ] The publish confirmation shows "version 1.0" for a first publication; otherwise it shows the content/fix choice with each resulting version, keeps confirm disabled until one is chosen, sends the kind, and shows backend errors inside the confirmation. Cancelling makes no request.
 - [ ] Data Service, BFF, and whole-app tests, the fake-storage end-to-end tracer, and the live S3 tracer pass with the new version model
