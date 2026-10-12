@@ -6,9 +6,11 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import {
+  answer,
   cited,
+  confirmation,
   connect,
   fakeBackend,
   fakeNetwork,
@@ -108,9 +110,9 @@ test("the token re-entry prompt offers Disconnect", async () => {
   expect(screen.getByLabelText("Admin token")).toHaveProperty("value", "");
 });
 
-test("dirty edits trigger the before-unload warning and a confirmation before returning to the catalogue", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-  render(<App network={fakeBackend([lessonDetail(1)]).network} />);
+test("dirty edits trigger the before-unload warning and an in-page confirmation before returning to the catalogue", async () => {
+  const { network, requests } = fakeBackend([lessonDetail(1)]);
+  render(<App network={network} />);
   await connect(validToken);
   await openLesson(1, 1);
   expect(unloadBlocked()).toBe(false);
@@ -118,21 +120,70 @@ test("dirty edits trigger the before-unload warning and a confirmation before re
   type("Version", "5", structureForm());
   expect(unloadBlocked()).toBe(true);
 
+  const sent = requests.length;
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenCalledOnce();
+  answer("Cancel");
+  await settle();
+  expect(requests.length).toBe(sent);
   expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
     "value",
     "5",
   );
 
-  confirm.mockReturnValue(true);
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+  answer("Leave");
   await screen.findByRole("table");
   expect(unloadBlocked()).toBe(false);
 });
 
+test("the in-page confirmation is operated by keyboard: it opens on Cancel, and Escape puts the button back", async () => {
+  render(<App network={fakeBackend([lessonDetail(1)]).network} />);
+  await connect(validToken);
+  await openLesson(1, 1);
+  type("Version", "5", structureForm());
+
+  fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+  expect(document.activeElement).toBe(
+    within(confirmation()).getByRole("button", { name: "Cancel" }),
+  );
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Back to catalogue" }),
+  );
+  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+    "value",
+    "5",
+  );
+});
+
+test("Disconnect with unsaved edits asks in the page, and confirming disconnects", async () => {
+  const { network, requests } = fakeBackend([lessonDetail(1)]);
+  render(<App network={network} />);
+  await connect(validToken);
+  await openLesson(1, 1);
+  type("Version", "5", structureForm());
+
+  const sent = requests.length;
+  fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+  screen.getByRole("alertdialog", {
+    name: "Unsaved changes in Structure will be discarded. Leave anyway?",
+  });
+  answer("Cancel");
+  await settle();
+  expect(requests.length).toBe(sent);
+  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+    "value",
+    "5",
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+  answer("Disconnect");
+  expect(screen.getByLabelText("Admin token")).toHaveProperty("value", "");
+  await waitFor(() => expect(unloadBlocked()).toBe(false));
+});
+
 test("the leave confirmation names each unsaved form, and a saved form drops out", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   render(
     <App
       network={
@@ -156,9 +207,9 @@ test("the leave confirmation names each unsaved form, and a saved form drops out
   type("Source URL", "https://example.dk/half-typed", newSourceForm());
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenLastCalledWith(
-    `Unsaved changes in Structure, Lesson Text (da), Lesson Text (th), Lesson Source ${guideSource.url}, and New Source will be discarded. Leave anyway?`,
-  );
+  screen.getByRole("alertdialog", {
+    name: `Unsaved changes in Structure, Lesson Text (da), Lesson Text (th), Lesson Source ${guideSource.url}, and New Source will be discarded. Leave anyway?`,
+  });
 
   fireEvent.click(
     within(structureForm()).getByRole("button", { name: "Save" }),
@@ -168,21 +219,19 @@ test("the leave confirmation names each unsaved form, and a saved form drops out
   );
   // The Lesson editor reports its unsaved forms to the shell after it renders.
   await settle();
-  fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenLastCalledWith(
-    `Unsaved changes in Lesson Text (da), Lesson Text (th), Lesson Source ${guideSource.url}, and New Source will be discarded. Leave anyway?`,
-  );
+  screen.getByRole("alertdialog", {
+    name: `Unsaved changes in Lesson Text (da), Lesson Text (th), Lesson Source ${guideSource.url}, and New Source will be discarded. Leave anyway?`,
+  });
 });
 
 test("returning to the catalogue without edits asks nothing", async () => {
-  const confirm = vi.spyOn(window, "confirm");
   render(<App network={fakeBackend([lessonDetail(1)]).network} />);
   await connect(validToken);
   await openLesson(1, 1);
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+  expect(screen.queryByRole("alertdialog")).toBeNull();
   await screen.findByRole("table");
-  expect(confirm).not.toHaveBeenCalled();
 });
 
 test("a 401 during save prompts for the token, keeps the edits, and the save can be retried", async () => {
@@ -211,6 +260,9 @@ test("a 401 during save prompts for the token, keeps the edits, and the save can
   const dialog = await screen.findByRole("dialog", {
     name: "Re-enter admin token",
   });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+  answer("Cancel", dialog);
+  expect(dialog.isConnected).toBe(true);
   fireEvent.change(within(dialog).getByLabelText("Admin token"), {
     target: { value: "rotated-token" },
   });

@@ -8,11 +8,11 @@ See the spec sections "Admin" (Confirmations) and user stories 38–39.
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Archiving, detaching with unsaved references, in-app navigation with unsaved forms, and navigation with recoverable upload state each show an in-page confirmation with the same wording as today
-- [ ] Choosing the cancel option in any confirmation makes no request and leaves the page and its unsaved edits as they were
-- [ ] The confirmation is reachable and operable by keyboard, and announced to assistive technology as a dialog or alert
-- [ ] The before-unload warning still fires for dirty forms and recoverable upload state
-- [ ] No `window.confirm` remains in the Admin
-- [ ] Whole-app tests drive each confirmation through visible controls, covering both confirming and cancelling
+- [x] Archiving, detaching with unsaved references, in-app navigation with unsaved forms, and navigation with recoverable upload state each show an in-page confirmation with the same wording as today
+- [x] Choosing the cancel option in any confirmation makes no request and leaves the page and its unsaved edits as they were
+- [x] The confirmation is reachable and operable by keyboard, and announced to assistive technology as a dialog or alert
+- [x] The before-unload warning still fires for dirty forms and recoverable upload state
+- [x] No `window.confirm` remains in the Admin
+- [x] Whole-app tests drive each confirmation through visible controls, covering both confirming and cancelling

@@ -6,10 +6,11 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 
 import { App } from "../../../app/App";
 import {
+  answer,
   bookSource,
   canonicalEditControls,
   cited,
@@ -138,7 +139,6 @@ test("attaching a Source adds it to the Draft's Lesson Sources", async () => {
 });
 
 test("each Lesson Source saves its own references with saved/unsaved state and navigation warnings", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   const backend = fakeBackend([
     lessonDetail(1, {
       lessonSources: [cited(law), cited(guide, { pageFrom: 2 })],
@@ -157,7 +157,7 @@ test("each Lesson Source saves its own references with saved/unsaved state and n
   expect(within(lessonSourceForm(guide.url)).getByText("Saved")).toBeTruthy();
   expect(unloadBlocked()).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenCalledOnce();
+  answer("Cancel");
   expect(
     within(lessonSourceForm(law.url)).getByLabelText("Page to"),
   ).toHaveProperty("value", "5");
@@ -269,19 +269,20 @@ test("detaching a Source removes it from the Draft and keeps the canonical Sourc
   expect(attachButton(law.url)).toHaveProperty("disabled", false);
 });
 
-test("detaching a Lesson Source with unsaved references asks before discarding them", async () => {
-  const confirm = vi
-    .spyOn(window, "confirm")
-    .mockReturnValueOnce(false)
-    .mockReturnValueOnce(true);
+test("detaching a Lesson Source with unsaved references asks in the page before discarding them", async () => {
   const backend = fakeBackend([
     lessonDetail(1, { lessonSources: [cited(law)] }),
   ]);
   await openDraft(backend);
+  const item = () => lessonSourceForm(law.url).closest("li")!;
 
   type("Section reference", "unsaved", lessonSourceForm(law.url));
   fireEvent.click(screen.getByRole("button", { name: `Detach ${law.url}` }));
-  expect(confirm).toHaveBeenCalledOnce();
+  within(item()).getByRole("alertdialog", {
+    name: "Detach this Source and discard its unsaved references?",
+  });
+  answer("Cancel", item());
+  await settle();
   expect(backend.requests.some((request) => request.method === "DELETE")).toBe(
     false,
   );
@@ -290,8 +291,8 @@ test("detaching a Lesson Source with unsaved references asks before discarding t
   ).toHaveProperty("value", "unsaved");
 
   fireEvent.click(screen.getByRole("button", { name: `Detach ${law.url}` }));
+  answer("Detach", item());
   await waitFor(() => expect(lessonSourceUrls()).toEqual([]));
-  expect(confirm).toHaveBeenCalledTimes(2);
   await waitFor(() => expect(unloadBlocked()).toBe(false));
 });
 
@@ -352,7 +353,6 @@ test("Detach waits for Lesson changes in flight, and changes wait for a detach",
 });
 
 test("a New Source draft keeps its text and its unsaved-changes warnings while a detach runs", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   const backend = fakeBackend(
     [lessonDetail(1, { lessonSources: [cited(law)] })],
     { sources: [guide] },
@@ -373,7 +373,7 @@ test("a New Source draft keeps its text and its unsaved-changes warnings while a
   expect(draftUrl()).toHaveProperty("value", "https://example.dk/half-typed");
   expect(unloadBlocked()).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenCalledOnce();
+  answer("Cancel");
 
   releaseDelete();
   await waitFor(() => expect(lessonSourceUrls()).toEqual([]));
@@ -438,13 +438,12 @@ test("a failed detach keeps the Lesson Source and shows the error", async () => 
 });
 
 test("an uncreated New Source counts as an unsaved edit in the Lesson editor", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   await openDraft(fakeBackend([lessonDetail(1)]));
 
   type("Source URL", "https://example.dk/half-typed", newSourceForm());
   expect(unloadBlocked()).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenCalledOnce();
+  answer("Cancel");
   expect(canonicalEditControls()).toEqual([]);
 });
 

@@ -6,10 +6,11 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 
 import { App } from "../../../app/App";
 import {
+  answer,
   bookSource,
   canonicalEditControls,
   connect,
@@ -200,25 +201,23 @@ test("a duplicate URL says the Source exists, shows it, and points to attaching 
 });
 
 test("an uncreated New Source warns before leaving the Sources screen", async () => {
-  const confirm = vi
-    .spyOn(window, "confirm")
-    .mockReturnValueOnce(false)
-    .mockReturnValueOnce(true);
   await openSources(fakeBackend());
 
   type("Source URL", "https://example.dk/half-typed", newSourceForm());
   expect(unloadBlocked()).toBe(true);
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenCalledExactlyOnceWith(
-    "Unsaved changes in New Source will be discarded. Leave anyway?",
-  );
+  screen.getByRole("alertdialog", {
+    name: "Unsaved changes in New Source will be discarded. Leave anyway?",
+  });
+  answer("Cancel");
   expect(within(newSourceForm()).getByLabelText("Source URL")).toHaveProperty(
     "value",
     "https://example.dk/half-typed",
   );
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+  answer("Leave");
   await screen.findByRole("button", { name: "Sources" });
   expect(unloadBlocked()).toBe(false);
 });

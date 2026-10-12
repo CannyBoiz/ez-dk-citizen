@@ -9,12 +9,14 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 
 import { App } from "../../../app/App";
 import type { BffRequest, BffResponse } from "../../../shared/lib/network";
 import {
+  answer,
   chooseFile,
+  confirmation,
   connect,
   fakeBackend,
   firstOnly,
@@ -346,7 +348,6 @@ test("Publish and Archive wait while finalizing, including a retry, and return o
 });
 
 test("leaving warns during an upload and while recovery is possible, and confirming discards the recovery", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   const backend = await open();
   expect(unloadBlocked()).toBe(false);
 
@@ -356,16 +357,15 @@ test("leaving warns during an upload and while recovery is possible, and confirm
   expect((await alert()).textContent).toContain(uncertain);
   expect(unloadBlocked()).toBe(true);
 
-  fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
-  const back = screen.getByRole("button", { name: "Back to catalogue" });
-  fireEvent.click(back);
-  expect(confirm).toHaveBeenCalledTimes(2);
-  for (const [message] of confirm.mock.calls)
-    expect(message).toMatch(/recovery will be discarded/);
+  for (const leave of ["Disconnect", "Back to catalogue"]) {
+    fireEvent.click(screen.getByRole("button", { name: leave }));
+    expect(confirmation().textContent).toMatch(/recovery will be discarded/);
+    answer("Cancel");
+  }
   expect(button("Check upload / Retry finalization")).not.toBeNull();
 
-  confirm.mockReturnValue(true);
-  fireEvent.click(back);
+  fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+  answer("Leave");
   await screen.findByRole("table");
   expect(unloadBlocked()).toBe(false);
   await openLesson(1, 1);
@@ -375,7 +375,6 @@ test("leaving warns during an upload and while recovery is possible, and confirm
 });
 
 test("a terminal failure leaves nothing to recover, so leaving needs no warning", async () => {
-  const confirm = vi.spyOn(window, "confirm");
   const backend = await open(
     failFirst(
       isCompletion,
@@ -393,8 +392,8 @@ test("a terminal failure leaves nothing to recover, so leaving needs no warning"
   await waitFor(() => expect(unloadBlocked()).toBe(false));
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+  expect(screen.queryByRole("alertdialog")).toBeNull();
   await screen.findByRole("table");
-  expect(confirm).not.toHaveBeenCalled();
 });
 
 test("a transient failure while checking the upload keeps the check on offer", async () => {

@@ -493,6 +493,17 @@ export function structureForm() {
   return screen.getByRole("form", { name: "Structure" });
 }
 
+// The one in-page confirmation open in `container`, answered through its visible buttons.
+export function confirmation(container: HTMLElement = document.body) {
+  return within(container).getByRole("alertdialog");
+}
+
+export function answer(choice: string, container: HTMLElement = document.body) {
+  fireEvent.click(
+    within(confirmation(container)).getByRole("button", { name: choice }),
+  );
+}
+
 export function unloadBlocked() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);

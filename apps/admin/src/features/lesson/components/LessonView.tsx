@@ -10,6 +10,7 @@ import {
 } from "@ez-dk-citizen/api-contracts/schemas";
 import { useEffect, useId, useRef, useState } from "react";
 
+import { ConfirmButton } from "../../../shared/components/ConfirmButton";
 import { EditForm, type Values } from "../../../shared/components/EditForm";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
 import type { Call } from "../../../shared/lib/bff";
@@ -40,14 +41,12 @@ export function LessonView({
   call,
   putObject,
   lessonId,
-  onBack,
   onUnsavedChange,
   onUploadChange,
 }: {
   call: Call;
   putObject: Network["putObject"];
   lessonId: number;
-  onBack: () => void;
   // Names the unsaved forms, in page order, for the navigation guards.
   onUnsavedChange: (forms: string[]) => void;
   onUploadChange: (status: UploadStatus) => void;
@@ -183,11 +182,6 @@ export function LessonView({
   if (lesson === null)
     return (
       <section className="lesson">
-        <div className="toolbar">
-          <button type="button" onClick={onBack}>
-            Back to catalogue
-          </button>
-        </div>
         {error !== null && <ErrorMessage error={error} onRetry={load} />}
         {error === null && <p>Loading Lesson…</p>}
       </section>
@@ -219,11 +213,6 @@ export function LessonView({
 
   function detach(sourceId: number) {
     const form = sourceForm(sourceId);
-    if (
-      isDirty(form) &&
-      !window.confirm("Detach this Source and discard its unsaved references?")
-    )
-      return;
     void detaching.run(sourceId, async () => {
       await call(
         {
@@ -273,11 +262,6 @@ export function LessonView({
 
   return (
     <section className="lesson">
-      <div className="toolbar">
-        <button type="button" disabled={uploading} onClick={onBack}>
-          Back to catalogue
-        </button>
-      </div>
       {error !== null && <ErrorMessage error={error} onRetry={load} />}
       <h2>
         Chapter {lesson.chapter}, version {lesson.version}
@@ -422,15 +406,20 @@ export function LessonView({
                 }
                 {...formProps(form)}
               />
-              <button
-                type="button"
+              <ConfirmButton
                 className="danger"
                 aria-label={`Detach ${source.url}`}
                 disabled={readOnly || detachingNow || writes > 0}
-                onClick={() => detach(source.id)}
+                message={
+                  isDirty(form)
+                    ? "Detach this Source and discard its unsaved references?"
+                    : null
+                }
+                confirmLabel="Detach"
+                onConfirm={() => detach(source.id)}
               >
                 Detach
-              </button>
+              </ConfirmButton>
               {detaching.failure?.key === source.id && (
                 <ErrorMessage error={detaching.failure.error} />
               )}

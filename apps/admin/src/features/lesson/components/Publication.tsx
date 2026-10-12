@@ -8,6 +8,7 @@ import {
   type PatchLessonRequest,
 } from "@ez-dk-citizen/api-contracts/schemas";
 
+import { ConfirmButton } from "../../../shared/components/ConfirmButton";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
 import { BffError, type Call } from "../../../shared/lib/bff";
 import { useAction } from "../../../shared/lib/useAction";
@@ -51,12 +52,6 @@ export function Publication({
   }
 
   const waiting = busy || transitioning.pending !== null;
-  const confirmArchive = () =>
-    window.confirm(
-      dirty
-        ? `${archiveWarning} Unsaved changes on this Lesson will be discarded.`
-        : archiveWarning,
-    );
   return (
     <section className="card" aria-label="Publication">
       <h3>Publication</h3>
@@ -93,14 +88,19 @@ export function Publication({
         </button>
       )}
       {lesson.status !== "ARCHIVED" && (
-        <button
-          type="button"
+        <ConfirmButton
           className="danger"
           disabled={waiting}
-          onClick={() => confirmArchive() && transition("ARCHIVED")}
+          message={
+            dirty
+              ? `${archiveWarning} Unsaved changes on this Lesson will be discarded.`
+              : archiveWarning
+          }
+          confirmLabel="Archive"
+          onConfirm={() => transition("ARCHIVED")}
         >
           Archive
-        </button>
+        </ConfirmButton>
       )}
       {failure !== undefined && (
         <ErrorMessage error={failure}>

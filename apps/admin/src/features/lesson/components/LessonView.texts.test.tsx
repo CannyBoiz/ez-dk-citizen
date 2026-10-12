@@ -6,10 +6,11 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 
 import { App } from "../../../app/App";
 import {
+  answer,
   connect,
   fakeBackend,
   fieldError,
@@ -62,7 +63,6 @@ test("the editor shows da, en, and th tabs with Thai selected and each Language'
 });
 
 test("saving one Language sends only its Lesson Text and keeps unsaved text in other tabs", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   const { network, requests } = fakeBackend([
     lessonDetail(1, { lessonTexts: [thaiText] }),
   ]);
@@ -91,7 +91,7 @@ test("saving one Language sends only its Lesson Text and keeps unsaved text in o
   expect(tab("da").textContent).toBe("da: Unsaved");
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenCalledOnce();
+  answer("Cancel");
 
   fireEvent.click(tab("da"));
   expect(within(textForm()).getByLabelText("Content")).toHaveProperty(

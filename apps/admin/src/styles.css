@@ -294,6 +294,18 @@ ul {
   display: none;
 }
 
+/* An in-page confirmation, standing in for the button it guards. */
+[role="alertdialog"] {
+  padding: var(--space-3) var(--space-4);
+  border-left: 4px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface));
+}
+
+[role="alertdialog"] > p {
+  margin: 0 0 var(--space-2);
+}
+
 [role="alert"] button {
   min-height: 2rem;
   padding: var(--space-1) var(--space-3);

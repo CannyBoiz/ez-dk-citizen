@@ -10,11 +10,13 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 
 import { App } from "../../../app/App";
 import type { BffRequest, BffResponse } from "../../../shared/lib/network";
 import {
+  answer,
+  confirmation,
   connect,
   fakeBackend,
   finder,
@@ -34,6 +36,7 @@ import {
   unloadBlocked,
   validToken,
 } from "../../../shared/test/support";
+import { statusLabels } from "../utils/statusLabels";
 
 const citedLaw = {
   ...lawSource,
@@ -250,29 +253,27 @@ test("another Published version of the chapter is reported, and no action replac
 });
 
 test.each(["DRAFT", "PUBLISHED"] as const)(
-  "archiving a %s Lesson asks first, and cancelling sends nothing",
+  "archiving a %s Lesson asks in the page first, and cancelling sends nothing",
   async (status) => {
-    const confirm = vi
-      .spyOn(window, "confirm")
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
     const backend = fakeBackend([complete(1, { status })]);
     await openFirst(backend);
     const sent = backend.requests.length;
+    const archive = () =>
+      within(publication()).getByRole("button", { name: "Archive" });
 
-    fireEvent.click(
-      within(publication()).getByRole("button", { name: "Archive" }),
-    );
-    expect(confirm).toHaveBeenCalledOnce();
-    const message = confirm.mock.calls[0]![0]!;
+    fireEvent.click(archive());
+    const message = confirmation(publication()).textContent;
     expect(message).toContain("terminal");
     expect(message).toContain("read-only");
     expect(message).toContain("learner catalogue");
+    answer("Cancel", publication());
+    expect(within(publication()).queryByRole("alertdialog")).toBeNull();
+    await settle();
     expect(backend.requests.length).toBe(sent);
+    expect(screen.getByText(statusLabels[status])).toBeTruthy();
 
-    fireEvent.click(
-      within(publication()).getByRole("button", { name: "Archive" }),
-    );
+    fireEvent.click(archive());
+    answer("Archive", publication());
     await waitFor(() => expect(screen.getByText("Archived")).toBeTruthy());
     expect(backend.requests.at(-1)).toMatchObject({
       method: "PATCH",
@@ -282,7 +283,6 @@ test.each(["DRAFT", "PUBLISHED"] as const)(
 );
 
 test("archiving with unsaved edits warns that they will be discarded, then discards them", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
   await openFirst(fakeBackend([complete(1)]));
 
   type("Content", "ยังไม่บันทึก", textForm());
@@ -291,9 +291,10 @@ test("archiving with unsaved edits warns that they will be discarded, then disca
   fireEvent.click(
     within(publication()).getByRole("button", { name: "Archive" }),
   );
-  expect(confirm.mock.calls[0]![0]).toContain(
+  expect(confirmation(publication()).textContent).toContain(
     "Unsaved changes on this Lesson will be discarded.",
   );
+  answer("Archive", publication());
 
   await waitFor(() => expect(screen.getByText("Archived")).toBeTruthy());
   expect(within(textForm()).getByLabelText("Content")).toHaveProperty(
@@ -308,7 +309,6 @@ test("archiving with unsaved edits warns that they will be discarded, then disca
 });
 
 test("a save that finishes after archiving cannot reopen the Archived Lesson", async () => {
-  vi.spyOn(window, "confirm").mockReturnValue(true);
   const backend = fakeBackend([complete(1)], {
     audio: { "1:th": storedAudio() },
   });
@@ -329,6 +329,7 @@ test("a save that finishes after archiving cannot reopen the Archived Lesson", a
   fireEvent.click(
     within(publication()).getByRole("button", { name: "Archive" }),
   );
+  answer("Archive", publication());
   await waitFor(() => expect(screen.getByText("Archived")).toBeTruthy());
 
   releaseSave();
