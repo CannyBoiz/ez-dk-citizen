@@ -20,6 +20,7 @@ export function ConfirmButton({
   details,
   confirmLabel,
   confirmDisabled = false,
+  canOpen,
   onOpen,
   onConfirm,
   ...button
@@ -31,6 +32,8 @@ export function ConfirmButton({
   confirmLabel: string;
   // Holds the confirm button back, such as until a choice is made.
   confirmDisabled?: boolean;
+  // Asked before the confirmation opens; false leaves the button, as when a form fails its checks.
+  canOpen?: () => boolean;
   // Runs each time the confirmation opens, such as to read what it shows afresh.
   onOpen?: () => void;
   onConfirm: () => void | Promise<void>;
@@ -50,6 +53,7 @@ export function ConfirmButton({
   }, [asking]);
 
   function open() {
+    if (canOpen?.() === false) return;
     if (message === null) return void onConfirm();
     setFailure(null);
     setAsking(true);

@@ -30,8 +30,10 @@ import {
   type SourceResponse,
   sourceListResponseSchema,
   sourceResponseSchema,
+  type UpdateSourceRequest,
   type UpsertLessonSourceRequest,
   type UpsertLessonTextRequest,
+  updateSourceRequestSchema,
   upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
 } from "@ez-dk-citizen/api-contracts";
@@ -70,6 +72,11 @@ export interface DataServiceClient {
     requestId: string,
   ): Promise<SourceResponse>;
   listSources(requestId: string): Promise<SourceListResponse>;
+  updateSource(
+    id: number,
+    input: UpdateSourceRequest,
+    requestId: string,
+  ): Promise<SourceResponse>;
   upsertLessonSource(
     lessonId: number,
     sourceId: number,
@@ -218,6 +225,14 @@ export function createDataServiceClient(
         requestId,
         undefined,
         sourceListResponseSchema.parse,
+      ),
+    updateSource: (id, input, requestId) =>
+      call(
+        `/internal/sources/${id}`,
+        "PATCH",
+        requestId,
+        updateSourceRequestSchema.parse(input),
+        sourceResponseSchema.parse,
       ),
     upsertLessonSource: (lessonId, sourceId, input, requestId) =>
       call(

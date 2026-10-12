@@ -1,4 +1,5 @@
-// Citing Sources from the Lesson editor: attach, reference editing, and detach (ticket 06).
+// Citing Sources from the Lesson editor: attach, reference editing, and detach (ticket 06),
+// and correcting a cited Source from its finder (Stage 4b ticket 03).
 import {
   fireEvent,
   render,
@@ -12,9 +13,9 @@ import { App } from "../../../app/App";
 import {
   answer,
   bookSource,
-  canonicalEditControls,
   cited,
   connect,
+  editSource,
   fakeBackend,
   fieldError,
   finder,
@@ -22,10 +23,13 @@ import {
   hold,
   lawSource as law,
   lessonDetail,
+  movedLawUrl as moved,
   newSourceForm,
   openLesson,
   problem,
+  saveSource,
   settle,
+  sourceDeleteControls,
   structureForm,
   textForm,
   thaiText,
@@ -444,7 +448,7 @@ test("an uncreated New Source counts as an unsaved edit in the Lesson editor", a
   expect(unloadBlocked()).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
   answer("Cancel");
-  expect(canonicalEditControls()).toEqual([]);
+  expect(sourceDeleteControls()).toEqual([]);
 });
 
 test.each(["PUBLISHED", "ARCHIVED"] as const)(
@@ -488,3 +492,27 @@ test.each(["PUBLISHED", "ARCHIVED"] as const)(
     ).toBeNull();
   },
 );
+
+test("correcting a Source from a Published Lesson's finder shows it among the Lesson Sources", async () => {
+  await openDraft(
+    fakeBackend([
+      lessonDetail(1, {
+        status: "PUBLISHED",
+        lessonSources: [cited(law, { pageFrom: 4 })],
+      }),
+    ]),
+  );
+
+  const form = editSource(law.url);
+  type("Source URL", moved, form);
+  expect(unloadBlocked()).toBe(true);
+  saveSource(form);
+  answer("Save", form);
+
+  await waitFor(() => expect(lessonSourceUrls()).toEqual([moved]));
+  await waitFor(() => expect(unloadBlocked()).toBe(false));
+  expect(screen.getAllByRole("link", { name: moved })).toHaveLength(2);
+  expect(
+    within(lessonSourceForm(moved)).getByLabelText("Page from"),
+  ).toHaveProperty("value", "4");
+});

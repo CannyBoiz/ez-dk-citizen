@@ -767,6 +767,142 @@ test("internal Source HTTP operations preserve canonical URL identity", async ()
   );
 });
 
+test("internal Source updates correct a Source cited by a Published Lesson without touching it", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const createSource = async (url: string, publishedAt: string | null) =>
+    (
+      await app.request("/internal/sources", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ url, publishedAt }),
+      })
+    ).json();
+  const typo = await createSource(
+    "https://example.com/tpyo",
+    "2025-03-09T00:00:00.000Z",
+  );
+  const other = await createSource("https://example.com/other", null);
+  const lesson = await (
+    await app.request("/internal/lessons", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ chapter: 75 }),
+    })
+  ).json();
+  await app.request(`/internal/lessons/${lesson.id}/texts/th`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ title: "Title", content: "Content" }),
+  });
+  await app.request(`/internal/lessons/${lesson.id}/sources/${typo.id}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ pageFrom: 3 }),
+  });
+  const published = await (
+    await app.request(`/internal/lessons/${lesson.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ status: "PUBLISHED" }),
+    })
+  ).json();
+  const update = (id: number | string, body: unknown) =>
+    app.request(`/internal/sources/${id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(body),
+    });
+
+  assert.equal(
+    (
+      await app.request(`/internal/sources/${typo.id}`, {
+        method: "PATCH",
+        body: "{}",
+      })
+    ).status,
+    401,
+  );
+
+  const moved = await update(typo.id, { url: " https://example.com/typo " });
+  assert.equal(moved.status, 200);
+  assert.deepEqual(await moved.json(), {
+    id: typo.id,
+    url: "https://example.com/typo",
+    publishedAt: "2025-03-09T00:00:00.000Z",
+  });
+
+  const undated = await update(typo.id, { publishedAt: null });
+  assert.equal(undated.status, 200);
+  assert.deepEqual(await undated.json(), {
+    id: typo.id,
+    url: "https://example.com/typo",
+    publishedAt: null,
+  });
+
+  const both = await update(typo.id, {
+    url: "https://example.com/fixed",
+    publishedAt: "2025-03-10T02:00:00+02:00",
+  });
+  assert.equal(both.status, 200);
+  assert.deepEqual(await both.json(), {
+    id: typo.id,
+    url: "https://example.com/fixed",
+    publishedAt: "2025-03-10T00:00:00.000Z",
+  });
+
+  const conflict = await update(typo.id, { url: other.url });
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).code, "source_url_conflict");
+
+  const invalid = await update(typo.id, { url: "ftp://example.com" });
+  assert.equal(invalid.status, 422);
+  assert.deepEqual(
+    (await invalid.json()).errors.map(
+      (entry: { path: string[] }) => entry.path,
+    ),
+    [["url"]],
+  );
+
+  const missing = await update(999_999, { publishedAt: null });
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).code, "source_not_found");
+
+  const detail = await (
+    await app.request(`/internal/lessons/${lesson.id}`, { headers })
+  ).json();
+  assert.equal(detail.updatedAt, published.updatedAt);
+  assert.deepEqual(detail.lessonSources, [
+    {
+      id: typo.id,
+      url: "https://example.com/fixed",
+      publishedAt: "2025-03-10T00:00:00.000Z",
+      pageFrom: 3,
+      pageTo: null,
+      sectionReference: null,
+    },
+  ]);
+  const thai = await (
+    await app.request(
+      `/internal/lessons/${lesson.id}?status=PUBLISHED&language=th`,
+      { headers },
+    )
+  ).json();
+  assert.equal(thai.updatedAt, published.updatedAt);
+  assert.deepEqual(
+    thai.lessonSources.map(({ url }: { url: string }) => url),
+    ["https://example.com/fixed"],
+  );
+  assert.deepEqual(
+    (
+      await (await app.request("/internal/sources", { headers })).json()
+    ).items.map(({ url }: { url: string }) => url),
+    ["https://example.com/fixed", other.url],
+  );
+});
+
 test("internal Lesson Source operations replace locators and detach safely", async () => {
   const headers = {
     Authorization: "Bearer data-token",

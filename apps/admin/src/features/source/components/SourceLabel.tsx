@@ -1,5 +1,5 @@
 // A Source as the admin sees it: its URL as a link and its UTC publication date.
-import { publicationLabel } from "../utils/publicationLabel";
+import { publicationLabel } from "../utils/publicationDate";
 
 export function SourceLabel({
   url,

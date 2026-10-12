@@ -18,6 +18,7 @@ export function createTestDataServiceClient(
     patchLesson: unused,
     createSource: unused,
     listSources: unused,
+    updateSource: unused,
     upsertLessonSource: unused,
     deleteLessonSource: unused,
     listPublishedLessons: unused,

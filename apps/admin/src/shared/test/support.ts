@@ -11,6 +11,7 @@ import type {
   LessonSummary,
   PatchLessonRequest,
   SourceResponse,
+  UpdateSourceRequest,
   UpsertLessonSourceRequest,
 } from "@ez-dk-citizen/api-contracts/schemas";
 import {
@@ -253,7 +254,7 @@ export function fakeBackend(
             publishedAt,
           })),
         ),
-        ...extraSources,
+        ...structuredClone(extraSources),
       ].map((source) => [source.id, source]),
     ).values(),
   ];
@@ -313,6 +314,36 @@ export function fakeBackend(
   const network = fakeNetwork((request) => {
     const overridden = override(request);
     if (overridden) return overridden;
+    if (request.path.startsWith("/api/admin/sources/")) {
+      const id = Number(request.path.split("/")[4]);
+      const source = sources.find((candidate) => candidate.id === id);
+      if (!source)
+        return problem(
+          404,
+          "source_not_found",
+          "Source was not found.",
+          "req-404-source",
+        );
+      const correction = request.body as UpdateSourceRequest;
+      if (
+        sources.some((other) => other.id !== id && other.url === correction.url)
+      )
+        return problem(
+          409,
+          "source_url_conflict",
+          "A Source with this URL already exists.",
+          "req-409-source",
+        );
+      // Every citing Lesson shows the correction, and none of them is touched.
+      for (const updated of [
+        source,
+        ...lessons.flatMap((lesson) =>
+          lesson.lessonSources.filter((cited) => cited.id === id),
+        ),
+      ])
+        Object.assign(updated, correction);
+      return { status: 200, body: source };
+    }
     if (request.path === "/api/admin/sources") {
       if (request.method === "GET")
         return { status: 200, body: { items: sources } };
@@ -589,6 +620,8 @@ export const guideSource = {
   url: "https://nyidanmark.dk/da/guide",
   publishedAt: null,
 };
+// Where a correction moves lawSource.
+export const movedLawUrl = "https://www.retsinformation.dk/eli/lta/2024/2";
 // 01:00 at +02:00 is still 31 December in UTC.
 export const bookSource = {
   id: 3,
@@ -609,21 +642,43 @@ export function finder() {
   return screen.getByRole("region", { name: "Source finder" });
 }
 
-// The visible text of each Source the finder lists.
+// The visible text of each Source the finder lists, without its buttons and Edit form.
 export function sourceRows() {
   return within(within(finder()).getByRole("list", { name: "Sources" }))
     .queryAllByRole("listitem")
-    .map((item) => item.textContent);
+    .map((item) => {
+      const label = item.cloneNode(true) as HTMLElement;
+      for (const control of label.querySelectorAll("button, form"))
+        control.remove();
+      return label.textContent!.trim();
+    });
+}
+
+export function sourceEditForm(url: string) {
+  return within(finder()).getByRole("form", { name: `Source ${url}` });
+}
+
+// Opens a listed Source's Edit form.
+export function editSource(url: string) {
+  fireEvent.click(
+    within(finder()).getByRole("button", { name: `Edit ${url}` }),
+  );
+  return sourceEditForm(url);
+}
+
+// Saves an Edit form, which first asks in the page.
+export function saveSource(form: HTMLElement) {
+  fireEvent.click(within(form).getByRole("button", { name: "Save" }));
 }
 
 export function newSourceForm() {
   return within(finder()).getByRole("form", { name: "New Source" });
 }
 
-// Canonical Sources are found, created, and reused only.
-export function canonicalEditControls() {
+// Canonical Sources are found, created, corrected, and reused, but never deleted.
+export function sourceDeleteControls() {
   return within(finder()).queryAllByRole("button", {
-    name: /edit|delete|remove|update|rename/i,
+    name: /delete|remove/i,
   });
 }
 

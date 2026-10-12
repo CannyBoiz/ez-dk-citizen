@@ -38,6 +38,7 @@ export const lessonIdParamsSchema = z.strictObject({ lessonId: positiveId });
 export const mediaAssetIdParamsSchema = z.strictObject({
   mediaAssetId: positiveId,
 });
+export const sourceIdParamsSchema = z.strictObject({ sourceId: positiveId });
 export const lessonSourceParamsSchema = z.strictObject({
   lessonId: positiveId,
   sourceId: positiveId,
@@ -100,6 +101,16 @@ export const createSourceRequestSchema = z.strictObject({
   url: sourceUrl,
   publishedAt: timestamp.nullable(),
 });
+
+// A correction to a canonical Source: its URL, its publication date (null means unknown), or both.
+export const updateSourceRequestSchema = z
+  .strictObject({
+    url: sourceUrl.optional(),
+    publishedAt: timestamp.nullable().optional(),
+  })
+  .refine(
+    (value) => value.url !== undefined || value.publishedAt !== undefined,
+  );
 
 export const sourceResponseSchema = z.strictObject({
   id: positiveInteger,
@@ -349,6 +360,7 @@ export type UpsertLessonSourceRequest = z.infer<
   typeof upsertLessonSourceRequestSchema
 >;
 export type CreateSourceRequest = z.infer<typeof createSourceRequestSchema>;
+export type UpdateSourceRequest = z.infer<typeof updateSourceRequestSchema>;
 export type SourceResponse = z.infer<typeof sourceResponseSchema>;
 export type SourceListResponse = z.infer<typeof sourceListResponseSchema>;
 export type LessonStatus = z.infer<typeof lessonStatusSchema>;

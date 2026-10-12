@@ -22,6 +22,8 @@ import {
   problemDetailsSchema,
   publishedLessonDetailSchema,
   readinessResponseSchema,
+  sourceIdParamsSchema,
+  updateSourceRequestSchema,
   uploadIntentResponseSchema,
   upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
@@ -503,6 +505,41 @@ test("Source contracts accept only trimmed HTTP URLs and offset timestamps", () 
       extra: true,
     }),
   );
+});
+
+test("Source updates change the URL, the publication date, or both, validated as on creation", () => {
+  assert.deepEqual(
+    updateSourceRequestSchema.parse({ url: " https://example.com/moved " }),
+    { url: "https://example.com/moved" },
+  );
+  assert.deepEqual(updateSourceRequestSchema.parse({ publishedAt: null }), {
+    publishedAt: null,
+  });
+  assert.deepEqual(
+    updateSourceRequestSchema.parse({
+      url: "http://example.com",
+      publishedAt: "2026-01-01T02:00:00+02:00",
+    }),
+    { url: "http://example.com", publishedAt: "2026-01-01T02:00:00+02:00" },
+  );
+  for (const body of [
+    {},
+    { url: "ftp://example.com" },
+    { url: "/source" },
+    { url: null },
+    { publishedAt: "2026-01-01T00:00:00" },
+    { url: "https://example.com", extra: true },
+  ]) {
+    assert.equal(
+      updateSourceRequestSchema.safeParse(body).success,
+      false,
+      JSON.stringify(body),
+    );
+  }
+  assert.deepEqual(sourceIdParamsSchema.parse({ sourceId: "7" }), {
+    sourceId: 7,
+  });
+  assert.throws(() => sourceIdParamsSchema.parse({ sourceId: "0" }));
 });
 
 test("Lesson Source upserts allow absent locators but reject invalid pages", () => {

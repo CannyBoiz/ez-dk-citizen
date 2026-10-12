@@ -1,5 +1,8 @@
-import type { CreateSourceRequest } from "@ez-dk-citizen/api-contracts";
-import { asc } from "drizzle-orm";
+import type {
+  CreateSourceRequest,
+  UpdateSourceRequest,
+} from "@ez-dk-citizen/api-contracts";
+import { asc, eq } from "drizzle-orm";
 
 import type { DataDatabase } from "../../db/database.js";
 import { source } from "../../db/schema.js";
@@ -17,6 +20,27 @@ export async function createSource(
     .returning();
   if (!created) throw new Error("Source insert returned no row.");
   return toSource(created);
+}
+
+// A correction applies to every citing Lesson, whatever its status, and touches none of them.
+export async function updateSource(
+  database: DataDatabase,
+  id: number,
+  input: UpdateSourceRequest,
+) {
+  const [updated] = await database
+    .update(source)
+    .set({
+      url: input.url,
+      // Absent keeps the date and null clears it, as Drizzle leaves out undefined.
+      publishedAt:
+        input.publishedAt == null
+          ? input.publishedAt
+          : new Date(input.publishedAt),
+    })
+    .where(eq(source.id, id))
+    .returning();
+  return updated && toSource(updated);
 }
 
 export async function listSources(database: DataDatabase) {

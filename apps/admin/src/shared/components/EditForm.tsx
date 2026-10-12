@@ -2,6 +2,7 @@
 import { type SubmitEvent, useId, useState } from "react";
 
 import { BffError } from "../lib/bff";
+import { ConfirmButton } from "./ConfirmButton";
 import { ErrorMessage } from "./ErrorMessage";
 
 export type Values = Record<string, string>;
@@ -27,6 +28,7 @@ export function EditForm({
   submitLabel = "Save",
   status,
   className,
+  confirmMessage,
 }: {
   name: string;
   fields: Field[];
@@ -40,14 +42,16 @@ export function EditForm({
   status?: string;
   // Extra layout class for the form, such as "inline-form".
   className?: string;
+  // Asked in the page once the fields pass their checks, before anything is saved.
+  confirmMessage?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [invalid, setInvalid] = useState<FieldErrors>({});
   const id = useId();
 
-  async function submit(event: SubmitEvent) {
-    event.preventDefault();
+  // Shows every failed check; true when the form may be saved.
+  function check() {
     // A field's own check takes precedence over a cross-field message for that field.
     const problems: FieldErrors = { ...validate?.(value) };
     for (const { name, label, kind, optional } of fields) {
@@ -61,7 +65,10 @@ export function EditForm({
     }
     setInvalid(problems);
     setError(null);
-    if (Object.keys(problems).length) return;
+    return Object.keys(problems).length === 0;
+  }
+
+  async function save() {
     setBusy(true);
     try {
       await onSave(value);
@@ -70,6 +77,12 @@ export function EditForm({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submit(event: SubmitEvent) {
+    event.preventDefault();
+    // A form that asks first saves only through its confirmation, never on Enter.
+    if (!confirmMessage && check()) await save();
   }
 
   return (
@@ -119,11 +132,23 @@ export function EditForm({
           </div>
         );
       })}
-      {!readOnly && (
-        <button type="submit" disabled={busy}>
-          {submitLabel}
-        </button>
-      )}
+      {!readOnly &&
+        (confirmMessage ? (
+          // Checked again on confirming, in case a field changed while it asked.
+          <ConfirmButton
+            disabled={busy}
+            message={confirmMessage}
+            confirmLabel={submitLabel}
+            canOpen={check}
+            onConfirm={() => (check() ? save() : undefined)}
+          >
+            {submitLabel}
+          </ConfirmButton>
+        ) : (
+          <button type="submit" disabled={busy}>
+            {submitLabel}
+          </button>
+        ))}
       {error !== null && <ErrorMessage error={error} />}
     </form>
   );

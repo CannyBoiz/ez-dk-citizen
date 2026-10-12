@@ -57,7 +57,7 @@ export function LessonView({
   // Unsaved edits per form; a form without an entry shows what the backend holds.
   const [edits, setEdits] = useState<Partial<Record<Form, Values>>>({});
   const [languageCode, setLanguageCode] = useState<LanguageCode>("th");
-  // The Source finder's New Source form counts towards unsaved edits too.
+  // The Source finder's unsaved forms, its Edit forms and New Source, count towards unsaved edits too.
   const [finderUnsaved, setFinderUnsaved] = useState<string[]>([]);
   const detaching = useAction<number>();
   // The upload's status, reported up for the navigation guards. While it is active (Uploading
@@ -422,6 +422,22 @@ export function LessonView({
       <SourceFinder
         call={call}
         onUnsavedChange={setFinderUnsaved}
+        // A correction leaves the Lesson's updatedAt alone, so it bypasses applyLesson.
+        // ponytail: a Lesson write answered with the old URL after this can still overwrite it
+        // until reload; order by a Source version if that ever matters.
+        onSourceUpdate={(corrected) =>
+          setLesson(
+            (current) =>
+              current && {
+                ...current,
+                lessonSources: current.lessonSources.map((cited) =>
+                  cited.id === corrected.id
+                    ? { ...cited, ...corrected }
+                    : cited,
+                ),
+              },
+          )
+        }
         readOnly={readOnly}
         attach={{
           attachedIds: lesson.lessonSources.map((source) => source.id),
