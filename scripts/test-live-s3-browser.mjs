@@ -208,7 +208,6 @@ await withTeardown(
       tracerPhase = "exercising the live upload and playback flow";
       const lesson = await requestBff(bffServer, "/api/admin/lessons", "POST", {
         chapter: 1,
-        version: 1,
       });
       assert.equal(
         lesson.response.status,
@@ -401,6 +400,7 @@ await withTeardown(
         "lessonSources",
         "title",
         "version",
+        "versionPatch",
       ]);
       assert.deepEqual(Object.keys(lessonResponse.audio ?? {}).sort(), [
         "audioVersion",

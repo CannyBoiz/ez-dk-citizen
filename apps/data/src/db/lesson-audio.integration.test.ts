@@ -18,7 +18,6 @@ test("Lesson Audio requires matching localized text but upload records may remai
     .insert(lesson)
     .values({
       chapter: 20,
-      version: 1,
       status: "DRAFT",
     })
     .returning();
@@ -81,8 +80,8 @@ test("Lesson Audio retains version history and has one current rendition per Les
   const [firstLesson, secondLesson] = await database
     .insert(lesson)
     .values([
-      { chapter: 21, version: 1, status: "DRAFT" },
-      { chapter: 22, version: 1, status: "DRAFT" },
+      { chapter: 21, status: "DRAFT" },
+      { chapter: 22, status: "DRAFT" },
     ])
     .returning();
 
@@ -219,6 +218,7 @@ test("Lesson Audio relationships resolve every navigation path unambiguously", a
     .values({
       chapter: 23,
       version: 1,
+      versionPatch: 0,
       status: "PUBLISHED",
     })
     .returning();

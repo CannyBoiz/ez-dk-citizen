@@ -18,7 +18,7 @@ See the spec sections "Deleting Drafts" and "Admin" (Publication, Uploads), and 
 
 **Status:** ready-for-agent
 
-- [ ] Archiving a Draft is `409 lesson_lifecycle_conflict` and leaves it `DRAFT`
+- [x] Archiving a Draft is `409 lesson_lifecycle_conflict` and leaves it `DRAFT`
 - [ ] Deleting a Draft removes it with its Lesson Texts, Lesson Sources, and Lesson Audio; its canonical Sources remain
 - [ ] The deleted Draft's Media Assets become `DELETED` and their objects are deleted from storage
 - [ ] Deleting a Published or Archived Lesson is `409 lesson_not_editable` and changes nothing; a missing Lesson is `404`

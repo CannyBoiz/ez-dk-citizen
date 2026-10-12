@@ -114,10 +114,10 @@ test("dirty edits trigger the before-unload warning and an in-page confirmation 
   const { network, requests } = fakeBackend([lessonDetail(1)]);
   render(<App network={network} />);
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
   expect(unloadBlocked()).toBe(false);
 
-  type("Version", "5", structureForm());
+  type("Chapter", "5", structureForm());
   expect(unloadBlocked()).toBe(true);
 
   const sent = requests.length;
@@ -125,7 +125,7 @@ test("dirty edits trigger the before-unload warning and an in-page confirmation 
   answer("Cancel");
   await settle();
   expect(requests.length).toBe(sent);
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "5",
   );
@@ -139,8 +139,8 @@ test("dirty edits trigger the before-unload warning and an in-page confirmation 
 test("the in-page confirmation is operated by keyboard: it opens on Cancel, and Escape puts the button back", async () => {
   render(<App network={fakeBackend([lessonDetail(1)]).network} />);
   await connect(validToken);
-  await openLesson(1, 1);
-  type("Version", "5", structureForm());
+  await openLesson();
+  type("Chapter", "5", structureForm());
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
   expect(document.activeElement).toBe(
@@ -151,7 +151,7 @@ test("the in-page confirmation is operated by keyboard: it opens on Cancel, and 
   expect(document.activeElement).toBe(
     screen.getByRole("button", { name: "Back to catalogue" }),
   );
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "5",
   );
@@ -161,8 +161,8 @@ test("Disconnect with unsaved edits asks in the page, and confirming disconnects
   const { network, requests } = fakeBackend([lessonDetail(1)]);
   render(<App network={network} />);
   await connect(validToken);
-  await openLesson(1, 1);
-  type("Version", "5", structureForm());
+  await openLesson();
+  type("Chapter", "5", structureForm());
 
   const sent = requests.length;
   fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
@@ -172,7 +172,7 @@ test("Disconnect with unsaved edits asks in the page, and confirming disconnects
   answer("Cancel");
   await settle();
   expect(requests.length).toBe(sent);
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "5",
   );
@@ -193,9 +193,9 @@ test("the leave confirmation names each unsaved form, and a saved form drops out
     />,
   );
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
 
-  type("Version", "5", structureForm());
+  type("Chapter", "5", structureForm());
   type("Title", "บทที่ 1", textForm());
   fireEvent.click(tab("da"));
   type("Title", "Kapitel 1", textForm());
@@ -227,7 +227,7 @@ test("the leave confirmation names each unsaved form, and a saved form drops out
 test("returning to the catalogue without edits asks nothing", async () => {
   render(<App network={fakeBackend([lessonDetail(1)]).network} />);
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
   expect(screen.queryByRole("alertdialog")).toBeNull();
@@ -249,10 +249,10 @@ test("a 401 during save prompts for the token, keeps the edits, and the save can
   });
   render(<App network={network} />);
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
 
   accepted = "rotated-token";
-  type("Version", "9", structureForm());
+  type("Chapter", "9", structureForm());
   fireEvent.click(
     within(structureForm()).getByRole("button", { name: "Save" }),
   );
@@ -268,7 +268,7 @@ test("a 401 during save prompts for the token, keeps the edits, and the save can
   });
   fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
   await waitFor(() => expect(dialog.isConnected).toBe(false));
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "9",
   );
@@ -276,7 +276,9 @@ test("a 401 during save prompts for the token, keeps the edits, and the save can
   fireEvent.click(
     within(structureForm()).getByRole("button", { name: "Save" }),
   );
-  await screen.findByRole("heading", { name: "Chapter 1, version 9" });
+  await screen.findByRole("heading", {
+    name: "Chapter 9 · Draft, created 11 Oct 2026",
+  });
   expect(requests.at(-1)).toMatchObject({
     method: "PATCH",
     token: "rotated-token",

@@ -81,7 +81,7 @@ test("internal Media Asset completion makes the first matching Lesson Audio curr
   const lessonResponse = await app.request("/internal/lessons", {
     method: "POST",
     headers,
-    body: JSON.stringify({ chapter: 70, version: 1 }),
+    body: JSON.stringify({ chapter: 70 }),
   });
   const lesson = await lessonResponse.json();
   const localized = await app.request(
@@ -212,7 +212,7 @@ test("internal Media Asset completion promotes corrections and returns matching 
   const createdLesson = await app.request("/internal/lessons", {
     method: "POST",
     headers,
-    body: JSON.stringify({ chapter: 71, version: 1 }),
+    body: JSON.stringify({ chapter: 71 }),
   });
   const lesson = await createdLesson.json();
   for (const languageCode of ["th", "da"]) {
@@ -344,7 +344,7 @@ test("internal Media Asset completion promotes corrections and returns matching 
   const archivedLesson = await app.request("/internal/lessons", {
     method: "POST",
     headers,
-    body: JSON.stringify({ chapter: 73, version: 1 }),
+    body: JSON.stringify({ chapter: 73 }),
   });
   const archived = await archivedLesson.json();
   await app.request(`/internal/lessons/${archived.id}/texts/th`, {
@@ -352,11 +352,19 @@ test("internal Media Asset completion promotes corrections and returns matching 
     headers,
     body: JSON.stringify({ title: "Title", content: "Content" }),
   });
-  await app.request(`/internal/lessons/${archived.id}`, {
-    method: "PATCH",
+  await app.request(`/internal/lessons/${archived.id}/sources/${source.id}`, {
+    method: "PUT",
     headers,
-    body: JSON.stringify({ status: "ARCHIVED" }),
+    body: "{}",
   });
+  for (const status of ["PUBLISHED", "ARCHIVED"]) {
+    const transitioned = await app.request(`/internal/lessons/${archived.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ status }),
+    });
+    assert.equal(transitioned.status, 200);
+  }
   const archivedAsset = await (
     await createAsset("audio/123e4567-e89b-12d3-a456-426614174012.mp3")
   ).json();
@@ -380,7 +388,7 @@ test("internal Media Asset completion rolls back every promotion write", async (
   const lessonResponse = await app.request("/internal/lessons", {
     method: "POST",
     headers,
-    body: JSON.stringify({ chapter: 72, version: 1 }),
+    body: JSON.stringify({ chapter: 72 }),
   });
   const lesson = await lessonResponse.json();
   await app.request(`/internal/lessons/${lesson.id}/texts/th`, {
@@ -484,7 +492,7 @@ test("internal Media Asset completion serializes concurrent corrections", async 
   const lessonResponse = await app.request("/internal/lessons", {
     method: "POST",
     headers,
-    body: JSON.stringify({ chapter: 74, version: 1 }),
+    body: JSON.stringify({ chapter: 74 }),
   });
   const lesson = await lessonResponse.json();
   await app.request(`/internal/lessons/${lesson.id}/texts/th`, {
@@ -551,7 +559,7 @@ test("internal Lesson HTTP operations persist and return aggregate transport sha
   const unauthorized = await app.request("/internal/lessons", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chapter: 1, version: 1 }),
+    body: JSON.stringify({ chapter: 1 }),
   });
   assert.equal(unauthorized.status, 401);
 
@@ -564,11 +572,10 @@ test("internal Lesson HTTP operations persist and return aggregate transport sha
       Authorization: "Bearer data-token",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ chapter: 1, version: 1, status: "PUBLISHED" }),
+    body: JSON.stringify({ chapter: 1, status: "PUBLISHED" }),
   });
   assert.equal(created.status, 422);
-
-  const valid = await app.request("/internal/lessons", {
+  const versioned = await app.request("/internal/lessons", {
     method: "POST",
     headers: {
       Authorization: "Bearer data-token",
@@ -576,9 +583,22 @@ test("internal Lesson HTTP operations persist and return aggregate transport sha
     },
     body: JSON.stringify({ chapter: 1, version: 1 }),
   });
+  assert.equal(versioned.status, 422);
+
+  const valid = await app.request("/internal/lessons", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer data-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ chapter: 1 }),
+  });
   assert.equal(valid.status, 201);
   const detail = await valid.json();
   assert.equal(detail.status, "DRAFT");
+  assert.equal(detail.chapter, 1);
+  assert.equal(detail.version, null);
+  assert.equal(detail.versionPatch, null);
   assert.deepEqual(detail.availableLanguageCodes, []);
   assert.deepEqual(detail.lessonTexts, []);
   assert.deepEqual(detail.lessonSources, []);
@@ -643,22 +663,26 @@ test("internal Lesson HTTP operations persist and return aggregate transport sha
   assert.equal(missingTextLesson.status, 404);
   assert.equal((await missingTextLesson.json()).code, "lesson_not_found");
 
-  const duplicate = await app.request("/internal/lessons", {
+  const sameChapter = await app.request("/internal/lessons", {
     method: "POST",
     headers: {
       Authorization: "Bearer data-token",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ chapter: 1, version: 1 }),
+    body: JSON.stringify({ chapter: 1 }),
   });
-  assert.equal(duplicate.status, 409);
-  assert.equal((await duplicate.json()).code, "lesson_version_conflict");
+  assert.equal(sameChapter.status, 201);
+  const secondDraft = await sameChapter.json();
 
   const list = await app.request("/internal/lessons", {
     headers: { Authorization: "Bearer data-token" },
   });
   assert.equal(list.status, 200);
-  assert.equal((await list.json()).items[0].id, detail.id);
+  // Drafts have no version to order by, so the newest comes first.
+  assert.deepEqual(
+    (await list.json()).items.map((item: { id: number }) => item.id),
+    [secondDraft.id, detail.id],
+  );
 
   const inspected = await app.request(`/internal/lessons/${detail.id}`, {
     headers: { Authorization: "Bearer data-token" },
@@ -751,7 +775,7 @@ test("internal Lesson Source operations replace locators and detach safely", asy
   const lessonResponse = await app.request("/internal/lessons", {
     method: "POST",
     headers,
-    body: JSON.stringify({ chapter: 2, version: 1 }),
+    body: JSON.stringify({ chapter: 2 }),
   });
   const lesson = await lessonResponse.json();
 
@@ -840,7 +864,7 @@ test("internal Lesson Source operations replace locators and detach safely", asy
   const secondLessonResponse = await app.request("/internal/lessons", {
     method: "POST",
     headers,
-    body: JSON.stringify({ chapter: 2, version: 2 }),
+    body: JSON.stringify({ chapter: 2 }),
   });
   const secondLesson = await secondLessonResponse.json();
   const reused = await app.request(
@@ -852,7 +876,7 @@ test("internal Lesson Source operations replace locators and detach safely", asy
 
   await database
     .update(lessonTable)
-    .set({ status: "PUBLISHED" })
+    .set({ status: "PUBLISHED", version: 1, versionPatch: 0 })
     .where(eq(lessonTable.id, secondLesson.id));
   const blocked = await app.request(
     `/internal/lessons/${secondLesson.id}/sources/${secondSource.id}`,
@@ -901,7 +925,7 @@ test("Published localized detail returns only the requested current ready audio"
   const created = await app.request("/internal/lessons", {
     method: "POST",
     headers,
-    body: JSON.stringify({ chapter: 74, version: 1 }),
+    body: JSON.stringify({ chapter: 74 }),
   });
   const lesson = await created.json();
   for (const languageCode of ["th", "da"]) {
@@ -1020,17 +1044,17 @@ test("internal localized reads filter by status and return Lesson aggregates", a
     Authorization: "Bearer data-token",
     "Content-Type": "application/json",
   };
-  const createLesson = async (chapter: number, version: number) => {
+  const createLesson = async (chapter: number) => {
     const response = await app.request("/internal/lessons", {
       method: "POST",
       headers,
-      body: JSON.stringify({ chapter, version }),
+      body: JSON.stringify({ chapter }),
     });
     assert.equal(response.status, 201);
     return response.json();
   };
 
-  const published = await createLesson(50, 1);
+  const published = await createLesson(50);
   const localized = await app.request(
     `/internal/lessons/${published.id}/texts/th`,
     {
@@ -1062,7 +1086,7 @@ test("internal localized reads filter by status and return Lesson aggregates", a
   });
   assert.equal(publish.status, 200);
 
-  const hidden = await createLesson(51, 1);
+  const hidden = await createLesson(51);
   const filteredList = await app.request(
     "/internal/lessons?status=PUBLISHED&language=th",
     { headers: { Authorization: "Bearer data-token" } },
@@ -1075,6 +1099,7 @@ test("internal localized reads filter by status and return Lesson aggregates", a
       id: published.id,
       chapter: 50,
       version: 1,
+      versionPatch: 0,
       status: "PUBLISHED",
       createdAt: published.createdAt,
       updatedAt: (await publish.json()).updatedAt,
@@ -1133,11 +1158,11 @@ test("internal Lesson patches enforce lifecycle and immutable history", async ()
     Authorization: "Bearer data-token",
     "Content-Type": "application/json",
   };
-  const createLesson = async (chapter: number, version: number) => {
+  const createLesson = async (chapter: number) => {
     const response = await app.request("/internal/lessons", {
       method: "POST",
       headers,
-      body: JSON.stringify({ chapter, version }),
+      body: JSON.stringify({ chapter }),
     });
     assert.equal(response.status, 201);
     return response.json();
@@ -1149,13 +1174,15 @@ test("internal Lesson patches enforce lifecycle and immutable history", async ()
       body: JSON.stringify(body),
     });
 
-  const draft = await createLesson(10, 1);
-  const structured = await patchLesson(draft.id, { chapter: 11, version: 2 });
+  const draft = await createLesson(10);
+  const structured = await patchLesson(draft.id, { chapter: 11 });
   assert.equal(structured.status, 200);
   const structuredDetail = await structured.json();
   assert.equal(structuredDetail.chapter, 11);
-  assert.equal(structuredDetail.version, 2);
+  assert.equal(structuredDetail.version, null);
   assert.notEqual(structuredDetail.updatedAt, draft.updatedAt);
+  const versionEdit = await patchLesson(draft.id, { version: 2 });
+  assert.equal(versionEdit.status, 422);
 
   const repeatedDraft = await patchLesson(draft.id, { status: "DRAFT" });
   assert.equal(repeatedDraft.status, 409);
@@ -1190,14 +1217,14 @@ test("internal Lesson patches enforce lifecycle and immutable history", async ()
   await makePublishable(draft.id);
   const published = await patchLesson(draft.id, {
     chapter: 12,
-    version: 3,
     status: "PUBLISHED",
   });
   assert.equal(published.status, 200);
   const publishedDetail = await published.json();
   assert.equal(publishedDetail.status, "PUBLISHED");
   assert.equal(publishedDetail.chapter, 12);
-  assert.equal(publishedDetail.version, 3);
+  assert.equal(publishedDetail.version, 1);
+  assert.equal(publishedDetail.versionPatch, 0);
 
   const textAfterPublication = await app.request(
     `/internal/lessons/${draft.id}/texts/th`,
@@ -1286,20 +1313,26 @@ test("internal Lesson patches enforce lifecycle and immutable history", async ()
   assert.equal(detachAfterArchive.status, 409);
   assert.equal((await detachAfterArchive.json()).code, "lesson_not_editable");
 
-  const draftToArchive = await createLesson(20, 1);
+  // A Draft that is no longer wanted is deleted, never archived.
+  const draftToArchive = await createLesson(20);
   const directArchive = await patchLesson(draftToArchive.id, {
     status: "ARCHIVED",
   });
-  assert.equal(directArchive.status, 200);
-  assert.equal((await directArchive.json()).status, "ARCHIVED");
+  assert.equal(directArchive.status, 409);
+  assert.equal((await directArchive.json()).code, "lesson_lifecycle_conflict");
+  const afterDirectArchive = await app.request(
+    `/internal/lessons/${draftToArchive.id}`,
+    { headers: { Authorization: "Bearer data-token" } },
+  );
+  assert.deepEqual(await afterDirectArchive.json(), draftToArchive);
 
-  const publishedVersion = await createLesson(30, 1);
+  const publishedVersion = await createLesson(30);
   await makePublishable(publishedVersion.id);
   assert.equal(
     (await patchLesson(publishedVersion.id, { status: "PUBLISHED" })).status,
     200,
   );
-  const competing = await createLesson(30, 2);
+  const competing = await createLesson(30);
   await makePublishable(competing.id);
   const beforeCompetingPublish = await app.request(
     `/internal/lessons/${competing.id}`,
@@ -1310,6 +1343,7 @@ test("internal Lesson patches enforce lifecycle and immutable history", async ()
   const beforeCompetingDetail = await beforeCompetingPublish.json();
   const competingPublish = await patchLesson(competing.id, {
     status: "PUBLISHED",
+    changeKind: "fix",
   });
   assert.equal(competingPublish.status, 409);
   assert.equal(
@@ -1323,27 +1357,6 @@ test("internal Lesson patches enforce lifecycle and immutable history", async ()
     },
   );
   assert.deepEqual(await afterCompetingPublish.json(), beforeCompetingDetail);
-
-  await createLesson(40, 1);
-  const rollback = await createLesson(41, 1);
-  const beforeRollback = await app.request(`/internal/lessons/${rollback.id}`, {
-    headers: { Authorization: "Bearer data-token" },
-  });
-  const beforeRollbackDetail = await beforeRollback.json();
-  const failedCombinedPatch = await patchLesson(rollback.id, {
-    chapter: 40,
-    version: 1,
-    status: "PUBLISHED",
-  });
-  assert.equal(failedCombinedPatch.status, 409);
-  assert.equal(
-    (await failedCombinedPatch.json()).code,
-    "lesson_version_conflict",
-  );
-  const afterRollback = await app.request(`/internal/lessons/${rollback.id}`, {
-    headers: { Authorization: "Bearer data-token" },
-  });
-  assert.deepEqual(await afterRollback.json(), beforeRollbackDetail);
 });
 
 test("internal Lesson publication requires a Thai Lesson Text and a Lesson Source", async () => {
@@ -1379,7 +1392,7 @@ test("internal Lesson publication requires a Thai Lesson Text and a Lesson Sourc
   const lessonSources = ["lessonSources"];
 
   const lesson = await (
-    await request("/internal/lessons", "POST", { chapter: 80, version: 1 })
+    await request("/internal/lessons", "POST", { chapter: 80 })
   ).json();
   await expectIncomplete(lesson.id, { status: "PUBLISHED" }, [
     thaiText,
@@ -1391,11 +1404,9 @@ test("internal Lesson publication requires a Thai Lesson Text and a Lesson Sourc
     content: "เนื้อหา",
   });
   await expectIncomplete(lesson.id, { status: "PUBLISHED" }, [lessonSources]);
-  await expectIncomplete(
-    lesson.id,
-    { chapter: 81, version: 2, status: "PUBLISHED" },
-    [lessonSources],
-  );
+  await expectIncomplete(lesson.id, { chapter: 81, status: "PUBLISHED" }, [
+    lessonSources,
+  ]);
 
   const source = await (
     await request("/internal/sources", "POST", {
@@ -1404,7 +1415,7 @@ test("internal Lesson publication requires a Thai Lesson Text and a Lesson Sourc
     })
   ).json();
   const untranslated = await (
-    await request("/internal/lessons", "POST", { chapter: 82, version: 1 })
+    await request("/internal/lessons", "POST", { chapter: 82 })
   ).json();
   await request(`/internal/lessons/${untranslated.id}/texts/da`, "PUT", {
     title: "Titel",
@@ -1424,7 +1435,6 @@ test("internal Lesson publication requires a Thai Lesson Text and a Lesson Sourc
   );
   const published = await request(`/internal/lessons/${lesson.id}`, "PATCH", {
     chapter: 81,
-    version: 2,
     status: "PUBLISHED",
   });
   assert.equal(published.status, 200);
@@ -1433,12 +1443,14 @@ test("internal Lesson publication requires a Thai Lesson Text and a Lesson Sourc
     {
       chapter: publishedDetail.chapter,
       version: publishedDetail.version,
+      versionPatch: publishedDetail.versionPatch,
       status: publishedDetail.status,
       availableLanguageCodes: publishedDetail.availableLanguageCodes,
     },
     {
       chapter: 81,
-      version: 2,
+      version: 1,
+      versionPatch: 0,
       status: "PUBLISHED",
       availableLanguageCodes: ["th"],
     },
@@ -1454,6 +1466,134 @@ test("internal Lesson publication requires a Thai Lesson Text and a Lesson Sourc
   );
 });
 
+test("publication gives the version: 1.0 first, then the chapter's highest version raised by the change kind", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const request = (path: string, method: string, body?: unknown) =>
+    app.request(path, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  const read = async (id: number) =>
+    (await request(`/internal/lessons/${id}`, "GET")).json();
+  const source = await (
+    await request("/internal/sources", "POST", {
+      url: "https://example.com/versions",
+      publishedAt: null,
+    })
+  ).json();
+  const publishableDraft = async (chapter: number) => {
+    const draft = await (
+      await request("/internal/lessons", "POST", { chapter })
+    ).json();
+    await request(`/internal/lessons/${draft.id}/texts/th`, "PUT", {
+      title: "บท",
+      content: "เนื้อหา",
+    });
+    await request(
+      `/internal/lessons/${draft.id}/sources/${source.id}`,
+      "PUT",
+      {},
+    );
+    return draft.id as number;
+  };
+  const publish = async (id: number, body: object = {}) =>
+    request(`/internal/lessons/${id}`, "PATCH", {
+      status: "PUBLISHED",
+      ...body,
+    });
+  const version = async (response: Response) => {
+    assert.equal(response.status, 200);
+    const { version, versionPatch } = await response.json();
+    return `${version}.${versionPatch}`;
+  };
+  const archive = async (id: number) =>
+    assert.equal(
+      (
+        await request(`/internal/lessons/${id}`, "PATCH", {
+          status: "ARCHIVED",
+        })
+      ).status,
+      200,
+    );
+
+  // A chapter's first publication is 1.0, whatever kind is sent.
+  assert.equal(await version(await publish(await publishableDraft(90))), "1.0");
+  for (const [chapter, changeKind] of [
+    [91, "content"],
+    [92, "fix"],
+  ] as const) {
+    assert.equal(
+      await version(
+        await publish(await publishableDraft(chapter), { changeKind }),
+      ),
+      "1.0",
+    );
+  }
+
+  // Chapter 93 holds Archived versions only, as the migration leaves Lessons archived as Drafts.
+  // 1.10 is higher than 1.9, and Drafts never count.
+  await database.insert(lessonTable).values([
+    { chapter: 93, version: 1, versionPatch: 9, status: "ARCHIVED" },
+    { chapter: 93, version: 1, versionPatch: 10, status: "ARCHIVED" },
+    { chapter: 93, status: "DRAFT" },
+  ]);
+  const fix = await publishableDraft(93);
+  const beforeRefusal = await read(fix);
+  const refused = await publish(fix);
+  assert.equal(refused.status, 422);
+  const refusal = await refused.json();
+  assert.equal(refusal.code, "validation_failed");
+  assert.deepEqual(
+    refusal.errors.map((error: { path: string[] }) => error.path),
+    [["changeKind"]],
+  );
+  assert.deepEqual(await read(fix), beforeRefusal);
+
+  assert.equal(
+    await version(await publish(fix, { changeKind: "fix" })),
+    "1.11",
+  );
+  await archive(fix);
+  const content = await publishableDraft(93);
+  assert.equal(
+    await version(await publish(content, { changeKind: "content" })),
+    "2.0",
+  );
+  await archive(content);
+
+  // The version follows the chapter the same command moves the Draft to, and a refusal
+  // leaves the chapter where it was.
+  const moved = await publishableDraft(94);
+  const beforeMove = await read(moved);
+  const refusedMove = await publish(moved, { chapter: 93 });
+  assert.equal(refusedMove.status, 422);
+  assert.deepEqual(await read(moved), beforeMove);
+  const movedPublication = await publish(moved, {
+    chapter: 93,
+    changeKind: "fix",
+  });
+  assert.equal(await version(movedPublication.clone()), "2.1");
+  assert.equal((await movedPublication.json()).chapter, 93);
+
+  // A change kind is refused on anything but a publication, and only content or fix exist.
+  const draft = await publishableDraft(95);
+  for (const body of [
+    { changeKind: "fix" },
+    { chapter: 96, changeKind: "content" },
+    { status: "ARCHIVED", changeKind: "fix" },
+    { status: "PUBLISHED", changeKind: "major" },
+  ]) {
+    const response = await request(`/internal/lessons/${draft}`, "PATCH", body);
+    assert.equal(response.status, 422, JSON.stringify(body));
+    assert.equal((await response.json()).code, "validation_failed");
+  }
+  assert.equal((await read(draft)).status, "DRAFT");
+});
+
 test("internal current Lesson Audio reads the current ready rendition in every Lesson status", async () => {
   const headers = {
     Authorization: "Bearer data-token",
@@ -1462,7 +1602,7 @@ test("internal current Lesson Audio reads the current ready rendition in every L
   const created = await app.request("/internal/lessons", {
     method: "POST",
     headers,
-    body: JSON.stringify({ chapter: 76, version: 1 }),
+    body: JSON.stringify({ chapter: 76 }),
   });
   const lesson = await created.json();
   const readAudio = (languageCode: string, id = lesson.id) =>

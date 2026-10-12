@@ -2,12 +2,14 @@
 
 import type {
   AdminLessonAudio,
+  ChangeKind,
   CompleteMediaAssetRequest,
   CreateSourceRequest,
   CreateUploadIntentRequest,
   LessonDetail,
   LessonStatus,
   LessonSummary,
+  PatchLessonRequest,
   SourceResponse,
   UpsertLessonSourceRequest,
 } from "@ez-dk-citizen/api-contracts/schemas";
@@ -157,17 +159,23 @@ export async function connect(token: string) {
   fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 }
 
+// Created at noon UTC, so it reads as 11 Oct 2026 in any test machine's time zone.
+export const createdAt = "2026-10-11T12:00:00.000Z";
+
+// Published and Archived Lessons default to version 1.0; Drafts have none.
 export function lessonSummary(
   id: number,
   overrides: Partial<LessonSummary> = {},
 ): LessonSummary {
+  const versioned = (overrides.status ?? "DRAFT") !== "DRAFT";
   return {
     id,
     chapter: id,
-    version: 1,
+    version: versioned ? 1 : null,
+    versionPatch: versioned ? 0 : null,
     status: "DRAFT",
-    createdAt: "2026-09-30T00:00:00.000Z",
-    updatedAt: "2026-09-30T00:00:00.000Z",
+    createdAt,
+    updatedAt: createdAt,
     availableLanguageCodes: [],
     ...overrides,
   };
@@ -178,11 +186,12 @@ export const catalogue = [
     status: "PUBLISHED",
     availableLanguageCodes: ["da", "th"],
   }),
-  lessonSummary(2, { chapter: 1, version: 2, availableLanguageCodes: ["th"] }),
-  lessonSummary(3, { chapter: 2, version: 1 }),
+  lessonSummary(2, { chapter: 1, availableLanguageCodes: ["th"] }),
+  lessonSummary(3, { chapter: 2, createdAt: "2026-10-09T12:00:00.000Z" }),
   lessonSummary(4, {
     chapter: 2,
     version: 2,
+    versionPatch: 1,
     status: "ARCHIVED",
     availableLanguageCodes: ["en"],
   }),
@@ -200,8 +209,8 @@ export function rows() {
     );
 }
 
-export function chapterVersions() {
-  return rows().map(([chapter, version]) => `${chapter}.${version}`);
+export function chapterStatuses() {
+  return rows().map(([chapter, , status]) => `${chapter} ${status}`);
 }
 
 export function lessonDetail(
@@ -209,7 +218,7 @@ export function lessonDetail(
   overrides: Partial<LessonDetail> = {},
 ): LessonDetail {
   return {
-    ...lessonSummary(id),
+    ...lessonSummary(id, overrides),
     lessonTexts: [],
     lessonSources: [],
     ...overrides,
@@ -249,7 +258,53 @@ export function fakeBackend(
     ).values(),
   ];
   // Every accepted transition succeeds; tests inject the backend's refusals through `override`.
-  function transition(lesson: LessonDetail, status: LessonStatus): BffResponse {
+  // Publication gives the version as the Data Service does: 1.0 for the chapter's first, and
+  // otherwise the highest Published or Archived version raised by the change kind.
+  function transition(
+    lesson: LessonDetail,
+    status: LessonStatus,
+    changeKind?: ChangeKind,
+  ): BffResponse {
+    if (status === "PUBLISHED") {
+      const [highest] = lessons
+        .filter(
+          (other) => other.chapter === lesson.chapter && other.version !== null,
+        )
+        .sort(
+          (a, b) =>
+            b.version! - a.version! || b.versionPatch! - a.versionPatch!,
+        );
+      if (highest && !changeKind)
+        return {
+          status: 422,
+          body: {
+            ...problem(
+              422,
+              "validation_failed",
+              "A change kind is required to publish this Lesson.",
+              "req-422-change-kind",
+            ).body,
+            errors: [
+              {
+                path: ["changeKind"],
+                message:
+                  "Choose a content change or a fix: this chapter already has a version.",
+              },
+            ],
+          },
+        };
+      Object.assign(
+        lesson,
+        !highest
+          ? { version: 1, versionPatch: 0 }
+          : changeKind === "content"
+            ? { version: highest.version! + 1, versionPatch: 0 }
+            : {
+                version: highest.version,
+                versionPatch: highest.versionPatch! + 1,
+              },
+      );
+    }
     lesson.status = status;
     touch(lesson);
     return { status: 200, body: lesson };
@@ -336,30 +391,15 @@ export function fakeBackend(
       .split("/");
     const body = request.body as {
       chapter: number;
-      version: number;
       title: string;
       content: string;
     };
-    const conflict = (chapter: number, version: number, except?: number) =>
-      lessons.some(
-        (other) =>
-          other.id !== except &&
-          other.chapter === chapter &&
-          other.version === version,
-      );
-    const conflictProblem = problem(
-      409,
-      "lesson_version_conflict",
-      "A Lesson with this chapter and version already exists.",
-      "req-409",
-    );
 
     if (!id) {
       if (request.method === "POST") {
-        if (conflict(body.chapter, body.version)) return conflictProblem;
         const created = lessonDetail(
           Math.max(0, ...lessons.map((lesson) => lesson.id)) + 1,
-          body,
+          { chapter: body.chapter },
         );
         lessons.push(created);
         return { status: 201, body: created };
@@ -398,9 +438,10 @@ export function fakeBackend(
       };
     }
     if (request.method === "GET") return { status: 200, body: lesson };
-    const status = (request.body as { status?: LessonStatus } | undefined)
-      ?.status;
-    if (request.method === "PATCH" && status) return transition(lesson, status);
+    const { status, changeKind } =
+      (request.body as PatchLessonRequest | undefined) ?? {};
+    if (request.method === "PATCH" && status)
+      return transition(lesson, status, changeKind);
     if (lesson.status !== "DRAFT")
       return problem(
         409,
@@ -409,8 +450,6 @@ export function fakeBackend(
         "req-409",
       );
     if (request.method === "PATCH") {
-      if (conflict(body.chapter, body.version, lesson.id))
-        return conflictProblem;
       Object.assign(lesson, body);
     } else if (collection === "sources") {
       const source = sources.find(
@@ -463,15 +502,19 @@ function touch(lesson: LessonDetail) {
   ).toISOString();
 }
 
-// Opens a Lesson and waits for the editor's own first reads, so they never race a test's requests.
-export async function openLesson(chapter: number, version: number) {
-  fireEvent.click(
-    await screen.findByRole("button", {
-      name: `Open chapter ${chapter}, version ${version}`,
-    }),
-  );
+// Opens a Lesson by its heading, such as "Chapter 1, version 2.1", or the only Lesson of a
+// chapter by its number, and waits for the editor's own first reads, so they never race a
+// test's requests. The editor's heading must match what the catalogue called the Lesson.
+export async function openLesson(lesson: string | number = 1) {
+  const open = await screen.findByRole("button", {
+    name:
+      typeof lesson === "number"
+        ? new RegExp(`^Open Chapter ${lesson}\\b`)
+        : `Open ${lesson}`,
+  });
+  fireEvent.click(open);
   await screen.findByRole("heading", {
-    name: `Chapter ${chapter}, version ${version}`,
+    name: open.getAttribute("aria-label")!.slice("Open ".length),
   });
   await waitFor(() => {
     expect(screen.queryByText("Loading audio…")).toBeNull();

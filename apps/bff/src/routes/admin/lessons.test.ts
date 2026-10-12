@@ -13,7 +13,8 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
   const detail = lessonDetailSchema.parse({
     id: 7,
     chapter: 2,
-    version: 1,
+    version: null,
+    versionPatch: null,
     status: "DRAFT",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -26,6 +27,7 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
     id: detail.id,
     chapter: detail.chapter,
     version: detail.version,
+    versionPatch: detail.versionPatch,
     status: detail.status,
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt,
@@ -33,7 +35,7 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
   };
   const client = createTestDataServiceClient({
     async createLesson(input, requestId) {
-      calls.push(`create:${input.chapter}:${input.version}:${requestId}`);
+      calls.push(`create:${JSON.stringify(input)}:${requestId}`);
       return detail;
     },
     async listLessons(requestId) {
@@ -54,7 +56,7 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
   const unauthorized = await app.request("/api/admin/lessons", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chapter: 2, version: 1 }),
+    body: JSON.stringify({ chapter: 2 }),
   });
   assert.equal(unauthorized.status, 401);
   assert.equal(unauthorized.headers.get("www-authenticate"), "Bearer");
@@ -75,7 +77,7 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
       "Content-Type": "application/json",
       "X-Request-ID": "request-1",
     },
-    body: JSON.stringify({ chapter: 2, version: 1 }),
+    body: JSON.stringify({ chapter: 2 }),
   });
   assert.equal(created.status, 201);
   assert.equal(created.headers.get("location"), "/api/admin/lessons/7");
@@ -93,7 +95,7 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
   assert.equal(inspected.status, 200);
   assert.deepEqual(await inspected.json(), detail);
   assert.equal(calls.length, 3);
-  assert.match(calls[0], /^create:2:1:request-1$/);
+  assert.equal(calls[0], 'create:{"chapter":2}:request-1');
 
   const corsResponse = await app.request("/api/admin/lessons", {
     method: "OPTIONS",
@@ -147,7 +149,8 @@ test("BFF upserts a localized Lesson Text through its client seam", async () => 
   const detail = lessonDetailSchema.parse({
     id: 7,
     chapter: 2,
-    version: 1,
+    version: null,
+    versionPatch: null,
     status: "DRAFT",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:01:00.000Z",
@@ -231,6 +234,7 @@ test("BFF patches Lessons through its client seam", async () => {
     id: 7,
     chapter: 3,
     version: 2,
+    versionPatch: 1,
     status: "PUBLISHED",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:01:00.000Z",
@@ -268,12 +272,32 @@ test("BFF patches Lessons through its client seam", async () => {
       errors: incompleteErrors,
     }),
   );
+  const changeKindErrors = [
+    {
+      path: ["changeKind"],
+      message:
+        "Choose a content change or a fix: this chapter already has a version.",
+    },
+  ];
+  const changeKindRequired = new DataServiceError(
+    problemDetailsSchema.parse({
+      type: "https://ez-dk-citizen.invalid/problems/validation_failed",
+      title: "Unprocessable Content",
+      status: 422,
+      detail: "A change kind is required to publish this Lesson.",
+      instance: "/internal/lessons/7",
+      code: "validation_failed",
+      requestId: "downstream",
+      errors: changeKindErrors,
+    }),
+  );
   const calls: string[] = [];
   const client = createTestDataServiceClient({
     async patchLesson(id, input, requestId) {
       if (input.chapter === 99) throw conflict;
       if (input.chapter === 98) throw incomplete;
-      calls.push(`${id}:${input.chapter}:${input.status}:${requestId}`);
+      if (input.chapter === 97) throw changeKindRequired;
+      calls.push(`${id}:${JSON.stringify(input)}:${requestId}`);
       return detail;
     },
   });
@@ -299,11 +323,49 @@ test("BFF patches Lessons through its client seam", async () => {
       "Content-Type": "application/json",
       "X-Request-ID": "request-6",
     },
-    body: JSON.stringify({ chapter: 3, version: 2, status: "PUBLISHED" }),
+    body: JSON.stringify({
+      chapter: 3,
+      status: "PUBLISHED",
+      changeKind: "fix",
+    }),
   });
   assert.equal(patched.status, 200);
   assert.deepEqual(await patched.json(), detail);
-  assert.deepEqual(calls, ["7:3:PUBLISHED:request-6"]);
+  assert.deepEqual(calls, [
+    '7:{"chapter":3,"status":"PUBLISHED","changeKind":"fix"}:request-6',
+  ]);
+
+  for (const body of [
+    { chapter: 3, version: 2 },
+    { status: "ARCHIVED", changeKind: "fix" },
+    { status: "PUBLISHED", changeKind: "major" },
+  ]) {
+    const refused = await app.request("/api/admin/lessons/7", {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    assert.equal(refused.status, 422, JSON.stringify(body));
+  }
+  assert.equal(calls.length, 1);
+
+  const kindRequired = await app.request("/api/admin/lessons/7", {
+    method: "PATCH",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ chapter: 97, status: "PUBLISHED" }),
+  });
+  assert.equal(kindRequired.status, 422);
+  const kindRequiredBody = problemDetailsSchema.parse(
+    await kindRequired.json(),
+  );
+  assert.equal(kindRequiredBody.code, "validation_failed");
+  assert.deepEqual(kindRequiredBody.errors, changeKindErrors);
 
   const publishedConflict = await app.request("/api/admin/lessons/7", {
     method: "PATCH",

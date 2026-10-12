@@ -1,4 +1,4 @@
-// Editing a Lesson's chapter and version in the structure form (ticket 04).
+// Editing a Draft's chapter in the structure form (ticket 04), and the editor heading.
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, test } from "vitest";
 
@@ -14,67 +14,58 @@ import {
   validToken,
 } from "../../../shared/test/support";
 
-test("editing chapter or version marks the structure unsaved and saving marks it saved", async () => {
+const draftHeading = "Chapter 1 · Draft, created 11 Oct 2026";
+
+test.each([
+  [{ status: "DRAFT" }, "Chapter 3 · Draft, created 11 Oct 2026"],
+  [
+    { status: "PUBLISHED", version: 2, versionPatch: 1 },
+    "Chapter 3, version 2.1",
+  ],
+  [
+    { status: "ARCHIVED", version: 1, versionPatch: 10 },
+    "Chapter 3, version 1.10",
+  ],
+] as const)(
+  "the heading names a %o Lesson as “%s”",
+  async (lesson, heading) => {
+    render(
+      <App
+        network={
+          fakeBackend([lessonDetail(1, { chapter: 3, ...lesson })]).network
+        }
+      />,
+    );
+    await connect(validToken);
+    await openLesson(heading);
+
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(heading);
+  },
+);
+
+test("the structure form asks only for the chapter; editing it marks it unsaved and saving marks it saved", async () => {
   const { network, requests } = fakeBackend([lessonDetail(1)]);
   render(<App network={network} />);
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson(draftHeading);
   expect(within(structureForm()).getByText("Saved")).toBeTruthy();
+  expect(within(structureForm()).queryByLabelText("Version")).toBeNull();
 
-  type("Version", "4", structureForm());
+  type("Chapter", "4", structureForm());
   expect(within(structureForm()).getByText("Unsaved")).toBeTruthy();
   fireEvent.click(
     within(structureForm()).getByRole("button", { name: "Save" }),
   );
 
-  await screen.findByRole("heading", { name: "Chapter 1, version 4" });
+  await screen.findByRole("heading", {
+    name: "Chapter 4 · Draft, created 11 Oct 2026",
+  });
   expect(within(structureForm()).getByText("Saved")).toBeTruthy();
   expect(requests.at(-1)).toMatchObject({
     method: "PATCH",
     path: "/api/admin/lessons/1",
-    body: { chapter: 1, version: 4 },
+    body: { chapter: 4 },
   });
-});
-
-test("a chapter/version conflict shows a clear message and keeps the edits", async () => {
-  render(
-    <App
-      network={
-        fakeBackend([
-          lessonDetail(1),
-          lessonDetail(2, { chapter: 1, version: 2 }),
-        ]).network
-      }
-    />,
-  );
-  await connect(validToken);
-  await screen.findByRole("table");
-
-  type("New Draft chapter", "1");
-  type("New Draft version", "2");
-  fireEvent.click(screen.getByRole("button", { name: "Create Draft" }));
-  expect((await screen.findByRole("alert")).textContent).toContain(
-    "A Lesson with this chapter and version already exists.",
-  );
-  expect(screen.getByLabelText("New Draft version")).toHaveProperty(
-    "value",
-    "2",
-  );
-
-  await openLesson(1, 1);
-  type("Version", "2", structureForm());
-  fireEvent.click(
-    within(structureForm()).getByRole("button", { name: "Save" }),
-  );
-
-  expect(
-    (await within(structureForm()).findByRole("alert")).textContent,
-  ).toContain("A Lesson with this chapter and version already exists.");
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
-    "value",
-    "2",
-  );
-  expect(within(structureForm()).getByText("Unsaved")).toBeTruthy();
 });
 
 test("a failed structure save keeps the edits and shows the error with its request ID", async () => {
@@ -97,20 +88,19 @@ test("a failed structure save keeps the edits and shows the error with its reque
     />,
   );
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
 
-  type("Chapter", "7", structureForm());
-  type("Version", "", structureForm());
+  type("Chapter", "", structureForm());
   fireEvent.click(
     within(structureForm()).getByRole("button", { name: "Save" }),
   );
   expect(
     within(structureForm()).getByText(
-      "Version must be a positive whole number.",
+      "Chapter must be a positive whole number.",
     ),
   ).toBeTruthy();
 
-  type("Version", "3", structureForm());
+  type("Chapter", "7", structureForm());
   fireEvent.click(
     within(structureForm()).getByRole("button", { name: "Save" }),
   );
@@ -126,7 +116,9 @@ test("a failed structure save keeps the edits and shows the error with its reque
   fireEvent.click(
     within(structureForm()).getByRole("button", { name: "Save" }),
   );
-  await screen.findByRole("heading", { name: "Chapter 7, version 3" });
+  await screen.findByRole("heading", {
+    name: "Chapter 7 · Draft, created 11 Oct 2026",
+  });
 });
 
 test.each(["PUBLISHED", "ARCHIVED"] as const)(
@@ -136,13 +128,9 @@ test.each(["PUBLISHED", "ARCHIVED"] as const)(
       <App network={fakeBackend([lessonDetail(1, { status })]).network} />,
     );
     await connect(validToken);
-    await openLesson(1, 1);
+    await openLesson("Chapter 1, version 1.0");
 
     expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
-      "readOnly",
-      true,
-    );
-    expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
       "readOnly",
       true,
     );

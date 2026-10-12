@@ -32,13 +32,13 @@ See the spec sections "Lesson versions", "The Lesson command", and "Admin" (Head
 
 **Status:** ready-for-agent
 
-- [ ] The migration keeps integer versions as N.0 on Published and Archived Lessons and clears Draft versions; Lessons archived as Drafts keep theirs
-- [ ] Contracts accept a positive `version` with a non-negative `versionPatch`; the admin summary accepts both `null` or both present, and the mobile summary requires both
-- [ ] Creating a Lesson with only a chapter returns a Draft with `null` version parts
-- [ ] A chapter's first publication becomes 1.0 whatever kind is sent, or with none
-- [ ] A later publication without a kind is `422` with a `changeKind` field error, and the Lesson stays `DRAFT` with an unchanged timestamp
-- [ ] `content` and `fix` produce the next major or patch from the highest Published or Archived version, including Lessons archived as Drafts before this stage
-- [ ] `changeKind` alongside any status other than `PUBLISHED`, or with a value other than `content` or `fix`, is `422`
-- [ ] The catalogue and heading show Drafts with their creation date and other Lessons as `major.patch`
-- [ ] The publish confirmation shows "version 1.0" for a first publication; otherwise it shows the content/fix choice with each resulting version, keeps confirm disabled until one is chosen, sends the kind, and shows backend errors inside the confirmation. Cancelling makes no request.
+- [x] The migration keeps integer versions as N.0 on Published and Archived Lessons and clears Draft versions; Lessons archived as Drafts keep theirs
+- [x] Contracts accept a positive `version` with a non-negative `versionPatch`; the admin summary accepts both `null` or both present, and the mobile summary requires both
+- [x] Creating a Lesson with only a chapter returns a Draft with `null` version parts
+- [x] A chapter's first publication becomes 1.0 whatever kind is sent, or with none
+- [x] A later publication without a kind is `422` with a `changeKind` field error, and the Lesson stays `DRAFT` with an unchanged timestamp
+- [x] `content` and `fix` produce the next major or patch from the highest Published or Archived version, including Lessons archived as Drafts before this stage
+- [x] `changeKind` alongside any status other than `PUBLISHED`, or with a value other than `content` or `fix`, is `422`
+- [x] The catalogue and heading show Drafts with their creation date and other Lessons as `major.patch`
+- [x] The publish confirmation shows "version 1.0" for a first publication; otherwise it shows the content/fix choice with each resulting version, keeps confirm disabled until one is chosen, sends the kind, and shows backend errors inside the confirmation. Cancelling makes no request.
 - [ ] Data Service, BFF, and whole-app tests, the fake-storage end-to-end tracer, and the live S3 tracer pass with the new version model

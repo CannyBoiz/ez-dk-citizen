@@ -34,7 +34,7 @@ test("the editor shows da, en, and th tabs with Thai selected and each Language'
     />,
   );
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
 
   expect(
     screen.getAllByRole("tab").map((element) => element.textContent),
@@ -68,7 +68,7 @@ test("saving one Language sends only its Lesson Text and keeps unsaved text in o
   ]);
   render(<App network={network} />);
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
 
   fireEvent.click(tab("da"));
   type("Title", "Kapitel 1", textForm());
@@ -130,7 +130,7 @@ test("blank Lesson Text is rejected in the form and backend validation errors at
   });
   render(<App network={network} />);
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
   const sent = requests.length;
 
   type("Title", "   ", textForm());
@@ -176,7 +176,7 @@ test("a failed Lesson Text save keeps the pasted text and can be retried", async
     />,
   );
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
 
   type("Title", "บทที่ 1", textForm());
   type("Content", "ข้อความที่วางไว้", textForm());
@@ -217,7 +217,7 @@ test.each(["PUBLISHED", "ARCHIVED"] as const)(
       />,
     );
     await connect(validToken);
-    await openLesson(1, 1);
+    await openLesson();
 
     for (const code of ["th", "da"]) {
       fireEvent.click(tab(code));

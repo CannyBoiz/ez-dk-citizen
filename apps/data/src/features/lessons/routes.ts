@@ -55,22 +55,10 @@ export function createLessonRoutes(database?: DataDatabase) {
       );
     }
 
-    try {
-      const id = await createLesson(database, input);
-      const detail = await loadLessonDetail(database, id);
-      if (!detail) throw new Error("Created Lesson could not be read.");
-      return c.json(lessonDetailSchema.parse(detail), 201);
-    } catch (error) {
-      if (isPostgresError(error, "23505")) {
-        return problem(
-          c,
-          409,
-          "lesson_version_conflict",
-          "A Lesson with this chapter and version already exists.",
-        );
-      }
-      throw error;
-    }
+    const id = await createLesson(database, input);
+    const detail = await loadLessonDetail(database, id);
+    if (!detail) throw new Error("Created Lesson could not be read.");
+    return c.json(lessonDetailSchema.parse(detail), 201);
   });
 
   app.patch(
@@ -106,12 +94,19 @@ export function createLessonRoutes(database?: DataDatabase) {
             "Lesson status transition is not allowed.",
           );
         }
-        if (outcome === "lesson_version_conflict") {
+        if (outcome === "change_kind_required") {
           return problem(
             c,
-            409,
-            outcome,
-            "A Lesson with this chapter and version already exists.",
+            422,
+            "validation_failed",
+            "A change kind is required to publish this Lesson.",
+            [
+              {
+                path: ["changeKind"],
+                message:
+                  "Choose a content change or a fix: this chapter already has a version.",
+              },
+            ],
           );
         }
         if (outcome === "published_lesson_conflict") {

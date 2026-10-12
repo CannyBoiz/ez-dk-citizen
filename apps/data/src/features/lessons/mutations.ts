@@ -17,8 +17,11 @@ import {
 import {
   isAllowedLessonTransition,
   isEditableLesson,
+  type LessonVersion,
   lockEditableDraft,
   nextUpdatedAt,
+  nextVersion,
+  selectHighestVersion,
   touchLesson,
 } from "./lifecycle.js";
 
@@ -29,7 +32,7 @@ export async function createLesson(
   const [created] = await database.transaction(async (transaction) =>
     transaction
       .insert(lesson)
-      .values({ ...input, status: "DRAFT" })
+      .values({ chapter: input.chapter, status: "DRAFT" })
       .returning({ id: lesson.id }),
   );
   if (!created) throw new Error("Lesson insert returned no row.");
@@ -45,7 +48,6 @@ export async function patchLesson(
     const [existing] = await transaction
       .select({
         chapter: lesson.chapter,
-        version: lesson.version,
         status: lesson.status,
         updatedAt: lesson.updatedAt,
       })
@@ -54,9 +56,7 @@ export async function patchLesson(
       .for("update");
     if (!existing) return "lesson_not_found" as const;
 
-    const changesStructure =
-      input.chapter !== undefined || input.version !== undefined;
-    if (changesStructure && !isEditableLesson(existing.status)) {
+    if (input.chapter !== undefined && !isEditableLesson(existing.status)) {
       return "lesson_not_editable" as const;
     }
     if (
@@ -67,19 +67,9 @@ export async function patchLesson(
     }
 
     const chapter = input.chapter ?? existing.chapter;
-    const version = input.version ?? existing.version;
     const status = input.status ?? existing.status;
-    const [identityConflict] = await transaction
-      .select({ id: lesson.id })
-      .from(lesson)
-      .where(
-        and(
-          eq(lesson.chapter, chapter),
-          eq(lesson.version, version),
-          ne(lesson.id, id),
-        ),
-      );
-    if (identityConflict) return "lesson_version_conflict" as const;
+    // The version publication gives; other changes leave it as it is.
+    let given: LessonVersion | undefined;
 
     if (status === "PUBLISHED") {
       const [published] = await transaction
@@ -124,13 +114,20 @@ export async function patchLesson(
             ]),
       ];
       if (missing.length) return { missing };
+
+      const next = nextVersion(
+        await selectHighestVersion(transaction, chapter),
+        input.changeKind,
+      );
+      if (next === "change_kind_required") return next;
+      given = next;
     }
 
     await transaction
       .update(lesson)
       .set({
         chapter,
-        version,
+        ...given,
         status,
         updatedAt: nextUpdatedAt(existing.updatedAt),
       })

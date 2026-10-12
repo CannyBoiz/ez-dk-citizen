@@ -13,9 +13,11 @@ import {
   lessonDetailSchema,
   lessonIdParamsSchema,
   lessonReadQuerySchema,
+  lessonSummarySchema,
   livenessResponseSchema,
   mediaAssetIdParamsSchema,
   mobileLessonDetailSchema,
+  mobileLessonSummarySchema,
   patchLessonRequestSchema,
   problemDetailsSchema,
   publishedLessonDetailSchema,
@@ -173,6 +175,7 @@ test("Published Lesson audio stays private until the mobile projection", () => {
     id: 1,
     chapter: 1,
     version: 1,
+    versionPatch: 0,
     status: "PUBLISHED" as const,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -198,6 +201,7 @@ test("Published Lesson audio stays private until the mobile projection", () => {
       id: 1,
       chapter: 1,
       version: 1,
+      versionPatch: 0,
       languageCode: "th",
       title: "ไทย",
       content: "เนื้อหา",
@@ -211,6 +215,7 @@ test("Published Lesson audio stays private until the mobile projection", () => {
       id: 1,
       chapter: 1,
       version: 1,
+      versionPatch: 0,
       languageCode: "th",
       title: "ไทย",
       content: "เนื้อหา",
@@ -230,6 +235,7 @@ test("Published Lesson audio stays private until the mobile projection", () => {
       id: 1,
       chapter: 1,
       version: 1,
+      versionPatch: 0,
       languageCode: "th",
       title: "ไทย",
       content: "เนื้อหา",
@@ -304,28 +310,22 @@ test("admin current audio keeps storage identity internal and requires fresh pla
 });
 
 test("Lesson transport contracts are strict and keep database fields private", () => {
-  assert.deepEqual(
+  assert.deepEqual(createLessonRequestSchema.parse({ chapter: 1 }), {
+    chapter: 1,
+  });
+  assert.throws(() =>
     createLessonRequestSchema.parse({ chapter: 1, version: 2 }),
-    {
-      chapter: 1,
-      version: 2,
-    },
   );
   assert.throws(() =>
-    createLessonRequestSchema.parse({
-      chapter: 1,
-      version: 2,
-      status: "DRAFT",
-    }),
+    createLessonRequestSchema.parse({ chapter: 1, status: "DRAFT" }),
   );
-  assert.throws(() =>
-    createLessonRequestSchema.parse({ chapter: 0, version: 1 }),
-  );
+  assert.throws(() => createLessonRequestSchema.parse({ chapter: 0 }));
   assert.throws(() =>
     lessonDetailSchema.parse({
       id: 1,
       chapter: 1,
-      version: 1,
+      version: null,
+      versionPatch: null,
       status: "DRAFT",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -333,6 +333,65 @@ test("Lesson transport contracts are strict and keep database fields private", (
       lessonTexts: [],
       lessonSources: [],
       databaseRow: true,
+    }),
+  );
+});
+
+test("Lesson versions are a positive major and a non-negative patch, both absent on Drafts", () => {
+  const summary = {
+    id: 1,
+    chapter: 1,
+    status: "PUBLISHED" as const,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    availableLanguageCodes: [],
+  };
+  const detail = { ...summary, lessonTexts: [], lessonSources: [] };
+  for (const schema of [lessonSummarySchema, lessonDetailSchema]) {
+    const lesson = schema === lessonSummarySchema ? summary : detail;
+    for (const [version, versionPatch] of [
+      [null, null],
+      [1, 0],
+      [2, 1],
+      [1, 10],
+    ]) {
+      assert.deepEqual(schema.parse({ ...lesson, version, versionPatch }), {
+        ...lesson,
+        version,
+        versionPatch,
+      });
+    }
+    for (const [version, versionPatch] of [
+      [1, null],
+      [null, 0],
+      [0, 0],
+      [1, -1],
+      [1, 0.5],
+    ]) {
+      assert.throws(
+        () => schema.parse({ ...lesson, version, versionPatch }),
+        undefined,
+        `${version}.${versionPatch} was accepted`,
+      );
+    }
+    assert.throws(() => schema.parse({ ...lesson, version: 1 }));
+  }
+
+  const mobile = { id: 1, chapter: 1, languageCode: "th", title: "ไทย" };
+  assert.deepEqual(
+    mobileLessonSummarySchema.parse({ ...mobile, version: 2, versionPatch: 1 }),
+    { ...mobile, version: 2, versionPatch: 1 },
+  );
+  for (const versionPatch of [null, undefined, -1]) {
+    assert.throws(() =>
+      mobileLessonSummarySchema.parse({ ...mobile, version: 2, versionPatch }),
+    );
+  }
+  assert.throws(() =>
+    mobileLessonSummarySchema.parse({
+      ...mobile,
+      version: null,
+      versionPatch: null,
     }),
   );
 });
@@ -369,9 +428,39 @@ test("Lesson patches are strict and non-empty", () => {
   assert.throws(() => patchLessonRequestSchema.parse({}));
   assert.throws(() => patchLessonRequestSchema.parse({ chapter: undefined }));
   assert.throws(() => patchLessonRequestSchema.parse({ chapter: 0 }));
+  assert.throws(() => patchLessonRequestSchema.parse({ version: 2 }));
   assert.throws(() =>
     patchLessonRequestSchema.parse({ status: "DRAFT", extra: true }),
   );
+});
+
+test("only a publication carries a change kind, and only content or fix", () => {
+  for (const changeKind of ["content", "fix"] as const) {
+    assert.deepEqual(
+      patchLessonRequestSchema.parse({ status: "PUBLISHED", changeKind }),
+      { status: "PUBLISHED", changeKind },
+    );
+  }
+  assert.throws(() =>
+    patchLessonRequestSchema.parse({
+      status: "PUBLISHED",
+      changeKind: "minor",
+    }),
+  );
+  for (const body of [
+    { changeKind: "fix" },
+    { chapter: 2, changeKind: "content" },
+    { status: "ARCHIVED", changeKind: "fix" },
+    { status: "DRAFT", changeKind: "content" },
+  ]) {
+    const result = patchLessonRequestSchema.safeParse(body);
+    assert.equal(result.success, false, JSON.stringify(body));
+    if (body.chapter === undefined && body.status === undefined) continue;
+    assert.deepEqual(
+      result.error?.issues.map((issue) => issue.path),
+      [["changeKind"]],
+    );
+  }
 });
 
 test("Source contracts accept only trimmed HTTP URLs and offset timestamps", () => {

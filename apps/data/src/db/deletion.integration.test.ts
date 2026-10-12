@@ -25,8 +25,8 @@ test("A representative Lesson graph loads bidirectionally through Drizzle", asyn
   const [primaryLesson, reuseLesson] = await database
     .insert(lesson)
     .values([
-      { chapter: 30, version: 1, status: "PUBLISHED" },
-      { chapter: 31, version: 1, status: "DRAFT" },
+      { chapter: 30, version: 1, versionPatch: 0, status: "PUBLISHED" },
+      { chapter: 31, status: "DRAFT" },
     ])
     .returning();
   await database.insert(lessonText).values([
@@ -113,7 +113,7 @@ test("A representative Lesson graph loads bidirectionally through Drizzle", asyn
 test("Deleting a Lesson removes owned associations but preserves shared parents", async () => {
   const [ownedLesson] = await database
     .insert(lesson)
-    .values({ chapter: 32, version: 1, status: "DRAFT" })
+    .values({ chapter: 32, status: "DRAFT" })
     .returning();
   await database.insert(lessonText).values({
     lessonId: ownedLesson.id,
@@ -188,7 +188,7 @@ test("Deleting a Lesson removes owned associations but preserves shared parents"
 test("Restricted parents remain protected and deleting audio preserves its Media Asset", async () => {
   const [protectedLesson] = await database
     .insert(lesson)
-    .values({ chapter: 33, version: 1, status: "DRAFT" })
+    .values({ chapter: 33, status: "DRAFT" })
     .returning();
   await database.insert(lessonText).values({
     lessonId: protectedLesson.id,

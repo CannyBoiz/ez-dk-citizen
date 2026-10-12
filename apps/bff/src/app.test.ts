@@ -175,7 +175,6 @@ test("BFF rejects write bodies above 1 MiB with Problem Details", async () => {
     },
     body: JSON.stringify({
       chapter: 1,
-      version: 1,
       padding: "x".repeat(1024 * 1024),
     }),
   });

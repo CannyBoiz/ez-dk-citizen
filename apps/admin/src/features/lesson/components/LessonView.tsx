@@ -1,4 +1,4 @@
-// The Lesson editor: the structure form, per-Language Lesson Text tabs, and per-Source
+// The Lesson editor: the Draft's chapter, per-Language Lesson Text tabs, and per-Source
 // Lesson Source references, each saved separately, with their unsaved edits reported up
 // for the navigation guards; the selected Language's audio; and publication.
 import {
@@ -31,6 +31,7 @@ import {
   validateReferences,
 } from "../utils/references";
 import { statusLabels } from "../utils/statusLabels";
+import { lessonLabel } from "../utils/versions";
 import { Publication } from "./Publication";
 
 // Each Lesson Source's reference form is keyed by its Source ID.
@@ -128,10 +129,7 @@ export function LessonView({
 
   const saved: Partial<Record<Form, Values>> = lesson
     ? {
-        structure: {
-          chapter: String(lesson.chapter),
-          version: String(lesson.version),
-        },
+        structure: { chapter: String(lesson.chapter) },
         ...Object.fromEntries(
           languageCodes.map((code) => {
             const text = lesson.lessonTexts.find(
@@ -263,9 +261,7 @@ export function LessonView({
   return (
     <section className="lesson">
       {error !== null && <ErrorMessage error={error} onRetry={load} />}
-      <h2>
-        Chapter {lesson.chapter}, version {lesson.version}
-      </h2>
+      <h2>{lessonLabel(lesson)}</h2>
       <p>
         <span className="badge" data-status={lesson.status}>
           {statusLabels[lesson.status]}
@@ -273,10 +269,7 @@ export function LessonView({
       </p>
       <EditForm
         name="Structure"
-        fields={[
-          { name: "chapter", label: "Chapter", kind: "number" },
-          { name: "version", label: "Version", kind: "number" },
-        ]}
+        fields={[{ name: "chapter", label: "Chapter", kind: "number" }]}
         status={formState("structure", true)}
         onSave={(submitted) =>
           save("structure", submitted, {
@@ -284,7 +277,6 @@ export function LessonView({
             path: `/api/admin/lessons/${lesson.id}`,
             body: {
               chapter: Number(submitted.chapter),
-              version: Number(submitted.version),
             } satisfies PatchLessonRequest,
           })
         }
@@ -448,15 +440,12 @@ export function LessonView({
         }}
       />
       <Publication
-        call={writeCall}
+        call={call}
+        writeCall={writeCall}
         lesson={lesson}
         dirty={dirty}
         busy={uploading || detachingNow}
-        onChange={(next) => {
-          applyLesson(next);
-          // Archiving makes every form read-only, so unsaved edits can no longer be saved.
-          if (next.status === "ARCHIVED") setEdits({});
-        }}
+        onChange={applyLesson}
       />
     </section>
   );

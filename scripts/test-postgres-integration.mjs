@@ -140,8 +140,8 @@ const call = async (path, method, body) => {
   const response = await fetch('http://127.0.0.1:3000' + path, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
   return { response, body: response.status === 204 ? undefined : await response.json() };
 };
-const lesson = await call('/api/admin/lessons', 'POST', { chapter: 1, version: 1 });
-if (lesson.response.status !== 201 || lesson.response.headers.get('x-request-id') !== requestId) throw new Error('Lesson creation failed.');
+const lesson = await call('/api/admin/lessons', 'POST', { chapter: 1 });
+if (lesson.response.status !== 201 || lesson.response.headers.get('x-request-id') !== requestId || lesson.body.version !== null || lesson.body.versionPatch !== null) throw new Error('Lesson creation failed.');
 if ((await fetch('http://127.0.0.1:3000/api/mobile/lessons')).status !== 200) throw new Error('Mobile list failed.');
 if ((await (await fetch('http://127.0.0.1:3000/api/mobile/lessons')).json()).items.length) throw new Error('Draft leaked to mobile.');
 await call('/api/admin/lessons/' + lesson.body.id + '/texts/th', 'PUT', { title: 'ไทย', content: 'เนื้อหา' });
@@ -150,7 +150,7 @@ await call('/api/admin/lessons/' + lesson.body.id + '/sources/' + source.body.id
 await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'PUBLISHED' });
 const mobile = await fetch('http://127.0.0.1:3000/api/mobile/lessons');
 const list = await mobile.json();
-if (list.items[0]?.title !== 'ไทย' || list.items[0]?.languageCode !== 'th' || 'status' in list.items[0]) throw new Error('Mobile list projection failed.');
+if (list.items[0]?.title !== 'ไทย' || list.items[0]?.languageCode !== 'th' || list.items[0]?.version !== 1 || list.items[0]?.versionPatch !== 0 || 'status' in list.items[0]) throw new Error('Mobile list projection failed.');
 const detail = await (await fetch('http://127.0.0.1:3000/api/mobile/lessons/' + lesson.body.id)).json();
 if (detail.content !== 'เนื้อหา' || !detail.availableLanguageCodes.includes('th') || detail.lessonSources[0]?.pageFrom !== 2 || detail.lessonSources[0]?.pageTo !== 3 || detail.audio !== null) throw new Error('Mobile detail projection failed.');
 `;
@@ -176,7 +176,7 @@ const call = async (path, method, body) => {
   const response = await app.request(path, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
   return { response, body: response.status === 204 ? undefined : await response.json() };
 };
-const lesson = await call('/api/admin/lessons', 'POST', { chapter: 2, version: 1 });
+const lesson = await call('/api/admin/lessons', 'POST', { chapter: 2 });
 if (lesson.response.status !== 201) throw new Error('Completion tracer Lesson creation failed.');
 const refused = await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'PUBLISHED' });
 if (refused.response.status !== 409 || refused.body.code !== 'lesson_publication_incomplete' || JSON.stringify(refused.body.errors.map(({ path }) => path)) !== JSON.stringify([['lessonTexts', 'th'], ['lessonSources']])) throw new Error('Incomplete publication was not refused.');
@@ -255,6 +255,15 @@ const archived = await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { s
 if (archived.response.status !== 200 || archived.body.status !== 'ARCHIVED') throw new Error('Completion tracer archive failed.');
 const archivedAudio = await readAdminAudio();
 if (archivedAudio.response.status !== 200 || archivedAudio.body.audio?.audioVersion !== 4 || Object.keys(archivedAudio.body.audio ?? {}).sort().join(',') !== adminAudioKeys) throw new Error('Admin audio read failed after archiving.');
+const fix = await call('/api/admin/lessons', 'POST', { chapter: 2 });
+await call('/api/admin/lessons/' + fix.body.id + '/texts/th', 'PUT', { title: 'ไทย', content: 'แก้ไข' });
+await call('/api/admin/lessons/' + fix.body.id + '/sources/' + source.body.id, 'PUT', {});
+const kindless = await call('/api/admin/lessons/' + fix.body.id, 'PATCH', { status: 'PUBLISHED' });
+if (kindless.response.status !== 422 || JSON.stringify(kindless.body.errors?.map(({ path }) => path)) !== JSON.stringify([['changeKind']])) throw new Error('A later publication without a change kind was not refused.');
+const fixed = await call('/api/admin/lessons/' + fix.body.id, 'PATCH', { status: 'PUBLISHED', changeKind: 'fix' });
+if (fixed.response.status !== 200 || fixed.body.version !== 1 || fixed.body.versionPatch !== 1) throw new Error('A fix did not raise the patch version.');
+const fixedMobile = await call('/api/mobile/lessons/' + fix.body.id, 'GET');
+if (fixedMobile.body.version !== 1 || fixedMobile.body.versionPatch !== 1) throw new Error('Mobile detail did not carry the fixed version.');
 `;
 }
 

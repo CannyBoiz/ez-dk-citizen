@@ -62,7 +62,7 @@ function findNarrationWarning() {
 async function open(backend: ReturnType<typeof fakeBackend>) {
   render(<App network={backend.network} />);
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
 }
 
 test.each(["DRAFT", "PUBLISHED", "ARCHIVED"] as const)(
@@ -112,13 +112,13 @@ test("an audio load error stays in the audio panel, keeps unsaved edits, and Rel
         : undefined,
   });
   await open(backend);
-  type("Version", "7", structureForm());
+  type("Chapter", "7", structureForm());
 
   const alert = await within(audioPanel()).findByRole("alert");
   expect(alert.textContent).toContain("Storage is unavailable.");
   expect(alert.textContent).toContain("req-503-audio");
   expect(screen.getAllByRole("alert")).toHaveLength(1);
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "7",
   );
@@ -129,7 +129,7 @@ test("an audio load error stays in the audio panel, keeps unsaved edits, and Rel
   );
   await within(audioPanel()).findByLabelText("Current audio player");
   expect(within(audioPanel()).queryByRole("alert")).toBeNull();
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "7",
   );

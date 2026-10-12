@@ -36,7 +36,7 @@ const intentPath = "/api/admin/media/upload-intents";
 async function open(backend: ReturnType<typeof fakeBackend>) {
   render(<App network={backend.network} />);
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
 }
 
 test("files that are not .mp3, are empty, or exceed 50 MiB are rejected before any request", async () => {
@@ -224,9 +224,6 @@ test("the Lesson and Language stay locked, and no second upload starts, until th
   const publication = screen.getByRole("region", { name: "Publication" });
   expect(
     within(publication).getByRole("button", { name: "Publish" }),
-  ).toHaveProperty("disabled", true);
-  expect(
-    within(publication).getByRole("button", { name: "Archive" }),
   ).toHaveProperty("disabled", true);
 
   backend.uploads[0]!.finish(200);

@@ -53,7 +53,7 @@ function lessonSourceUrls() {
 async function openDraft(backend: ReturnType<typeof fakeBackend>) {
   render(<App network={backend.network} />);
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
 }
 
 async function createSource(url: string) {
