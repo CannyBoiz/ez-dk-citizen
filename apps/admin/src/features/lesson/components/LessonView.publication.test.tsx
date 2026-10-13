@@ -1,5 +1,5 @@
-// The publication checklist, Publish with its version, and Archive in the Lesson editor
-// (Stage 4 ticket 07, Stage 4b ticket 02).
+// The publication checklist, Publish with its version, Archive, and Delete in the Lesson editor
+// (Stage 4 ticket 07, Stage 4b tickets 02 and 04).
 import type {
   LessonDetail,
   PatchLessonRequest,
@@ -475,15 +475,55 @@ test("another Published version of the chapter is reported, and no action replac
     within(publication())
       .getAllByRole("button")
       .map((button) => button.textContent),
-  ).toEqual(["Publish"]);
+  ).toEqual(["Publish", "Delete"]);
 });
 
-test("Archive is offered only on Published Lessons", async () => {
-  await openFirst(fakeBackend([complete(1)]));
+test.each([
+  ["DRAFT", ["Publish", "Delete"]],
+  ["PUBLISHED", ["Archive"]],
+  ["ARCHIVED", []],
+] as const)("a %s Lesson offers %j", async (status, actions) => {
+  await openFirst(fakeBackend([complete(1, { status })]));
 
   expect(
-    within(publication()).queryByRole("button", { name: "Archive" }),
-  ).toBeNull();
+    within(publication())
+      .queryAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(actions);
+});
+
+test("deleting a Draft asks in the page what will be lost, and then returns to the catalogue without it", async () => {
+  const backend = fakeBackend([
+    complete(1, { status: "PUBLISHED" }),
+    complete(2, { chapter: 1 }),
+  ]);
+  await openFirst(backend, draftOfChapterOne);
+  const sent = backend.requests.length;
+  const deleteButton = () =>
+    within(publication()).getByRole("button", { name: "Delete" });
+
+  fireEvent.click(deleteButton());
+  const message = confirmation(publication()).textContent;
+  expect(message).toContain(
+    "Lesson Texts, Lesson Source references, and Lesson Audio",
+  );
+  expect(message).toContain("Canonical Sources stay");
+  expect(message).toContain("cannot be undone");
+  answer("Cancel", publication());
+  expect(within(publication()).queryByRole("alertdialog")).toBeNull();
+  await settle();
+  expect(backend.requests.length).toBe(sent);
+
+  fireEvent.click(deleteButton());
+  answer("Delete", publication());
+
+  await screen.findByRole("table");
+  expect(rows()).toEqual([["1", "1.0", "Published", "th"]]);
+  expect(backend.requests.slice(sent)).toContainEqual({
+    method: "DELETE",
+    path: "/api/admin/lessons/2",
+    token: validToken,
+  });
 });
 
 test("archiving a Published Lesson asks in the page first, and cancelling sends nothing", async () => {

@@ -1851,3 +1851,233 @@ test("internal current Lesson Audio reads the current ready rendition in every L
     .where(eq(mediaAsset.id, second));
   assert.deepEqual(await (await readAudio("th")).json(), { audio: null });
 });
+
+let uploadCount = 0;
+
+// Creates a Lesson with a Lesson Text per Language, and completes one upload per entry in `uploads`.
+async function lessonWithAudio(chapter: number, uploads: string[]) {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const lesson = await (
+    await app.request("/internal/lessons", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ chapter }),
+    })
+  ).json();
+  for (const languageCode of new Set(["th", ...uploads])) {
+    await app.request(`/internal/lessons/${lesson.id}/texts/${languageCode}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ title: "Title", content: "Content" }),
+    });
+  }
+  const assets: { id: number; objectKey: string }[] = [];
+  for (const languageCode of uploads) {
+    uploadCount += 1;
+    const objectKey = `audio/00000000-0000-4000-8000-${String(uploadCount).padStart(12, "0")}.mp3`;
+    const asset = await (
+      await app.request("/internal/media-assets", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          languageCode,
+          storageProvider: "s3",
+          storageContainer: "citizenship-audio",
+          objectKey,
+          originalFilename: "lesson.mp3",
+          contentType: "audio/mpeg",
+          sizeBytes: 1,
+        }),
+      })
+    ).json();
+    const completed = await app.request(
+      `/internal/media-assets/${asset.id}/complete`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ lessonId: lesson.id, languageCode }),
+      },
+    );
+    assert.equal(completed.status, 200);
+    assets.push({ id: asset.id, objectKey });
+  }
+  return { lesson, assets };
+}
+
+async function mediaAssetStatus(id: number) {
+  const response = await app.request(`/internal/media-assets/${id}`, {
+    headers: { Authorization: "Bearer data-token" },
+  });
+  return (await response.json()).status;
+}
+
+function deleteLesson(id: number) {
+  return app.request(`/internal/lessons/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: "Bearer data-token" },
+  });
+}
+
+test("deleting a Draft removes its texts, citations, and audio, and marks the Media Assets it used DELETED", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  // Two Thai renditions, so the superseded one goes too, and a Danish one.
+  const { lesson: draft, assets } = await lessonWithAudio(81, [
+    "th",
+    "th",
+    "da",
+  ]);
+  const { lesson: other, assets: otherAssets } = await lessonWithAudio(82, [
+    "th",
+  ]);
+  const source = await (
+    await app.request("/internal/sources", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        url: "https://example.test/kept-after-delete",
+        publishedAt: null,
+      }),
+    })
+  ).json();
+  await app.request(`/internal/lessons/${draft.id}/sources/${source.id}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ pageFrom: 2 }),
+  });
+  const pending = await (
+    await app.request("/internal/media-assets", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        languageCode: "th",
+        storageProvider: "s3",
+        storageContainer: "citizenship-audio",
+        objectKey: "audio/123e4567-e89b-12d3-a456-000000008199.mp3",
+        originalFilename: "pending.mp3",
+        contentType: "audio/mpeg",
+        sizeBytes: 1,
+      }),
+    })
+  ).json();
+
+  const deleted = await deleteLesson(draft.id);
+
+  assert.equal(deleted.status, 200);
+  assert.deepEqual(
+    (await deleted.json()).deletedMediaAssets.sort(
+      (a: { id: number }, b: { id: number }) => a.id - b.id,
+    ),
+    assets,
+  );
+  const gone = await app.request(`/internal/lessons/${draft.id}`, { headers });
+  assert.equal(gone.status, 404);
+  assert.equal((await gone.json()).code, "lesson_not_found");
+  for (const asset of assets) {
+    assert.equal(await mediaAssetStatus(asset.id), "DELETED");
+  }
+  // Nothing outside the Draft changes: a PENDING upload has no link to a Lesson.
+  assert.equal(await mediaAssetStatus(pending.id), "PENDING");
+  assert.equal(await mediaAssetStatus(otherAssets[0]!.id), "READY");
+  assert.equal(
+    (
+      await (
+        await app.request(`/internal/lessons/${other.id}/audio/th`, {
+          headers,
+        })
+      ).json()
+    ).audio.mediaAssetId,
+    otherAssets[0]!.id,
+  );
+  const { items } = await (
+    await app.request("/internal/sources", { headers })
+  ).json();
+  assert.deepEqual(
+    items.map(({ url }: { url: string }) => url),
+    [source.url],
+  );
+
+  const again = await deleteLesson(draft.id);
+  assert.equal(again.status, 404);
+  assert.equal((await again.json()).code, "lesson_not_found");
+});
+
+test("only Drafts can be deleted, and a Draft without audio deletes with no Media Assets", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const source = await (
+    await app.request("/internal/sources", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        url: "https://example.test/delete-refusals",
+        publishedAt: null,
+      }),
+    })
+  ).json();
+  const publish = async (id: number) => {
+    await app.request(`/internal/lessons/${id}/sources/${source.id}`, {
+      method: "PUT",
+      headers,
+      body: "{}",
+    });
+    const published = await app.request(`/internal/lessons/${id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ status: "PUBLISHED", changeKind: "fix" }),
+    });
+    assert.equal(published.status, 200);
+  };
+  const { lesson: archived, assets: archivedAssets } = await lessonWithAudio(
+    83,
+    ["th"],
+  );
+  await publish(archived.id);
+  await app.request(`/internal/lessons/${archived.id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ status: "ARCHIVED" }),
+  });
+  const { lesson: published, assets: publishedAssets } = await lessonWithAudio(
+    83,
+    ["th"],
+  );
+  await publish(published.id);
+
+  for (const [lesson, assets] of [
+    [archived, archivedAssets],
+    [published, publishedAssets],
+  ] as const) {
+    const before = await (
+      await app.request(`/internal/lessons/${lesson.id}`, { headers })
+    ).json();
+    const refused = await deleteLesson(lesson.id);
+    assert.equal(refused.status, 409);
+    const problem = await refused.json();
+    assert.equal(problem.code, "lesson_not_editable");
+    assert.equal(problem.detail, "Only Draft Lessons can be deleted.");
+    assert.deepEqual(
+      await (
+        await app.request(`/internal/lessons/${lesson.id}`, { headers })
+      ).json(),
+      before,
+    );
+    assert.equal(await mediaAssetStatus(assets[0]!.id), "READY");
+  }
+
+  const missing = await deleteLesson(987654);
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).code, "lesson_not_found");
+
+  const { lesson: silent } = await lessonWithAudio(84, []);
+  const deleted = await deleteLesson(silent.id);
+  assert.equal(deleted.status, 200);
+  assert.deepEqual(await deleted.json(), { deletedMediaAssets: [] });
+});

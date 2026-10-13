@@ -1,5 +1,6 @@
-// The publication checklist and the lifecycle actions. The checklist mirrors the backend's
-// publication prerequisites; the backend stays the authority, and its refusals are shown.
+// The publication checklist and the lifecycle actions: Publish and Delete on a Draft, Archive on
+// a Published Lesson. The checklist mirrors the backend's publication prerequisites; the
+// backend stays the authority, and its refusals are shown.
 // Publishing asks in the page which version the Draft becomes, from the chapter's versions as
 // the backend holds them then. Replacing a Published version is two separate actions: archive
 // it, then publish the Draft.
@@ -28,6 +29,9 @@ import {
 const archiveWarning =
   "Archive this Lesson? Archiving is terminal: the Lesson becomes read-only and can never be " +
   "published again. It is also removed from the learner catalogue.";
+const deleteWarning =
+  "Delete this Draft? Its Lesson Texts, Lesson Source references, and Lesson Audio will be " +
+  "lost. Canonical Sources stay. Deleting cannot be undone.";
 
 // The chapter's versions as last read for the publish confirmation.
 type VersionsRead =
@@ -42,15 +46,17 @@ export function Publication({
   dirty,
   busy,
   onChange,
+  onDelete,
 }: {
   call: Call;
   // `call` for changing the Lesson.
   writeCall: Call;
   lesson: LessonDetail;
-  // Publish waits for every edit to be saved; both actions wait for an upload or detach in progress.
+  // Publish waits for every edit to be saved; every action waits for an upload or detach in progress.
   dirty: boolean;
   busy: boolean;
   onChange: (lesson: LessonDetail) => void;
+  onDelete: () => void;
 }) {
   const archiving = useAction<"archive">();
   const [versions, setVersions] = useState<VersionsRead>({ state: "reading" });
@@ -122,6 +128,14 @@ export function Publication({
     );
   }
 
+  async function deleteDraft() {
+    await writeCall(
+      { method: "DELETE", path: `/api/admin/lessons/${lesson.id}` },
+      { parse: () => undefined },
+    );
+    onDelete();
+  }
+
   const highest = versions.state === "read" ? versions.highest : undefined;
   const publishMessage =
     versions.state === "reading"
@@ -150,8 +164,8 @@ export function Publication({
       )}
       {busy && (
         <p>
-          Publishing and archiving wait until the upload or detach in progress
-          finishes.
+          Publishing, archiving, and deleting wait until the upload or detach in
+          progress finishes.
         </p>
       )}
       {dirty && lesson.status === "DRAFT" && (
@@ -197,6 +211,17 @@ export function Publication({
           onConfirm={publish}
         >
           Publish
+        </ConfirmButton>
+      )}
+      {lesson.status === "DRAFT" && (
+        <ConfirmButton
+          className="danger"
+          disabled={waiting}
+          message={deleteWarning}
+          confirmLabel="Delete"
+          onConfirm={deleteDraft}
+        >
+          Delete
         </ConfirmButton>
       )}
       {lesson.status === "PUBLISHED" && (

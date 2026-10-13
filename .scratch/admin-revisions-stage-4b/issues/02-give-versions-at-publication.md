@@ -30,7 +30,7 @@ See the spec sections "Lesson versions", "The Lesson command", and "Admin" (Head
 
 **Blocked by:** 01 — Show every confirmation in the page
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] The migration keeps integer versions as N.0 on Published and Archived Lessons and clears Draft versions; Lessons archived as Drafts keep theirs
 - [x] Contracts accept a positive `version` with a non-negative `versionPatch`; the admin summary accepts both `null` or both present, and the mobile summary requires both
@@ -41,4 +41,4 @@ See the spec sections "Lesson versions", "The Lesson command", and "Admin" (Head
 - [x] `changeKind` alongside any status other than `PUBLISHED`, or with a value other than `content` or `fix`, is `422`
 - [x] The catalogue and heading show Drafts with their creation date and other Lessons as `major.patch`
 - [x] The publish confirmation shows "version 1.0" for a first publication; otherwise it shows the content/fix choice with each resulting version, keeps confirm disabled until one is chosen, sends the kind, and shows backend errors inside the confirmation. Cancelling makes no request.
-- [ ] Data Service, BFF, and whole-app tests, the fake-storage end-to-end tracer, and the live S3 tracer pass with the new version model
+- [x] Data Service, BFF, and whole-app tests, the fake-storage end-to-end tracer, and the live S3 tracer pass with the new version model

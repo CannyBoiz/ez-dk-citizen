@@ -176,6 +176,12 @@ test("an upload goes Uploading with progress, then Finalizing, then Complete, st
     ),
   );
   expect(screen.queryByText(/Upload complete/)).toBeNull();
+  expect(
+    within(screen.getByRole("region", { name: "Publication" })).getByRole(
+      "button",
+      { name: "Delete" },
+    ),
+  ).toHaveProperty("disabled", true);
 
   releaseCompletion();
   await waitFor(() =>
@@ -222,9 +228,10 @@ test("the Lesson and Language stay locked, and no second upload starts, until th
   expect(fileInput()).toHaveProperty("disabled", true);
   expect(uploadButton()).toHaveProperty("disabled", true);
   const publication = screen.getByRole("region", { name: "Publication" });
-  expect(
-    within(publication).getByRole("button", { name: "Publish" }),
-  ).toHaveProperty("disabled", true);
+  for (const action of ["Publish", "Delete"])
+    expect(
+      within(publication).getByRole("button", { name: action }),
+    ).toHaveProperty("disabled", true);
 
   backend.uploads[0]!.finish(200);
   await waitFor(() =>
@@ -243,9 +250,10 @@ test("the Lesson and Language stay locked, and no second upload starts, until th
     languageCode: "th",
   });
   expect(tab("da")).toHaveProperty("disabled", false);
-  expect(
-    within(publication).getByRole("button", { name: "Publish" }),
-  ).toHaveProperty("disabled", false);
+  for (const action of ["Publish", "Delete"])
+    expect(
+      within(publication).getByRole("button", { name: action }),
+    ).toHaveProperty("disabled", false);
 });
 
 test.each([

@@ -16,15 +16,15 @@ See the spec sections "Deleting Drafts" and "Admin" (Publication, Uploads), and 
 
 **Blocked by:** 01 — Show every confirmation in the page
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Archiving a Draft is `409 lesson_lifecycle_conflict` and leaves it `DRAFT`
-- [ ] Deleting a Draft removes it with its Lesson Texts, Lesson Sources, and Lesson Audio; its canonical Sources remain
-- [ ] The deleted Draft's Media Assets become `DELETED` and their objects are deleted from storage
-- [ ] Deleting a Published or Archived Lesson is `409 lesson_not_editable` and changes nothing; a missing Lesson is `404`
-- [ ] A storage failure during object deletion still returns `204`, is logged without secrets, and leaves the Media Asset `DELETED`
-- [ ] No response exposes object keys, provider, or bucket
-- [ ] The Admin shows Archive only on Published Lessons and Delete only on Drafts; Delete requires the confirmation, cancelling makes no request, and Delete is disabled during Uploading and Finalizing
-- [ ] The fake-storage end-to-end tracer deletes a Draft with uploaded audio and the object leaves fake storage
-- [ ] The opt-in live S3 tracer deletes its Draft after the upload path and asserts that the object no longer exists in the bucket
-- [ ] Data Service (real PostgreSQL), BFF route, and whole-app tests cover the above
+- [x] Deleting a Draft removes it with its Lesson Texts, Lesson Sources, and Lesson Audio; its canonical Sources remain
+- [x] The deleted Draft's Media Assets become `DELETED` and their objects are deleted from storage
+- [x] Deleting a Published or Archived Lesson is `409 lesson_not_editable` and changes nothing; a missing Lesson is `404`
+- [x] A storage failure during object deletion still returns `204`, is logged without secrets, and leaves the Media Asset `DELETED`
+- [x] No response exposes object keys, provider, or bucket
+- [x] The Admin shows Archive only on Published Lessons and Delete only on Drafts; Delete requires the confirmation, cancelling makes no request, and Delete is disabled during Uploading and Finalizing
+- [x] The fake-storage end-to-end tracer deletes a Draft with uploaded audio and the object leaves fake storage
+- [x] The opt-in live S3 tracer deletes its Draft after the upload path and asserts that the object no longer exists in the bucket
+- [x] Data Service (real PostgreSQL), BFF route, and whole-app tests cover the above

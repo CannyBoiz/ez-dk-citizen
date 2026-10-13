@@ -433,6 +433,79 @@ await withTeardown(
         false,
         "Unsigned public object access succeeded.",
       );
+
+      tracerPhase = "deleting a Draft with uploaded audio";
+      const draft = await requestBff(bffServer, "/api/admin/lessons", "POST", {
+        chapter: 1,
+      });
+      assert.equal(draft.response.status, 201, "Tracer Draft was not created.");
+      const draftText = await requestBff(
+        bffServer,
+        `/api/admin/lessons/${draft.body.id}/texts/${languageCode}`,
+        "PUT",
+        textBody,
+      );
+      assert.equal(
+        draftText.response.status,
+        200,
+        "Tracer Draft Lesson Text was not saved.",
+      );
+      const draftIntent = await requestBff(
+        bffServer,
+        "/api/admin/media/upload-intents",
+        "POST",
+        { ...uploadBody, lessonId: draft.body.id },
+      );
+      assert.equal(
+        draftIntent.response.status,
+        201,
+        "Draft Upload Intent was not created.",
+      );
+      sensitiveValues.push({
+        name: "Draft upload URL",
+        value: draftIntent.body.uploadUrl,
+      });
+      currentUploadUrl = draftIntent.body.uploadUrl;
+      await expectBrowserResult(
+        browser,
+        browserProfile,
+        `${origin}/?mode=upload`,
+        "uploaded",
+        "The Draft's audio did not upload.",
+      );
+      const draftCompleted = await requestBff(
+        bffServer,
+        `/api/admin/media/${draftIntent.body.mediaAssetId}/complete`,
+        "POST",
+        { lessonId: draft.body.id, languageCode },
+      );
+      assert.equal(
+        draftCompleted.response.status,
+        200,
+        "The Draft's Media Asset was not completed.",
+      );
+      const draftKey = assertSmokeKey((await readSmokeKeys()).at(-1));
+      assert.equal(
+        await smokeObjectStatus(draftKey),
+        200,
+        "The Draft's object is not in the bucket.",
+      );
+      const deleted = await requestBff(
+        bffServer,
+        `/api/admin/lessons/${draft.body.id}`,
+        "DELETE",
+      );
+      assert.equal(
+        deleted.response.status,
+        204,
+        "Tracer Draft was not deleted.",
+      );
+      // The role may read the key (200 above) but not list the bucket, so S3 answers a
+      // missing key with 403 rather than 404.
+      assert.ok(
+        [403, 404].includes(await smokeObjectStatus(draftKey)),
+        "The deleted Draft's object is still in the bucket.",
+      );
     } catch (error) {
       throw new Error(
         `Live S3 tracer failed while ${tracerPhase}: ${error instanceof Error ? error.message : String(error)}`,
@@ -685,7 +758,7 @@ async function waitForBff(baseUrl) {
 async function requestBff(baseUrl, endpoint, method, body) {
   const bodyText = JSON.stringify(body);
   sensitiveValues.push({ name: "request body", value: bodyText });
-  for (const [key, value] of Object.entries(body)) {
+  for (const [key, value] of Object.entries(body ?? {})) {
     sensitiveValues.push({
       name: `request body field ${key}`,
       pattern: `${RegExp.escape(JSON.stringify(key))}\\s*:\\s*${RegExp.escape(JSON.stringify(value))}`,
@@ -707,8 +780,8 @@ async function requestBff(baseUrl, endpoint, method, body) {
     },
     body: bodyText,
   });
-  const responseBody = await response.json();
-  assertPublicResponse(responseBody, `${method} ${endpoint}`);
+  const responseBody = response.status === 204 ? null : await response.json();
+  assertPublicResponse(responseBody ?? {}, `${method} ${endpoint}`);
   return { response, body: responseBody };
 }
 
@@ -767,6 +840,17 @@ async function deleteExactSmokeKeys(keys) {
   );
   const report = JSON.parse(result.output.trim().split("\n").at(-1));
   return report.failed.map(assertSmokeKey);
+}
+
+// The status S3 answers the BFF's role for a HEAD of one exact smoke key.
+async function smokeObjectStatus(key) {
+  assertSmokeKey(key);
+  const source = `import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3"; try { await new S3Client({}).send(new HeadObjectCommand({ Bucket: process.env.S3_BUCKET, Key: process.argv[1] })); console.log(200); } catch (error) { console.log(error.$metadata?.httpStatusCode ?? 0); }`;
+  const result = await runDocker(
+    ["exec", containerName, "node", "--input-type=module", "-e", source, key],
+    { captureOutput: true },
+  );
+  return Number(result.output.trim().split("\n").at(-1));
 }
 
 async function assertSafeLogs(extraValues) {

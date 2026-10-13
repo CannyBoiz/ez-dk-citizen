@@ -44,6 +44,7 @@ export function LessonView({
   lessonId,
   onUnsavedChange,
   onUploadChange,
+  onDelete,
 }: {
   call: Call;
   putObject: Network["putObject"];
@@ -51,6 +52,8 @@ export function LessonView({
   // Names the unsaved forms, in page order, for the navigation guards.
   onUnsavedChange: (forms: string[]) => void;
   onUploadChange: (status: UploadStatus) => void;
+  // After the Draft is deleted, as there is nothing left to show.
+  onDelete: () => void;
 }) {
   const [lesson, setLesson] = useState<LessonDetail | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -462,6 +465,7 @@ export function LessonView({
         dirty={dirty}
         busy={uploading || detachingNow}
         onChange={applyLesson}
+        onDelete={onDelete}
       />
     </section>
   );

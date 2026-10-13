@@ -2,6 +2,7 @@ import {
   type CreateLessonRequest,
   createLessonRequestSchema,
   currentLessonAudioResponseSchema,
+  deleteLessonResponseSchema,
   type LessonStatus,
   lessonDetailListResponseSchema,
   lessonDetailSchema,
@@ -29,6 +30,7 @@ import type { DataDatabase } from "../../db/database.js";
 import { isPostgresError } from "../../db/errors.js";
 import {
   createLesson,
+  deleteLesson,
   deleteLessonSource,
   patchLesson,
   upsertLessonSource,
@@ -151,6 +153,34 @@ export function createLessonRoutes(database?: DataDatabase) {
         }
         throw error;
       }
+    },
+  );
+
+  app.delete(
+    "/:lessonId",
+    validateRequest("param", lessonIdParamsSchema),
+    async (c) => {
+      const { lessonId: id } = c.req.valid("param") as { lessonId: number };
+      if (!database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
+
+      const outcome = await deleteLesson(database, id);
+
+      if (outcome === "lesson_not_found") {
+        return problem(c, 404, outcome, "Lesson was not found.");
+      }
+      if (outcome === "lesson_not_editable") {
+        return problem(c, 409, outcome, "Only Draft Lessons can be deleted.");
+      }
+      return c.json(
+        deleteLessonResponseSchema.parse({ deletedMediaAssets: outcome }),
+      );
     },
   );
 

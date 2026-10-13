@@ -264,6 +264,18 @@ const fixed = await call('/api/admin/lessons/' + fix.body.id, 'PATCH', { status:
 if (fixed.response.status !== 200 || fixed.body.version !== 1 || fixed.body.versionPatch !== 1) throw new Error('A fix did not raise the patch version.');
 const fixedMobile = await call('/api/mobile/lessons/' + fix.body.id, 'GET');
 if (fixedMobile.body.version !== 1 || fixedMobile.body.versionPatch !== 1) throw new Error('Mobile detail did not carry the fixed version.');
+const discarded = await call('/api/admin/lessons', 'POST', { chapter: 2 });
+await call('/api/admin/lessons/' + discarded.body.id + '/texts/th', 'PUT', { title: 'ไทย', content: 'ทิ้ง' });
+const discardedIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: discarded.body.id, languageCode: 'th', originalFilename: 'discarded.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const discardedKey = storage.uploads.at(-1).key;
+storage.putObject(discardedKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
+await call('/api/admin/media/' + discardedIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: discarded.body.id, languageCode: 'th' });
+const deletedDraft = await call('/api/admin/lessons/' + discarded.body.id, 'DELETE');
+if (deletedDraft.response.status !== 204 || deletedDraft.body !== undefined || (await call('/api/admin/lessons/' + discarded.body.id, 'GET')).response.status !== 404 || (await dataServiceClient.getMediaAsset(discardedIntent.body.mediaAssetId, requestId)).status !== 'DELETED') throw new Error('Draft deletion failed.');
+try { await storage.inspectObject(discardedKey); throw new Error('Deleted Draft audio stayed in storage.'); } catch (error) { if (error.message !== 'S3 object was not found.') throw error; }
+await storage.inspectObject(storage.uploads[1].key);
+const refusedDelete = await call('/api/admin/lessons/' + fix.body.id, 'DELETE');
+if (refusedDelete.response.status !== 409 || refusedDelete.body.code !== 'lesson_not_editable' || (await call('/api/admin/lessons/' + fix.body.id, 'GET')).body.status !== 'PUBLISHED') throw new Error('A Published Lesson was deleted.');
 `;
 }
 

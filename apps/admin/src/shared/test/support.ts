@@ -480,6 +480,10 @@ export function fakeBackend(
         "Only Draft Lessons can be edited.",
         "req-409",
       );
+    if (request.method === "DELETE" && !collection) {
+      lessons.splice(lessons.indexOf(lesson), 1);
+      return { status: 204, body: null };
+    }
     if (request.method === "PATCH") {
       Object.assign(lesson, body);
     } else if (collection === "sources") {

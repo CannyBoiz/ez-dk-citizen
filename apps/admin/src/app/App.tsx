@@ -147,6 +147,7 @@ export function App({ network }: { network: Network }) {
                 lessonId={screen.lessonId}
                 onUnsavedChange={setUnsaved}
                 onUploadChange={setUpload}
+                onDelete={() => setScreen("catalogue")}
               />
             )}
           </>

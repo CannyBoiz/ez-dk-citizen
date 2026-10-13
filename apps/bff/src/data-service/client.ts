@@ -11,6 +11,8 @@ import {
   createPendingMediaAssetRequestSchema,
   createSourceRequestSchema,
   currentLessonAudioResponseSchema,
+  type DeleteLessonResponse,
+  deleteLessonResponseSchema,
   type LessonDetail,
   type LessonDetailListResponse,
   type LessonListResponse,
@@ -67,6 +69,7 @@ export interface DataServiceClient {
     input: PatchLessonRequest,
     requestId: string,
   ): Promise<LessonDetail>;
+  deleteLesson(id: number, requestId: string): Promise<DeleteLessonResponse>;
   createSource(
     input: CreateSourceRequest,
     requestId: string,
@@ -209,6 +212,14 @@ export function createDataServiceClient(
         requestId,
         patchLessonRequestSchema.parse(input),
         lessonDetailSchema.parse,
+      ),
+    deleteLesson: (id, requestId) =>
+      call(
+        `/internal/lessons/${id}`,
+        "DELETE",
+        requestId,
+        undefined,
+        deleteLessonResponseSchema.parse,
       ),
     createSource: (input, requestId) =>
       call(

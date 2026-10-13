@@ -7,6 +7,7 @@ import {
 
 import { createBffApp } from "../../app.js";
 import { DataServiceError } from "../../data-service/client.js";
+import { FakeStorage } from "../../storage.js";
 import { createTestDataServiceClient } from "../../testing/data-service-client.js";
 
 test("admin Lesson routes authenticate and use the Data Service client seam", async () => {
@@ -395,4 +396,156 @@ test("BFF patches Lessons through its client seam", async () => {
   );
   assert.equal(incompleteBody.code, "lesson_publication_incomplete");
   assert.deepEqual(incompleteBody.errors, incompleteErrors);
+});
+
+const deletedKeys = [
+  "audio/123e4567-e89b-12d3-a456-426614174001.mp3",
+  "audio/123e4567-e89b-12d3-a456-426614174002.mp3",
+];
+// The Data Service's answer: the Media Assets it marked DELETED.
+const deletedMediaAssets = deletedKeys.map((objectKey, index) => ({
+  id: 41 + index,
+  objectKey,
+}));
+const unrelatedKey = "audio/123e4567-e89b-12d3-a456-426614174003.mp3";
+
+function deleteDraft(app: ReturnType<typeof createBffApp>) {
+  return app.request("/api/admin/lessons/7", {
+    method: "DELETE",
+    headers: {
+      Authorization: "Bearer admin-token",
+      "X-Request-ID": "delete-request",
+    },
+  });
+}
+
+test("deleting a Draft deletes exactly the objects of the Media Assets the Data Service marked DELETED, after it commits", async () => {
+  const calls: string[] = [];
+  const storage = new FakeStorage();
+  for (const key of [...deletedKeys, unrelatedKey])
+    storage.putObject(key, { contentType: "audio/mpeg", sizeBytes: 1 });
+  const deleteObject = storage.deleteObject.bind(storage);
+  storage.deleteObject = async (key) => {
+    calls.push(`storage:${key}`);
+    await deleteObject(key);
+  };
+  const app = createBffApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    storage,
+    dataServiceClient: createTestDataServiceClient({
+      async deleteLesson(id, requestId) {
+        calls.push(`data:${id}:${requestId}`);
+        return { deletedMediaAssets };
+      },
+    }),
+  });
+
+  const unauthorized = await app.request("/api/admin/lessons/7", {
+    method: "DELETE",
+  });
+  assert.equal(unauthorized.status, 401);
+  assert.deepEqual(calls, []);
+
+  const response = await deleteDraft(app);
+
+  assert.equal(response.status, 204);
+  assert.equal(await response.text(), "");
+  assert.deepEqual(calls, [
+    "data:7:delete-request",
+    ...deletedKeys.map((key) => `storage:${key}`),
+  ]);
+  await assert.rejects(storage.inspectObject(deletedKeys[0]!));
+  assert.deepEqual(await storage.inspectObject(unrelatedKey), {
+    contentType: "audio/mpeg",
+    sizeBytes: 1,
+  });
+});
+
+test("a storage failure after the delete commits is logged safely and still answers 204", async () => {
+  const deleted: string[] = [];
+  const logs: unknown[] = [];
+  const storage = new FakeStorage();
+  storage.deleteObject = async (key) => {
+    if (key === deletedKeys[0])
+      throw Object.assign(
+        new Error(
+          `Bearer admin-token https://storage.invalid/${key}?signature=secret`,
+        ),
+        { name: "AccessDenied", $metadata: { requestId: "aws-request" } },
+      );
+    deleted.push(key);
+  };
+  const app = createBffApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    storage,
+    dataServiceClient: createTestDataServiceClient({
+      async deleteLesson() {
+        return { deletedMediaAssets };
+      },
+    }),
+  });
+  const originalLog = console.log;
+  console.log = (entry: unknown) => logs.push(entry);
+  let response: Response;
+  try {
+    response = await deleteDraft(app);
+  } finally {
+    console.log = originalLog;
+  }
+
+  assert.equal(response.status, 204);
+  // One failure does not stop the remaining objects from being deleted.
+  assert.deepEqual(deleted, [deletedKeys[1]]);
+  const failure = logs
+    .map((entry) => JSON.parse(String(entry)))
+    .find((entry) => entry.operation === "delete");
+  assert.deepEqual(failure, {
+    requestId: "delete-request",
+    operation: "delete",
+    mediaAssetId: 41,
+    storageErrorCode: "AccessDenied",
+    storageRequestId: "aws-request",
+  });
+  assert.doesNotMatch(
+    logs.join("\n"),
+    /admin-token|storage\.invalid|signature|audio\//,
+  );
+});
+
+test("a refused or missing Lesson deletes nothing from storage", async () => {
+  for (const [status, code, detail] of [
+    [409, "lesson_not_editable", "Only Draft Lessons can be deleted."],
+    [404, "lesson_not_found", "Lesson was not found."],
+  ] as const) {
+    const storage = new FakeStorage();
+    storage.deleteObject = async () => {
+      throw new Error("nothing may be deleted");
+    };
+    const app = createBffApp(async () => undefined, {
+      adminApiToken: "admin-token",
+      storage,
+      dataServiceClient: createTestDataServiceClient({
+        async deleteLesson() {
+          throw new DataServiceError(
+            problemDetailsSchema.parse({
+              type: `https://ez-dk-citizen.invalid/problems/${code}`,
+              title: "Problem",
+              status,
+              detail,
+              instance: "/internal/lessons/7",
+              code,
+              requestId: "downstream",
+            }),
+          );
+        },
+      }),
+    });
+
+    const response = await deleteDraft(app);
+
+    assert.equal(response.status, status);
+    const problem = await response.json();
+    assert.equal(problem.code, code);
+    assert.equal(problem.detail, detail);
+  }
 });

@@ -4,14 +4,16 @@ import type {
   UpsertLessonSourceRequest,
   UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, notExists } from "drizzle-orm";
 
 import type { DataDatabase } from "../../db/database.js";
 import {
   language,
   lesson,
+  lessonAudio,
   lessonSource,
   lessonText,
+  mediaAsset,
   source,
 } from "../../db/schema.js";
 import {
@@ -37,6 +39,44 @@ export async function createLesson(
   );
   if (!created) throw new Error("Lesson insert returned no row.");
   return created.id;
+}
+
+// Deletes a Draft with its Lesson Audio, and with its Lesson Texts and Lesson Sources by cascade.
+// Each Media Asset that audio used is marked DELETED once no remaining Lesson Audio uses it;
+// one shared with another Lesson stays. Returns the marked ones, whose objects are to go.
+// ponytail: the check takes no lock on the Media Assets, so two Drafts deleted at once that were
+// the only users of one asset would both leave it READY. That cannot happen while audio is shared
+// only by copying a Published or Archived Lesson, whose Lesson Audio is never deleted; lock the
+// assets FOR UPDATE first if Drafts ever share audio without such a Lesson.
+export async function deleteLesson(database: DataDatabase, id: number) {
+  return database.transaction(async (transaction) => {
+    const existing = await lockEditableDraft(transaction, id);
+    if (typeof existing === "string") return existing;
+
+    const deletedAudio = await transaction
+      .delete(lessonAudio)
+      .where(eq(lessonAudio.lessonId, id))
+      .returning({ mediaAssetId: lessonAudio.mediaAssetId });
+    await transaction.delete(lesson).where(eq(lesson.id, id));
+    return transaction
+      .update(mediaAsset)
+      .set({ status: "DELETED" })
+      .where(
+        and(
+          inArray(
+            mediaAsset.id,
+            deletedAudio.map(({ mediaAssetId }) => mediaAssetId),
+          ),
+          notExists(
+            transaction
+              .select({ id: lessonAudio.id })
+              .from(lessonAudio)
+              .where(eq(lessonAudio.mediaAssetId, mediaAsset.id)),
+          ),
+        ),
+      )
+      .returning({ id: mediaAsset.id, objectKey: mediaAsset.objectKey });
+  });
 }
 
 export async function patchLesson(
