@@ -214,17 +214,23 @@ Short-lived, read-only access to one Media Asset.
 
 It is generated at runtime, expires after one hour, and is never persisted.
 
-## BFF
+## Backend
 
-The public Hono Backend-for-Frontend.
+The one Hono application that serves the Admin API and the Mobile API, owns
+relational persistence, and holds the AWS identity. It is the only application
+with direct PostgreSQL access (ADR-0009).
 
-Owns client orchestration and object-storage authorization, but not PostgreSQL.
+_Avoid_: BFF, Data Service. These were the names before ADR-0009; code and
+older sections keep them until the merge lands.
 
-## Data Service
+## Admin API
 
-The internal Hono service that owns Drizzle, relational persistence, constraints, and migrations.
+The Backend's `/api/admin/*` routes, served only on its unpublished admin
+listener (ADR-0007).
 
-Only this service directly accesses PostgreSQL.
+## Mobile API
+
+The Backend's public `/api/mobile/*` routes for the learner's app.
 
 ---
 
@@ -706,7 +712,8 @@ inspect MP3 bytes. The signed upload requires `If-None-Match: *`, and the bucket
 policy enforces conditional writes so a generated object key can be written
 only once. The signature also binds the declared exact `Content-Length` and
 `Content-Type`. The browser tracer must prove those signed headers work before
-Stage 3 is complete. The PoC does not enable S3 bucket versioning.
+Stage 3 is complete. Stage 3 left S3 bucket versioning off; ADR-0010 turns it
+on with 30-day expiry of old versions.
 
 ## 8.8 Upload completion semantics
 
@@ -832,6 +839,9 @@ custom metrics or dashboards.
 ---
 
 # 9. Architecture
+
+> ADR-0009 merges the BFF and Data Service into one Backend. Sections 9 to 18
+> describe the split until that merge lands.
 
 ```mermaid
 flowchart LR
@@ -1735,6 +1745,11 @@ runs before Stage 5 so that mobile builds on the final contracts.
   audio replacement), never the version. Stage 5 adds the date to the mobile
   contract.
 
+Revised order after ADR-0009 (2026-10-16): commit ticket 05; merge the BFF and
+Data Service into the Backend (`.scratch/one-backend/`); build tickets 06 to 08
+on the Backend; then ticket 09 accepts Stage 4b and the merged Backend's AWS
+identity together on real S3. Stage 6 then deploys the final shape once.
+
 ## Stage 5 — Mobile
 
 1. Lesson list.
@@ -1768,13 +1783,19 @@ runs before Stage 5 so that mobile builds on the final contracts.
 9. Alert the developer by email when the deployed BFF's storage-credential path
    fails. Use a failure signal and notification path independent of the BFF's
    AWS credentials; evaluate Amazon SNS email delivery during Stage 6. This
-   alert does not gate the earlier local IAM-user retirement.
+   alert does not gate the earlier local IAM-user retirement. The same email
+   also fires when CloudTrail logs a Roles Anywhere `CreateSession` whose
+   `sourceIPAddress` is not the VPS, so a copied workload key is seen when it is
+   used (ADR-0009). There is no allow-list: the developer's local live-S3 runs
+   trigger it too, which proves the alert works.
 
 ---
 
 # 24. Architecture principles
 
-Preserve these unless a deliberate decision changes them:
+Preserve these unless a deliberate decision changes them. ADR-0009 changes 3
+and 5: the Backend's data module is the only code with direct PostgreSQL access,
+and the Backend is the orchestration boundary.
 
 1. **Object storage owns binary media.**
 2. **PostgreSQL owns structured relational data and media metadata.**
@@ -1919,6 +1940,8 @@ Accepted:
 0006 - Use IAM Roles Anywhere for the external BFF workload
 0007 - Serve the Admin from a private, same-origin admin site
 0008 - Share Media Assets between Lesson versions
+0009 - Merge the BFF and Data Service into one Backend
+0010 - Version the audio bucket
 ```
 
 Consider additional ADRs when these decisions become final and retain useful
@@ -1926,7 +1949,6 @@ trade-off context:
 
 ```text
 Use Hono + Drizzle instead of .NET + EF Core
-Keep BFF and Data Service as separate Hono services
 Model Lesson ↔ Source as M:N via lesson_source
 ```
 

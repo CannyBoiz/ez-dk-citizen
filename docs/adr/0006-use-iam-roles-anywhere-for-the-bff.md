@@ -1,5 +1,8 @@
 # Use IAM Roles Anywhere for the external BFF workload
 
+Amended by ADR-0009: the BFF workload is now the Backend. The identity, Trust
+Anchor, role, and trust policy below are unchanged.
+
 The BFF, intended for deployment on Hetzner, authenticates to S3 through IAM
 Roles Anywhere instead of a permanent IAM-user access key. A dedicated private
 CA, the exact Trust Anchor, and workload certificate CN `aws-iam-app` constrain
