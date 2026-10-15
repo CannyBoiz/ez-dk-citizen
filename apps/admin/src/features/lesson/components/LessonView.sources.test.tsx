@@ -13,6 +13,7 @@ import { App } from "../../../app/App";
 import {
   answer,
   bookSource,
+  chapterForm,
   cited,
   connect,
   editSource,
@@ -30,7 +31,6 @@ import {
   saveSource,
   settle,
   sourceDeleteControls,
-  structureForm,
   textForm,
   thaiText,
   type,
@@ -335,7 +335,7 @@ test("Detach waits for Lesson changes in flight, and changes wait for a detach",
     ).toHaveProperty("readOnly", true),
   );
   expect(
-    within(structureForm()).queryByRole("button", { name: "Save" }),
+    within(chapterForm()).queryByRole("button", { name: "Save" }),
   ).toBeNull();
   expect(attachButton(bookSource.url)).toHaveProperty("disabled", true);
   expect(

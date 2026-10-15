@@ -9,6 +9,7 @@ import {
 import { expect, test } from "vitest";
 import {
   answer,
+  chapterForm,
   cited,
   confirmation,
   connect,
@@ -22,7 +23,6 @@ import {
   openLesson,
   problem,
   settle,
-  structureForm,
   tab,
   textForm,
   type,
@@ -117,7 +117,7 @@ test("dirty edits trigger the before-unload warning and an in-page confirmation 
   await openLesson();
   expect(unloadBlocked()).toBe(false);
 
-  type("Chapter", "5", structureForm());
+  type("Chapter", "5", chapterForm());
   expect(unloadBlocked()).toBe(true);
 
   const sent = requests.length;
@@ -125,7 +125,7 @@ test("dirty edits trigger the before-unload warning and an in-page confirmation 
   answer("Cancel");
   await settle();
   expect(requests.length).toBe(sent);
-  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
+  expect(within(chapterForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "5",
   );
@@ -140,7 +140,7 @@ test("the in-page confirmation is operated by keyboard: it opens on Cancel, and 
   render(<App network={fakeBackend([lessonDetail(1)]).network} />);
   await connect(validToken);
   await openLesson();
-  type("Chapter", "5", structureForm());
+  type("Chapter", "5", chapterForm());
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
   expect(document.activeElement).toBe(
@@ -151,7 +151,7 @@ test("the in-page confirmation is operated by keyboard: it opens on Cancel, and 
   expect(document.activeElement).toBe(
     screen.getByRole("button", { name: "Back to catalogue" }),
   );
-  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
+  expect(within(chapterForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "5",
   );
@@ -162,17 +162,17 @@ test("Disconnect with unsaved edits asks in the page, and confirming disconnects
   render(<App network={network} />);
   await connect(validToken);
   await openLesson();
-  type("Chapter", "5", structureForm());
+  type("Chapter", "5", chapterForm());
 
   const sent = requests.length;
   fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
   screen.getByRole("alertdialog", {
-    name: "Unsaved changes in Structure will be discarded. Leave anyway?",
+    name: "Unsaved changes in Chapter will be discarded. Leave anyway?",
   });
   answer("Cancel");
   await settle();
   expect(requests.length).toBe(sent);
-  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
+  expect(within(chapterForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "5",
   );
@@ -195,7 +195,7 @@ test("the leave confirmation names each unsaved form, and a saved form drops out
   await connect(validToken);
   await openLesson();
 
-  type("Chapter", "5", structureForm());
+  type("Chapter", "5", chapterForm());
   type("Title", "บทที่ 1", textForm());
   fireEvent.click(tab("da"));
   type("Title", "Kapitel 1", textForm());
@@ -208,19 +208,18 @@ test("the leave confirmation names each unsaved form, and a saved form drops out
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
   screen.getByRole("alertdialog", {
-    name: `Unsaved changes in Structure, Lesson Text (da), Lesson Text (th), Lesson Source ${guideSource.url}, and New Source will be discarded. Leave anyway?`,
+    name: `Unsaved changes in Chapter, Lesson Text (da), Lesson Text (th), Lesson Source ${guideSource.url}, and New Source will be discarded. Leave anyway?`,
   });
 
-  fireEvent.click(
-    within(structureForm()).getByRole("button", { name: "Save" }),
-  );
-  await waitFor(() =>
-    expect(within(structureForm()).getByText("Saved")).toBeTruthy(),
-  );
+  // The da tab's Save sends the chapter and the Danish text, so both drop out.
+  type("Content", "Indhold", textForm());
+  fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(tab("da").textContent).toBe("da: Saved"));
+  expect(within(chapterForm()).getByText("Saved")).toBeTruthy();
   // The Lesson editor reports its unsaved forms to the shell after it renders.
   await settle();
   screen.getByRole("alertdialog", {
-    name: `Unsaved changes in Lesson Text (da), Lesson Text (th), Lesson Source ${guideSource.url}, and New Source will be discarded. Leave anyway?`,
+    name: `Unsaved changes in Lesson Text (th), Lesson Source ${guideSource.url}, and New Source will be discarded. Leave anyway?`,
   });
 });
 
@@ -252,10 +251,8 @@ test("a 401 during save prompts for the token, keeps the edits, and the save can
   await openLesson();
 
   accepted = "rotated-token";
-  type("Chapter", "9", structureForm());
-  fireEvent.click(
-    within(structureForm()).getByRole("button", { name: "Save" }),
-  );
+  type("Chapter", "9", chapterForm());
+  fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
 
   const dialog = await screen.findByRole("dialog", {
     name: "Re-enter admin token",
@@ -268,14 +265,12 @@ test("a 401 during save prompts for the token, keeps the edits, and the save can
   });
   fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
   await waitFor(() => expect(dialog.isConnected).toBe(false));
-  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
+  expect(within(chapterForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "9",
   );
 
-  fireEvent.click(
-    within(structureForm()).getByRole("button", { name: "Save" }),
-  );
+  fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
   await screen.findByRole("heading", {
     name: "Chapter 9 · Draft, created 11 Oct 2026",
   });

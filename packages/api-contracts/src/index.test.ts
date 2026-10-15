@@ -436,6 +436,32 @@ test("Lesson patches are strict and non-empty", () => {
   );
 });
 
+test("a Lesson command carries one Language's whole, non-blank Lesson Text", () => {
+  const text = { languageCode: "da", title: "Titel", content: "Indhold" };
+  assert.deepEqual(patchLessonRequestSchema.parse({ text }), { text });
+  assert.deepEqual(patchLessonRequestSchema.parse({ chapter: 2, text }), {
+    chapter: 2,
+    text,
+  });
+  for (const field of ["title", "content"] as const) {
+    const result = patchLessonRequestSchema.safeParse({
+      chapter: 2,
+      text: { ...text, [field]: " " },
+    });
+    assert.deepEqual(
+      result.error?.issues.map((issue) => issue.path),
+      [["text", field]],
+    );
+  }
+  for (const invalid of [
+    { languageCode: "da", title: "Titel" },
+    { ...text, languageCode: "" },
+    { ...text, extra: true },
+  ]) {
+    assert.throws(() => patchLessonRequestSchema.parse({ text: invalid }));
+  }
+});
+
 test("only a publication carries a change kind, and only content or fix", () => {
   for (const changeKind of ["content", "fix"] as const) {
     assert.deepEqual(

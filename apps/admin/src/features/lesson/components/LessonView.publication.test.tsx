@@ -17,10 +17,12 @@ import { App } from "../../../app/App";
 import type { BffRequest, BffResponse } from "../../../shared/lib/network";
 import {
   answer,
+  chapterForm,
   confirmation,
   connect,
   fakeBackend,
   finder,
+  firstOnly,
   hold,
   lawSource,
   lessonDetail,
@@ -30,7 +32,7 @@ import {
   problem,
   rows,
   settle,
-  structureForm,
+  tab,
   textForm,
   thaiText,
   type,
@@ -129,9 +131,9 @@ test("Publish is disabled while any form on the Lesson is unsaved", async () => 
   await openFirst(fakeBackend([complete(1)]));
   expect(publishButton()).toHaveProperty("disabled", false);
 
-  type("Chapter", "2", structureForm());
+  type("Chapter", "2", chapterForm());
   expect(publishButton()).toHaveProperty("disabled", true);
-  type("Chapter", "1", structureForm());
+  type("Chapter", "1", chapterForm());
   expect(publishButton()).toHaveProperty("disabled", false);
 
   type("Content", "แก้ไข", textForm());
@@ -191,7 +193,7 @@ test("a chapter's first publication confirms in the page as version 1.0 with no 
   expect(
     within(publication()).queryByRole("button", { name: "Publish" }),
   ).toBeNull();
-  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
+  expect(within(chapterForm()).getByLabelText("Chapter")).toHaveProperty(
     "readOnly",
     true,
   );
@@ -558,21 +560,17 @@ test("a save answered after a newer change never replaces the newer Lesson", asy
   await openFirst(backend);
   const releaseSave = hold(
     backend.network,
-    (request) => request.method === "PUT",
+    firstOnly((request) => request.method === "PATCH"),
     "response",
   );
 
   type("Content", "บันทึกช้า", textForm());
   fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
-  await waitFor(() =>
-    expect(backend.requests.some((request) => request.method === "PUT")).toBe(
-      true,
-    ),
-  );
-  type("Chapter", "2", structureForm());
-  fireEvent.click(
-    within(structureForm()).getByRole("button", { name: "Save" }),
-  );
+  await waitFor(() => expect(patches(backend)).toHaveLength(1));
+  // Saved from another tab, as the th tab's Save is still in flight.
+  type("Chapter", "2", chapterForm());
+  fireEvent.click(tab("da"));
+  fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
   await screen.findByRole("heading", {
     name: "Chapter 2 · Draft, created 11 Oct 2026",
   });
@@ -583,6 +581,7 @@ test("a save answered after a newer change never replaces the newer Lesson", asy
   expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(
     "Chapter 2 · Draft, created 11 Oct 2026",
   );
+  fireEvent.click(tab("th"));
   expect(within(textForm()).getByLabelText("Content")).toHaveProperty(
     "value",
     "บันทึกช้า",
@@ -619,7 +618,7 @@ test("an Archived Lesson stays readable with every mutation disabled", async () 
   ).toHaveProperty("readOnly", true);
   expect(within(publication()).queryAllByRole("button")).toEqual([]);
   expect(
-    within(structureForm()).queryByRole("button", { name: "Save" }),
+    within(chapterForm()).queryByRole("button", { name: "Save" }),
   ).toBeNull();
   expect(within(textForm()).queryByRole("button", { name: "Save" })).toBeNull();
   expect(

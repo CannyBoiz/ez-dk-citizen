@@ -1,19 +1,25 @@
-// The Lesson editor: the Draft's chapter, per-Language Lesson Text tabs, and per-Source
-// Lesson Source references, each saved separately, with their unsaved edits reported up
-// for the navigation guards; the selected Language's audio; and publication.
+// The Lesson editor: the Draft's chapter and per-Language Lesson Text tabs, where each tab's
+// Save sends the chapter with that Language's Lesson Text, and per-Source Lesson Source
+// references saved separately, with their unsaved edits reported up for the navigation
+// guards; the selected Language's audio; and publication.
 import {
   adminLessonAudioResponseSchema,
   type LessonDetail,
   lessonDetailSchema,
   type PatchLessonRequest,
-  type UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts/schemas";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { ConfirmButton } from "../../../shared/components/ConfirmButton";
-import { EditForm, type Values } from "../../../shared/components/EditForm";
+import {
+  EditForm,
+  type Field,
+  type FieldErrors,
+  fieldProblem,
+  type Values,
+} from "../../../shared/components/EditForm";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
-import type { Call } from "../../../shared/lib/bff";
+import { BffError, type Call } from "../../../shared/lib/bff";
 import {
   type LanguageCode,
   languageCodes,
@@ -35,8 +41,13 @@ import { lessonLabel } from "../utils/versions";
 import { Publication } from "./Publication";
 
 // Each Lesson Source's reference form is keyed by its Source ID.
-type Form = "structure" | LanguageCode | `source:${number}`;
+type Form = "chapter" | LanguageCode | `source:${number}`;
 const sourceForm = (sourceId: number): Form => `source:${sourceId}`;
+const chapterField: Field = {
+  name: "chapter",
+  label: "Chapter",
+  kind: "number",
+};
 
 export function LessonView({
   call,
@@ -60,6 +71,8 @@ export function LessonView({
   // Unsaved edits per form; a form without an entry shows what the backend holds.
   const [edits, setEdits] = useState<Partial<Record<Form, Values>>>({});
   const [languageCode, setLanguageCode] = useState<LanguageCode>("th");
+  // The chapter's messages from the last tab Save, shown on the chapter field above the tabs.
+  const [chapterErrors, setChapterErrors] = useState<FieldErrors>({});
   // The Source finder's unsaved forms, its Edit forms and New Source, count towards unsaved edits too.
   const [finderUnsaved, setFinderUnsaved] = useState<string[]>([]);
   const detaching = useAction<number>();
@@ -132,7 +145,7 @@ export function LessonView({
 
   const saved: Partial<Record<Form, Values>> = lesson
     ? {
-        structure: { chapter: String(lesson.chapter) },
+        chapter: { chapter: String(lesson.chapter) },
         ...Object.fromEntries(
           languageCodes.map((code) => {
             const text = lesson.lessonTexts.find(
@@ -157,7 +170,7 @@ export function LessonView({
       ([field, value]) => value !== saved[form]?.[field],
     );
   const unsaved = [
-    isDirty("structure") && "Structure",
+    isDirty("chapter") && "Chapter",
     ...languageCodes.map((code) => isDirty(code) && `Lesson Text (${code})`),
     ...(lesson?.lessonSources ?? []).map(
       (source) =>
@@ -199,17 +212,64 @@ export function LessonView({
   const formState = (form: Form, exists: boolean) =>
     isDirty(form) ? "Unsaved" : exists ? "Saved" : "Missing";
 
+  // Saves the submitted edits of one or more forms in one request.
   async function save(
-    form: Form,
-    submitted: Values,
+    submitted: Partial<Record<Form, Values>>,
     request: Omit<BffRequest, "token">,
   ) {
     applyLesson(await writeCall(request, lessonDetailSchema));
     // Edits made while the save was in flight stay unsaved.
-    setEdits((current) => {
-      const { [form]: edit, ...rest } = current;
-      return edit === submitted ? rest : current;
-    });
+    setEdits((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(
+          ([form, edit]) => edit !== submitted[form as Form],
+        ),
+      ),
+    );
+  }
+
+  const chapterEdit = isDirty("chapter") ? edits.chapter : undefined;
+  const isBlank = (text: Values) =>
+    !text.title?.trim() && !text.content?.trim();
+
+  // One Lesson command: the dirty chapter, if any, with this Language's Lesson Text, if dirty
+  // and not entirely blank. Either both are saved or neither.
+  async function saveTab(code: LanguageCode, submitted: Values) {
+    const { title = "", content = "" } = submitted;
+    const text =
+      isDirty(code) && !isBlank(submitted)
+        ? { languageCode: code, title, content }
+        : undefined;
+    if (!chapterEdit && !text) return;
+    try {
+      await save(
+        { chapter: chapterEdit, [code]: text && submitted },
+        {
+          method: "PATCH",
+          path: `/api/admin/lessons/${lesson!.id}`,
+          body: {
+            ...(chapterEdit && { chapter: Number(chapterEdit.chapter) }),
+            ...(text && { text }),
+          } satisfies PatchLessonRequest,
+        },
+      );
+    } catch (caught) {
+      const message =
+        caught instanceof BffError
+          ? caught.errors?.find((entry) => entry.path[0] === "chapter")?.message
+          : undefined;
+      setChapterErrors(message ? { chapter: message } : {});
+      throw caught;
+    }
+    if (!text) return;
+    // The audio stays current; the admin decides whether to replace it. The check runs after
+    // the save settles, so it never holds the form.
+    void currentAudioExists(code).then((exists) =>
+      setNarrationWarnings((current) => ({
+        ...current,
+        [code]: exists === false ? undefined : { audioKnown: exists === true },
+      })),
+    );
   }
 
   function detach(sourceId: number) {
@@ -252,6 +312,19 @@ export function LessonView({
     return hasAudio.current[code];
   }
 
+  // A Language with no Lesson Text and blank fields has no text to send, so its tab may save
+  // the chapter alone. A cleared Lesson Text is still checked, as it cannot be saved blank.
+  const textFields = (code: LanguageCode): Field[] => {
+    const optional =
+      chapterEdit !== undefined &&
+      !hasLessonText(lesson, code) &&
+      isBlank(formProps(code).value);
+    return [
+      { name: "title", label: "Title", kind: "text", optional },
+      { name: "content", label: "Content", kind: "textarea", optional },
+    ];
+  };
+
   const uploadUnavailable =
     lesson.status === "ARCHIVED"
       ? "Uploads are unavailable for Archived Lessons."
@@ -270,20 +343,13 @@ export function LessonView({
           {statusLabels[lesson.status]}
         </span>
       </p>
+      {/* No Save of its own: each Language tab's Save sends it. */}
       <EditForm
-        name="Structure"
-        fields={[{ name: "chapter", label: "Chapter", kind: "number" }]}
-        status={formState("structure", true)}
-        onSave={(submitted) =>
-          save("structure", submitted, {
-            method: "PATCH",
-            path: `/api/admin/lessons/${lesson.id}`,
-            body: {
-              chapter: Number(submitted.chapter),
-            } satisfies PatchLessonRequest,
-          })
-        }
-        {...formProps("structure")}
+        name="Chapter"
+        fields={[chapterField]}
+        status={formState("chapter", true)}
+        errors={chapterErrors}
+        {...formProps("chapter")}
       />
       <h3>Lesson Texts</h3>
       <div role="tablist" aria-label="Lesson Text Language">
@@ -314,28 +380,16 @@ export function LessonView({
         >
           <EditForm
             name="Lesson Text"
-            fields={[
-              { name: "title", label: "Title", kind: "text" },
-              { name: "content", label: "Content", kind: "textarea" },
-            ]}
-            onSave={async (submitted) => {
-              await save(code, submitted, {
-                method: "PUT",
-                path: `/api/admin/lessons/${lesson.id}/texts/${code}`,
-                body: submitted as UpsertLessonTextRequest,
-              });
-              // The audio stays current; the admin decides whether to replace it. The check
-              // runs after the save settles, so it never holds the form.
-              void currentAudioExists(code).then((exists) =>
-                setNarrationWarnings((current) => ({
-                  ...current,
-                  [code]:
-                    exists === false
-                      ? undefined
-                      : { audioKnown: exists === true },
-                })),
-              );
+            fields={textFields(code)}
+            validate={() => {
+              // The chapter is checked with the tab's fields and shown on its own field.
+              const problem =
+                chapterEdit && fieldProblem(chapterField, chapterEdit.chapter);
+              const problems: FieldErrors = problem ? { chapter: problem } : {};
+              setChapterErrors(problems);
+              return problems;
             }}
+            onSave={(submitted) => saveTab(code, submitted)}
             {...formProps(code)}
           />
           {/* Only a Draft's text can change, so only a Draft warns. */}
@@ -393,11 +447,14 @@ export function LessonView({
                 validate={validateReferences}
                 status={formState(form, true)}
                 onSave={(submitted) =>
-                  save(form, submitted, {
-                    method: "PUT",
-                    path: `/api/admin/lessons/${lesson.id}/sources/${source.id}`,
-                    body: toReferenceRequest(submitted),
-                  })
+                  save(
+                    { [form]: submitted },
+                    {
+                      method: "PUT",
+                      path: `/api/admin/lessons/${lesson.id}/sources/${source.id}`,
+                      body: toReferenceRequest(submitted),
+                    },
+                  )
                 }
                 {...formProps(form)}
               />

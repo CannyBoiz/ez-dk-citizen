@@ -88,6 +88,9 @@ export function createLessonRoutes(database?: DataDatabase) {
         if (outcome === "lesson_not_editable") {
           return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
         }
+        if (outcome === "unsupported_language") {
+          return problem(c, 422, outcome, "Language is not supported.");
+        }
         if (outcome === "lesson_lifecycle_conflict") {
           return problem(
             c,

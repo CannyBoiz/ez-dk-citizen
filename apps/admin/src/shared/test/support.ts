@@ -416,21 +416,16 @@ export function fakeBackend(
         },
       };
     }
-    // `/:id`, `/:id/texts/:languageCode`, `/:id/sources/:sourceId`, or `/:id/audio/:languageCode`.
+    // `/:id`, `/:id/sources/:sourceId`, or `/:id/audio/:languageCode`.
     const [id, collection, member] = request.path
       .slice("/api/admin/lessons/".length)
       .split("/");
-    const body = request.body as {
-      chapter: number;
-      title: string;
-      content: string;
-    };
 
     if (!id) {
       if (request.method === "POST") {
         const created = lessonDetail(
           Math.max(0, ...lessons.map((lesson) => lesson.id)) + 1,
-          { chapter: body.chapter },
+          { chapter: (request.body as { chapter: number }).chapter },
         );
         lessons.push(created);
         return { status: 201, body: created };
@@ -485,8 +480,20 @@ export function fakeBackend(
       return { status: 204, body: null };
     }
     if (request.method === "PATCH") {
-      Object.assign(lesson, body);
-    } else if (collection === "sources") {
+      const { chapter, text } = request.body as PatchLessonRequest;
+      if (chapter !== undefined) lesson.chapter = chapter;
+      if (text) {
+        lesson.lessonTexts = [
+          ...lesson.lessonTexts.filter(
+            (saved) => saved.languageCode !== text.languageCode,
+          ),
+          text,
+        ];
+        lesson.availableLanguageCodes = lesson.lessonTexts
+          .map((saved) => saved.languageCode)
+          .sort();
+      }
+    } else {
       const source = sources.find(
         (candidate) => candidate.id === Number(member),
       );
@@ -515,14 +522,6 @@ export function fakeBackend(
           sectionReference: references.sectionReference ?? null,
         },
       ].sort((a, b) => a.id - b.id);
-    } else {
-      lesson.lessonTexts = [
-        ...lesson.lessonTexts.filter((text) => text.languageCode !== member),
-        { languageCode: member!, title: body.title, content: body.content },
-      ];
-      lesson.availableLanguageCodes = lesson.lessonTexts
-        .map((text) => text.languageCode)
-        .sort();
     }
     touch(lesson);
     return { status: 200, body: lesson };
@@ -567,8 +566,9 @@ export function type(
   });
 }
 
-export function structureForm() {
-  return screen.getByRole("form", { name: "Structure" });
+// The Draft's chapter, above the Language tabs, saved by whichever tab's Save is clicked.
+export function chapterForm() {
+  return screen.getByRole("form", { name: "Chapter" });
 }
 
 // The one in-page confirmation open in `container`, answered through its visible buttons.

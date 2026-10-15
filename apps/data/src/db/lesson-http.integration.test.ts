@@ -1602,6 +1602,98 @@ test("internal Lesson publication requires a Thai Lesson Text and a Lesson Sourc
   );
 });
 
+test("one Lesson command saves the chapter and a Lesson Text together, or neither", async () => {
+  const headers = {
+    Authorization: "Bearer data-token",
+    "Content-Type": "application/json",
+  };
+  const request = (path: string, method: string, body?: unknown) =>
+    app.request(path, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  const read = async (id: number) =>
+    (await request(`/internal/lessons/${id}`, "GET")).json();
+  const patch = (id: number, body: unknown) =>
+    request(`/internal/lessons/${id}`, "PATCH", body);
+  const danish = { languageCode: "da", title: "Titel", content: "Indhold" };
+
+  const draft = await (
+    await request("/internal/lessons", "POST", { chapter: 90 })
+  ).json();
+  const saved = await patch(draft.id, { chapter: 91, text: danish });
+  assert.equal(saved.status, 200);
+  const savedDetail = await saved.json();
+  assert.equal(savedDetail.chapter, 91);
+  assert.deepEqual(savedDetail.lessonTexts, [danish]);
+  assert.deepEqual(savedDetail.availableLanguageCodes, ["da"]);
+  assert.ok(Date.parse(savedDetail.updatedAt) > Date.parse(draft.updatedAt));
+
+  const corrected = await patch(draft.id, {
+    text: { ...danish, content: "Rettet" },
+  });
+  assert.equal(corrected.status, 200);
+  assert.deepEqual((await corrected.json()).lessonTexts, [
+    { ...danish, content: "Rettet" },
+  ]);
+
+  const before = await read(draft.id);
+  for (const field of ["title", "content"]) {
+    const blank = await patch(draft.id, {
+      chapter: 92,
+      text: { ...danish, [field]: "  " },
+    });
+    assert.equal(blank.status, 422);
+    const details = await blank.json();
+    assert.equal(details.code, "validation_failed");
+    assert.deepEqual(
+      details.errors.map((error: { path: string[] }) => error.path),
+      [["text", field]],
+    );
+  }
+  const unsupported = await patch(draft.id, {
+    chapter: 92,
+    text: { ...danish, languageCode: "xx" },
+  });
+  assert.equal(unsupported.status, 422);
+  assert.equal((await unsupported.json()).code, "unsupported_language");
+  // A publication refused on the final state leaves the text unsaved too.
+  const incomplete = await patch(draft.id, {
+    text: { ...danish, languageCode: "en" },
+    status: "PUBLISHED",
+  });
+  assert.equal(incomplete.status, 409);
+  assert.equal((await incomplete.json()).code, "lesson_publication_incomplete");
+  assert.deepEqual(await read(draft.id), before);
+
+  // The Thai Lesson Text the publication needs may arrive in the same command.
+  const source = await (
+    await request("/internal/sources", "POST", {
+      url: "https://example.com/combined-save",
+      publishedAt: null,
+    })
+  ).json();
+  await request(
+    `/internal/lessons/${draft.id}/sources/${source.id}`,
+    "PUT",
+    {},
+  );
+  const published = await patch(draft.id, {
+    text: { languageCode: "th", title: "บท", content: "เนื้อหา" },
+    status: "PUBLISHED",
+  });
+  assert.equal(published.status, 200);
+  const publishedDetail = await published.json();
+  assert.equal(publishedDetail.status, "PUBLISHED");
+  assert.deepEqual(publishedDetail.availableLanguageCodes, ["da", "th"]);
+
+  const notEditable = await patch(draft.id, { text: danish });
+  assert.equal(notEditable.status, 409);
+  assert.equal((await notEditable.json()).code, "lesson_not_editable");
+  assert.deepEqual(await read(draft.id), publishedDetail);
+});
+
 test("publication gives the version: 1.0 first, then the chapter's highest version raised by the change kind", async () => {
   const headers = {
     Authorization: "Bearer data-token",

@@ -6,7 +6,7 @@ import type {
 } from "@ez-dk-citizen/api-contracts";
 import { and, eq, inArray, ne, notExists } from "drizzle-orm";
 
-import type { DataDatabase } from "../../db/database.js";
+import type { DataDatabase, DataTransaction } from "../../db/database.js";
 import {
   language,
   lesson,
@@ -96,7 +96,10 @@ export async function patchLesson(
       .for("update");
     if (!existing) return "lesson_not_found" as const;
 
-    if (input.chapter !== undefined && !isEditableLesson(existing.status)) {
+    if (
+      (input.chapter !== undefined || input.text !== undefined) &&
+      !isEditableLesson(existing.status)
+    ) {
       return "lesson_not_editable" as const;
     }
     if (
@@ -104,6 +107,12 @@ export async function patchLesson(
       !isAllowedLessonTransition(existing.status, input.status)
     ) {
       return "lesson_lifecycle_conflict" as const;
+    }
+    if (
+      input.text &&
+      !(await isSupportedLanguage(transaction, input.text.languageCode))
+    ) {
+      return "unsupported_language" as const;
     }
 
     const chapter = input.chapter ?? existing.chapter;
@@ -136,7 +145,7 @@ export async function patchLesson(
         .where(eq(lessonSource.lessonId, id))
         .limit(1);
       const missing = [
-        ...(thaiText
+        ...(thaiText || input.text?.languageCode === "th"
           ? []
           : [
               {
@@ -163,6 +172,11 @@ export async function patchLesson(
       given = next;
     }
 
+    // Every refusal comes before this point: a refusal commits, so nothing may be written yet.
+    if (input.text) {
+      const { languageCode, ...text } = input.text;
+      await writeLessonText(transaction, id, languageCode, text);
+    }
     await transaction
       .update(lesson)
       .set({
@@ -186,22 +200,39 @@ export async function upsertLessonText(
     const existing = await lockEditableDraft(transaction, id);
     if (typeof existing === "string") return existing;
 
-    const [supported] = await transaction
-      .select({ code: language.code })
-      .from(language)
-      .where(eq(language.code, languageCode));
-    if (!supported) return "unsupported_language" as const;
+    if (!(await isSupportedLanguage(transaction, languageCode)))
+      return "unsupported_language" as const;
 
-    await transaction
-      .insert(lessonText)
-      .values({ lessonId: id, languageCode, ...input })
-      .onConflictDoUpdate({
-        target: [lessonText.lessonId, lessonText.languageCode],
-        set: input,
-      });
+    await writeLessonText(transaction, id, languageCode, input);
     await touchLesson(transaction, id, existing.updatedAt);
     return id;
   });
+}
+
+async function isSupportedLanguage(
+  transaction: DataTransaction,
+  languageCode: string,
+) {
+  const [supported] = await transaction
+    .select({ code: language.code })
+    .from(language)
+    .where(eq(language.code, languageCode));
+  return supported !== undefined;
+}
+
+async function writeLessonText(
+  transaction: DataTransaction,
+  lessonId: number,
+  languageCode: string,
+  text: UpsertLessonTextRequest,
+) {
+  await transaction
+    .insert(lessonText)
+    .values({ lessonId, languageCode, ...text })
+    .onConflictDoUpdate({
+      target: [lessonText.lessonId, lessonText.languageCode],
+      set: text,
+    });
 }
 
 export async function upsertLessonSource(

@@ -16,7 +16,17 @@ export type Field = {
   optional?: boolean;
 };
 
+// A field's own check: a message, or undefined when the value passes.
+export function fieldProblem({ label, kind, optional }: Field, value = "") {
+  if (optional && !value.trim()) return;
+  if (kind === "number" ? !/^[1-9]\d*$/.test(value) : !value.trim())
+    return kind === "number"
+      ? `${label} must be a positive whole number.`
+      : `${label} must not be blank.`;
+}
+
 // One explicitly saved form: client-side validation first, then backend field errors.
+// Without onSave it has no Save of its own, as when another form's Save sends its fields.
 export function EditForm({
   name,
   fields,
@@ -24,6 +34,7 @@ export function EditForm({
   onChange,
   onSave,
   validate,
+  errors,
   readOnly = false,
   submitLabel = "Save",
   status,
@@ -34,9 +45,11 @@ export function EditForm({
   fields: Field[];
   value: Values;
   onChange: (value: Values) => void;
-  onSave: (value: Values) => Promise<void>;
+  onSave?: (value: Values) => Promise<void>;
   // Cross-field checks, run after each field's own check; returns messages by field name.
   validate?: (value: Values) => FieldErrors;
+  // Messages from checks made elsewhere, shown on the fields this form has no message for.
+  errors?: FieldErrors;
   readOnly?: boolean;
   submitLabel?: string;
   status?: string;
@@ -54,14 +67,9 @@ export function EditForm({
   function check() {
     // A field's own check takes precedence over a cross-field message for that field.
     const problems: FieldErrors = { ...validate?.(value) };
-    for (const { name, label, kind, optional } of fields) {
-      const field = value[name] ?? "";
-      if (optional && !field.trim()) continue;
-      if (kind === "number" ? !/^[1-9]\d*$/.test(field) : !field.trim())
-        problems[name] =
-          kind === "number"
-            ? `${label} must be a positive whole number.`
-            : `${label} must not be blank.`;
+    for (const field of fields) {
+      const problem = fieldProblem(field, value[field.name]);
+      if (problem) problems[field.name] = problem;
     }
     setInvalid(problems);
     setError(null);
@@ -71,7 +79,7 @@ export function EditForm({
   async function save() {
     setBusy(true);
     try {
-      await onSave(value);
+      await onSave?.(value);
     } catch (caught) {
       setError(caught);
     } finally {
@@ -82,7 +90,7 @@ export function EditForm({
   async function submit(event: SubmitEvent) {
     event.preventDefault();
     // A form that asks first saves only through its confirmation, never on Enter.
-    if (!confirmMessage && check()) await save();
+    if (onSave && !confirmMessage && check()) await save();
   }
 
   return (
@@ -100,10 +108,12 @@ export function EditForm({
       {fields.map((field) => {
         const message =
           invalid[field.name] ??
+          // A field nested in the request, such as ["text", "title"], is named by its last segment.
           (error instanceof BffError
-            ? error.errors?.find((entry) => entry.path[0] === field.name)
+            ? error.errors?.find((entry) => entry.path.at(-1) === field.name)
                 ?.message
-            : undefined);
+            : undefined) ??
+          errors?.[field.name];
         const props = {
           id: `${id}-${field.name}-control`,
           value: value[field.name] ?? "",
@@ -133,6 +143,7 @@ export function EditForm({
         );
       })}
       {!readOnly &&
+        onSave &&
         (confirmMessage ? (
           // Checked again on confirming, in case a field changed while it asked.
           <ConfirmButton

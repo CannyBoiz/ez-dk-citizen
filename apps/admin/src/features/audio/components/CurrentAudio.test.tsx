@@ -12,6 +12,7 @@ import { expect, test, vi } from "vitest";
 
 import { App } from "../../../app/App";
 import {
+  chapterForm,
   chooseFile,
   connect,
   danishText,
@@ -24,7 +25,6 @@ import {
   settle,
   storageOutage,
   storedAudio,
-  structureForm,
   tab,
   textForm,
   thaiText,
@@ -112,13 +112,13 @@ test("an audio load error stays in the audio panel, keeps unsaved edits, and Rel
         : undefined,
   });
   await open(backend);
-  type("Chapter", "7", structureForm());
+  type("Chapter", "7", chapterForm());
 
   const alert = await within(audioPanel()).findByRole("alert");
   expect(alert.textContent).toContain("Storage is unavailable.");
   expect(alert.textContent).toContain("req-503-audio");
   expect(screen.getAllByRole("alert")).toHaveLength(1);
-  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
+  expect(within(chapterForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "7",
   );
@@ -129,7 +129,7 @@ test("an audio load error stays in the audio panel, keeps unsaved edits, and Rel
   );
   await within(audioPanel()).findByLabelText("Current audio player");
   expect(within(audioPanel()).queryByRole("alert")).toBeNull();
-  expect(within(structureForm()).getByLabelText("Chapter")).toHaveProperty(
+  expect(within(chapterForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "7",
   );
@@ -182,6 +182,15 @@ test("saving Lesson Text in a Language with current audio warns that the narrati
   await open(backend);
   await within(audioPanel()).findByText(/^Audio version 3/);
   const audioReads = audioRequests(backend).length;
+
+  // A Save that sends only the chapter changes no text, so it warns of nothing.
+  type("Chapter", "2", chapterForm());
+  fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(within(chapterForm()).getByText("Saved")).toBeTruthy(),
+  );
+  await settle();
+  expect(narrationWarning()).toBeNull();
 
   type("Content", "เนื้อหาใหม่", textForm());
   fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
@@ -416,13 +425,13 @@ test("a save answered after an upload completes checks what is known then", asyn
   await waitFor(() => expect(backend.uploads).toHaveLength(1));
   const releaseSave = hold(
     backend.network,
-    (request) => request.method === "PUT",
+    (request) => request.method === "PATCH",
     "response",
   );
   type("Content", "แก้ไขระหว่างอัปโหลด", textForm());
   fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
   await waitFor(() =>
-    expect(backend.requests.some((request) => request.method === "PUT")).toBe(
+    expect(backend.requests.some((request) => request.method === "PATCH")).toBe(
       true,
     ),
   );

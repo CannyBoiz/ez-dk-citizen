@@ -64,13 +64,27 @@ export const createLessonRequestSchema = z.strictObject({
 // major and resets patch (2.1 -> 3.0), a fix raises patch (2.1 -> 2.2).
 export const changeKindSchema = z.enum(["content", "fix"]);
 
+export const upsertLessonTextRequestSchema = z.strictObject({
+  title: nonBlankText,
+  content: nonBlankText,
+});
+
 export const patchLessonRequestSchema = z
   .strictObject({
     chapter: positiveInteger.optional(),
+    // One Language's Lesson Text, upserted with the rest of the command.
+    text: upsertLessonTextRequestSchema
+      .extend({ languageCode: z.string().min(1) })
+      .optional(),
     status: lessonStatusSchema.optional(),
     changeKind: changeKindSchema.optional(),
   })
-  .refine((value) => value.chapter !== undefined || value.status !== undefined)
+  .refine(
+    (value) =>
+      value.chapter !== undefined ||
+      value.text !== undefined ||
+      value.status !== undefined,
+  )
   .refine(
     (value) => value.changeKind === undefined || value.status === "PUBLISHED",
     {
@@ -78,11 +92,6 @@ export const patchLessonRequestSchema = z
       message: "A change kind is allowed only when publishing.",
     },
   );
-
-export const upsertLessonTextRequestSchema = z.strictObject({
-  title: nonBlankText,
-  content: nonBlankText,
-});
 
 export const upsertLessonSourceRequestSchema = z
   .strictObject({

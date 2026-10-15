@@ -17,14 +17,14 @@ See the spec sections "The Lesson command" and "Admin" (Editor), and user storie
 
 **Blocked by:** 02 — Give versions at publication
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] One Lesson command with `chapter` and `text` saves both atomically; with a blank title or content it saves neither and returns field errors
-- [ ] `text` on a non-Draft is `409 lesson_not_editable`; an unsupported Language is `422 unsupported_language`
-- [ ] The Draft editor shows chapter above the tabs with no Save of its own and an Unsaved marker when changed
-- [ ] Changing the chapter on the `th` tab, switching to `da`, and clicking Save stores the chapter and the Danish text, while unsaved Thai edits stay unsaved
-- [ ] Saving a tab with no Lesson Text and blank fields stores only the chapter
-- [ ] A rejected Save keeps the chapter and text edits and shows the errors on their fields
-- [ ] The leave warning names "Chapter" and each dirty "Lesson Text (code)"
-- [ ] The audio-mismatch warning, the upload gate, Lesson Source reference saves, and disabled Publish while dirty behave as before
-- [ ] Contract, Data Service (real PostgreSQL), and whole-app tests cover the above
+- [x] One Lesson command with `chapter` and `text` saves both atomically; with a blank title or content it saves neither and returns field errors
+- [x] `text` on a non-Draft is `409 lesson_not_editable`; an unsupported Language is `422 unsupported_language`
+- [x] The Draft editor shows chapter above the tabs with no Save of its own and an Unsaved marker when changed
+- [x] Changing the chapter on the `th` tab, switching to `da`, and clicking Save stores the chapter and the Danish text, while unsaved Thai edits stay unsaved
+- [x] Saving a tab with no Lesson Text and blank fields stores only the chapter
+- [x] A rejected Save keeps the chapter and text edits and shows the errors on their fields
+- [x] The leave warning names "Chapter" and each dirty "Lesson Text (code)"
+- [x] The audio-mismatch warning, the upload gate, Lesson Source reference saves, and disabled Publish while dirty behave as before
+- [x] Contract, Data Service (real PostgreSQL), and whole-app tests cover the above
