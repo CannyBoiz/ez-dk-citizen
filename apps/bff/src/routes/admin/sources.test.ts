@@ -143,3 +143,93 @@ test("BFF creates and lists canonical Sources through its client seam", async ()
   );
   assert.match(calls[1]!, /^list:[\da-f-]{36}$/);
 });
+
+test("BFF passes Source corrections and their refusals through its client seam", async () => {
+  const refusal = (status: number, code: string, detail: string) =>
+    new DataServiceError(
+      problemDetailsSchema.parse({
+        type: `https://ez-dk-citizen.invalid/problems/${code}`,
+        title: "Problem",
+        status,
+        detail,
+        instance: "/internal/sources/3",
+        code,
+        requestId: "downstream",
+      }),
+    );
+  const calls: unknown[] = [];
+  const client = createTestDataServiceClient({
+    async updateSource(id, input, requestId) {
+      calls.push({ id, input, requestId });
+      if (id === 404)
+        throw refusal(404, "source_not_found", "Source was not found.");
+      if (input.url?.endsWith("conflict"))
+        throw refusal(
+          409,
+          "source_url_conflict",
+          "A Source with this URL already exists.",
+        );
+      return {
+        id,
+        url: input.url ?? "https://example.com/kept",
+        publishedAt: null,
+      };
+    },
+  });
+  const app = createBffApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    dataServiceClient: client,
+  });
+  const update = (id: number | string, body: unknown) =>
+    app.request(`/api/admin/sources/${id}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer admin-token",
+        "Content-Type": "application/json",
+        "X-Request-ID": "request-7",
+      },
+      body: JSON.stringify(body),
+    });
+
+  assert.equal(
+    (await app.request("/api/admin/sources/3", { method: "PATCH" })).status,
+    401,
+  );
+  const invalid = await update(3, { url: "ftp://example.com" });
+  assert.equal(invalid.status, 422);
+  assert.deepEqual(
+    problemDetailsSchema
+      .parse(await invalid.json())
+      .errors?.map((entry) => entry.path),
+    [["url"]],
+  );
+  assert.equal((await update(3, {})).status, 422);
+  assert.equal((await update("abc", { publishedAt: null })).status, 422);
+  assert.deepEqual(calls, []);
+
+  const updated = await update(3, {
+    url: " https://example.com/fixed ",
+    publishedAt: null,
+  });
+  assert.equal(updated.status, 200);
+  assert.deepEqual(await updated.json(), {
+    id: 3,
+    url: "https://example.com/fixed",
+    publishedAt: null,
+  });
+  assert.deepEqual(calls, [
+    {
+      id: 3,
+      input: { url: "https://example.com/fixed", publishedAt: null },
+      requestId: "request-7",
+    },
+  ]);
+
+  const conflict = await update(3, { url: "https://example.com/conflict" });
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).code, "source_url_conflict");
+
+  const missing = await update(404, { publishedAt: null });
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).code, "source_not_found");
+});

@@ -1,6 +1,7 @@
 import {
   type CreateLessonRequest,
   createLessonRequestSchema,
+  type DeleteLessonResponse,
   lessonDetailSchema,
   lessonIdParamsSchema,
   lessonListResponseSchema,
@@ -18,9 +19,10 @@ import { Hono } from "hono";
 import type { BffAppOptions } from "../../app.js";
 import { mapDataServiceError } from "../../errors/downstream.js";
 import { problem } from "../../errors/problem-details.js";
+import { logStorageFailure } from "../../errors/storage.js";
 
 export function createAdminLessonRoutes(
-  options: Pick<BffAppOptions, "dataServiceClient">,
+  options: Pick<BffAppOptions, "dataServiceClient" | "storage">,
 ) {
   return new Hono<RequestIdEnvironment>()
     .post("/", validateJson(createLessonRequestSchema), async (c) => {
@@ -73,6 +75,49 @@ export function createAdminLessonRoutes(
         } catch (error) {
           return mapDataServiceError(c, error);
         }
+      },
+    )
+    .delete(
+      "/:lessonId",
+      validateRequest("param", lessonIdParamsSchema),
+      async (c) => {
+        const { lessonId: id } = c.req.valid("param") as { lessonId: number };
+        if (!options.dataServiceClient) {
+          return problem(
+            c,
+            502,
+            "data_service_unavailable",
+            "The Data Service is unavailable.",
+          );
+        }
+        if (!options.storage) {
+          return problem(
+            c,
+            502,
+            "storage_unavailable",
+            "Storage is unavailable.",
+          );
+        }
+
+        let deleted: DeleteLessonResponse;
+        try {
+          deleted = await options.dataServiceClient.deleteLesson(
+            id,
+            c.get("requestId"),
+          );
+        } catch (error) {
+          return mapDataServiceError(c, error);
+        }
+        // The Draft is already gone, so a storage failure only leaves its object behind
+        // under the DELETED Media Asset; the keys never leave the BFF.
+        for (const asset of deleted.deletedMediaAssets) {
+          try {
+            await options.storage.deleteObject(asset.objectKey);
+          } catch (error) {
+            logStorageFailure(c.get("requestId"), "delete", asset.id, error);
+          }
+        }
+        return c.body(null, 204);
       },
     )
     .put(

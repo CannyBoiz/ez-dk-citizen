@@ -33,7 +33,9 @@ export const lesson = pgTable(
   {
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     chapter: integer("chapter").notNull(),
-    version: integer("version").notNull(),
+    // The major and patch parts of a `major.patch` version, given at publication.
+    version: integer("version"),
+    versionPatch: integer("version_patch"),
     status: lessonStatus("status").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -45,7 +47,21 @@ export const lesson = pgTable(
   (table) => [
     check("lesson_chapter_positive", sql`${table.chapter} > 0`),
     check("lesson_version_positive", sql`${table.version} > 0`),
-    unique("lesson_chapter_version_unique").on(table.chapter, table.version),
+    check("lesson_version_patch_non_negative", sql`${table.versionPatch} >= 0`),
+    check(
+      "lesson_version_whole",
+      sql`(${table.version} is null) = (${table.versionPatch} is null)`,
+    ),
+    check(
+      "lesson_version_absent_exactly_on_draft",
+      sql`(${table.version} is null) = (${table.status} = 'DRAFT')`,
+    ),
+    // Drafts never collide: their absent parts are distinct.
+    unique("lesson_chapter_version_unique").on(
+      table.chapter,
+      table.version,
+      table.versionPatch,
+    ),
     uniqueIndex("lesson_one_published_per_chapter")
       .on(table.chapter)
       .where(sql`${table.status} = 'PUBLISHED'`),

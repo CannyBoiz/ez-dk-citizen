@@ -5,7 +5,7 @@ import { expect, test } from "vitest";
 import { App } from "../../../app/App";
 import {
   catalogue,
-  chapterVersions,
+  chapterStatuses,
   connect,
   fakeBackend,
   fakeNetwork,
@@ -18,7 +18,7 @@ import {
   validToken,
 } from "../../../shared/test/support";
 
-test("the catalogue lists every Lesson with chapter, version, status, and Languages", async () => {
+test("the catalogue lists every Lesson with chapter, version or Draft date, status, and Languages", async () => {
   render(
     <App
       network={
@@ -30,10 +30,20 @@ test("the catalogue lists every Lesson with chapter, version, status, and Langua
 
   await screen.findByRole("table");
   expect(rows()).toEqual([
-    ["1", "1", "Published", "da, th"],
-    ["1", "2", "Draft", "th"],
-    ["2", "1", "Draft", "None"],
-    ["2", "2", "Archived", "en"],
+    ["1", "1.0", "Published", "da, th"],
+    ["1", "Draft, created 11 Oct 2026", "Draft", "th"],
+    ["2", "Draft, created 9 Oct 2026", "Draft", "None"],
+    ["2", "2.1", "Archived", "en"],
+  ]);
+  expect(
+    screen
+      .getAllByRole("button", { name: /^Open / })
+      .map((button) => button.getAttribute("aria-label")),
+  ).toEqual([
+    "Open Chapter 1, version 1.0",
+    "Open Chapter 1 · Draft, created 11 Oct 2026",
+    "Open Chapter 2 · Draft, created 9 Oct 2026",
+    "Open Chapter 2, version 2.1",
   ]);
 });
 
@@ -50,15 +60,15 @@ test("chapter and status filters combine in the browser", async () => {
   fireEvent.change(screen.getByLabelText("Chapter"), {
     target: { value: "1" },
   });
-  expect(chapterVersions()).toEqual(["1.1", "1.2"]);
+  expect(chapterStatuses()).toEqual(["1 Published", "1 Draft"]);
 
   fireEvent.change(screen.getByLabelText("Status"), {
     target: { value: "DRAFT" },
   });
-  expect(chapterVersions()).toEqual(["1.2"]);
+  expect(chapterStatuses()).toEqual(["1 Draft"]);
 
   fireEvent.change(screen.getByLabelText("Chapter"), { target: { value: "" } });
-  expect(chapterVersions()).toEqual(["1.2", "2.1"]);
+  expect(chapterStatuses()).toEqual(["1 Draft", "2 Draft"]);
 
   fireEvent.change(screen.getByLabelText("Chapter"), {
     target: { value: "2" },
@@ -90,7 +100,7 @@ test("a chapter filter whose chapter disappears on Refresh falls back to all cha
 
   await screen.findByText(/2 Lessons/);
   expect(screen.getByLabelText("Chapter")).toHaveProperty("value", "");
-  expect(chapterVersions()).toEqual(["1.1", "1.2"]);
+  expect(chapterStatuses()).toEqual(["1 Published", "1 Draft"]);
 });
 
 test("filters are kept when returning from a Lesson", async () => {
@@ -116,15 +126,19 @@ test("filters are kept when returning from a Lesson", async () => {
   });
 
   fireEvent.click(
-    screen.getByRole("button", { name: "Open chapter 1, version 2" }),
+    screen.getByRole("button", {
+      name: "Open Chapter 1 · Draft, created 11 Oct 2026",
+    }),
   );
-  await screen.findByRole("heading", { name: "Chapter 1, version 2" });
+  await screen.findByRole("heading", {
+    name: "Chapter 1 · Draft, created 11 Oct 2026",
+  });
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
 
   await screen.findByRole("table");
   expect(screen.getByLabelText("Chapter")).toHaveProperty("value", "1");
   expect(screen.getByLabelText("Status")).toHaveProperty("value", "DRAFT");
-  expect(chapterVersions()).toEqual(["1.2"]);
+  expect(chapterStatuses()).toEqual(["1 Draft"]);
 });
 
 test("an empty catalogue says so", async () => {
@@ -164,10 +178,10 @@ test("opening a Lesson shows its structure, Lesson Texts, and Lesson Sources, an
   await screen.findByRole("table");
 
   fireEvent.click(
-    screen.getByRole("button", { name: "Open chapter 1, version 1" }),
+    screen.getByRole("button", { name: "Open Chapter 1, version 1.0" }),
   );
 
-  await screen.findByRole("heading", { name: "Chapter 1, version 1" });
+  await screen.findByRole("heading", { name: "Chapter 1, version 1.0" });
   expect(requests).toContainEqual(
     expect.objectContaining({ method: "GET", path: "/api/admin/lessons/1" }),
   );
@@ -212,7 +226,7 @@ test("opening a Lesson shows its structure, Lesson Texts, and Lesson Sources, an
     method: "GET",
     path: "/api/admin/lessons",
   });
-  expect(rows()).toEqual([["1", "1", "Archived", "da, th"]]);
+  expect(rows()).toEqual([["1", "1.0", "Archived", "da, th"]]);
 });
 
 test("a Data Service outage shows the error with its request ID and can be retried", async () => {
@@ -247,26 +261,39 @@ test("a Data Service outage shows the error with its request ID and can be retri
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
-test("creating a Draft opens its editor and the Lesson appears in the catalogue", async () => {
+test("creating a Draft asks only for the chapter, opens its editor, and the Lesson appears in the catalogue", async () => {
   const { network, requests } = fakeBackend([lessonDetail(1)]);
   render(<App network={network} />);
   await connect(validToken);
   await screen.findByRole("table");
+  expect(
+    within(screen.getByRole("form", { name: "New Draft Lesson" }))
+      .getAllByRole("spinbutton")
+      .map((field) => field.closest("label")?.textContent),
+  ).toEqual(["New Draft chapter"]);
 
   type("New Draft chapter", "3");
-  type("New Draft version", "2");
   fireEvent.click(screen.getByRole("button", { name: "Create Draft" }));
 
-  await screen.findByRole("heading", { name: "Chapter 3, version 2" });
-  expect(requests.find((request) => request.method === "POST")).toMatchObject({
+  await screen.findByRole("heading", {
+    name: "Chapter 3 · Draft, created 11 Oct 2026",
+  });
+  expect(requests.find((request) => request.method === "POST")).toEqual({
+    method: "POST",
     path: "/api/admin/lessons",
-    body: { chapter: 3, version: 2 },
+    token: validToken,
+    body: { chapter: 3 },
   });
   expect(screen.getByText("Draft")).toBeTruthy();
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
   await screen.findByRole("table");
-  expect(rows()).toContainEqual(["3", "2", "Draft", "None"]);
+  expect(rows()).toContainEqual([
+    "3",
+    "Draft, created 11 Oct 2026",
+    "Draft",
+    "None",
+  ]);
 });
 
 test("New Draft values are kept locally across a closed tab and cleared once the Draft is created", async () => {
@@ -275,7 +302,6 @@ test("New Draft values are kept locally across a closed tab and cleared once the
   await connect(validToken);
   await screen.findByRole("table");
   type("New Draft chapter", "4");
-  type("New Draft version", "1");
   unmount();
 
   render(<App network={network} />);
@@ -285,13 +311,11 @@ test("New Draft values are kept locally across a closed tab and cleared once the
     "value",
     "4",
   );
-  expect(screen.getByLabelText("New Draft version")).toHaveProperty(
-    "value",
-    "1",
-  );
   expect(JSON.stringify(localStorage)).not.toContain(validToken);
 
   fireEvent.click(screen.getByRole("button", { name: "Create Draft" }));
-  await screen.findByRole("heading", { name: "Chapter 4, version 1" });
+  await screen.findByRole("heading", {
+    name: "Chapter 4 · Draft, created 11 Oct 2026",
+  });
   expect(localStorage.length).toBe(0);
 });

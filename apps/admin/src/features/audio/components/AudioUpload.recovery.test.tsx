@@ -9,12 +9,14 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 
 import { App } from "../../../app/App";
 import type { BffRequest, BffResponse } from "../../../shared/lib/network";
 import {
+  answer,
   chooseFile,
+  confirmation,
   connect,
   fakeBackend,
   firstOnly,
@@ -64,7 +66,7 @@ async function open(
   );
   render(<App network={backend.network} />);
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
   return {
     ...backend,
     intents: () =>
@@ -307,46 +309,50 @@ test("a 401 during finalization prompts for the token, keeps the recovery, and R
   expect(backend.uploads).toHaveLength(1);
 });
 
-test("Publish and Archive wait while finalizing, including a retry, and return once the attempt settles", async () => {
-  // Cited, so the Draft is otherwise ready to publish.
-  const backend = await open(failFirst(isCompletion, storageOutage()), {
-    lessonSources: [
-      { ...lawSource, pageFrom: null, pageTo: null, sectionReference: null },
-    ],
-  });
-  const lifecycle = () =>
-    ["Publish", "Archive"].map(
-      (name) =>
-        (
-          within(screen.getByRole("region", { name: "Publication" })).getByRole(
-            "button",
-            { name },
-          ) as HTMLButtonElement
-        ).disabled,
-    );
-  expect(lifecycle()).toEqual([false, false]);
+// Publish on a Draft, and Archive on a Published Lesson, which still takes audio.
+test.each([
+  ["Publish", "DRAFT"],
+  ["Archive", "PUBLISHED"],
+] as const)(
+  "%s waits while finalizing, including a retry, and returns once the attempt settles",
+  async (action, status) => {
+    // Cited, so the Draft is otherwise ready to publish.
+    const backend = await open(failFirst(isCompletion, storageOutage()), {
+      status,
+      lessonSources: [
+        { ...lawSource, pageFrom: null, pageTo: null, sectionReference: null },
+      ],
+    });
+    const waiting = () =>
+      (
+        within(screen.getByRole("region", { name: "Publication" })).getByRole(
+          "button",
+          { name: action },
+        ) as HTMLButtonElement
+      ).disabled;
+    expect(waiting()).toBe(false);
 
-  await startUpload(backend);
-  expect(lifecycle()).toEqual([true, true]);
-  const releaseFirst = hold(backend.network, isCompletion);
-  backend.uploads[0]!.finish(200);
-  await within(uploadPanel()).findByText("Finalizing the upload…");
-  expect(lifecycle()).toEqual([true, true]);
-  releaseFirst();
-  expect((await alert()).textContent).toContain(retryable);
-  expect(lifecycle()).toEqual([false, false]);
+    await startUpload(backend);
+    expect(waiting()).toBe(true);
+    const releaseFirst = hold(backend.network, isCompletion);
+    backend.uploads[0]!.finish(200);
+    await within(uploadPanel()).findByText("Finalizing the upload…");
+    expect(waiting()).toBe(true);
+    releaseFirst();
+    expect((await alert()).textContent).toContain(retryable);
+    expect(waiting()).toBe(false);
 
-  const releaseRetry = hold(backend.network, isCompletion);
-  fireEvent.click(button("Retry finalization")!);
-  await within(uploadPanel()).findByText("Finalizing the upload…");
-  expect(lifecycle()).toEqual([true, true]);
-  releaseRetry();
-  await within(uploadPanel()).findByText(completeMessage);
-  expect(lifecycle()).toEqual([false, false]);
-});
+    const releaseRetry = hold(backend.network, isCompletion);
+    fireEvent.click(button("Retry finalization")!);
+    await within(uploadPanel()).findByText("Finalizing the upload…");
+    expect(waiting()).toBe(true);
+    releaseRetry();
+    await within(uploadPanel()).findByText(completeMessage);
+    expect(waiting()).toBe(false);
+  },
+);
 
 test("leaving warns during an upload and while recovery is possible, and confirming discards the recovery", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   const backend = await open();
   expect(unloadBlocked()).toBe(false);
 
@@ -356,26 +362,24 @@ test("leaving warns during an upload and while recovery is possible, and confirm
   expect((await alert()).textContent).toContain(uncertain);
   expect(unloadBlocked()).toBe(true);
 
-  fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
-  const back = screen.getByRole("button", { name: "Back to catalogue" });
-  fireEvent.click(back);
-  expect(confirm).toHaveBeenCalledTimes(2);
-  for (const [message] of confirm.mock.calls)
-    expect(message).toMatch(/recovery will be discarded/);
+  for (const leave of ["Disconnect", "Back to catalogue"]) {
+    fireEvent.click(screen.getByRole("button", { name: leave }));
+    expect(confirmation().textContent).toMatch(/recovery will be discarded/);
+    answer("Cancel");
+  }
   expect(button("Check upload / Retry finalization")).not.toBeNull();
 
-  confirm.mockReturnValue(true);
-  fireEvent.click(back);
+  fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+  answer("Leave");
   await screen.findByRole("table");
   expect(unloadBlocked()).toBe(false);
-  await openLesson(1, 1);
+  await openLesson();
   expect(within(uploadPanel()).queryByRole("alert")).toBeNull();
   expect(backend.completions()).toEqual([]);
   expect(backend.intents()).toHaveLength(1);
 });
 
 test("a terminal failure leaves nothing to recover, so leaving needs no warning", async () => {
-  const confirm = vi.spyOn(window, "confirm");
   const backend = await open(
     failFirst(
       isCompletion,
@@ -393,8 +397,8 @@ test("a terminal failure leaves nothing to recover, so leaving needs no warning"
   await waitFor(() => expect(unloadBlocked()).toBe(false));
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
+  expect(screen.queryByRole("alertdialog")).toBeNull();
   await screen.findByRole("table");
-  expect(confirm).not.toHaveBeenCalled();
 });
 
 test("a transient failure while checking the upload keeps the check on offer", async () => {

@@ -13,13 +13,17 @@ import {
   lessonDetailSchema,
   lessonIdParamsSchema,
   lessonReadQuerySchema,
+  lessonSummarySchema,
   livenessResponseSchema,
   mediaAssetIdParamsSchema,
   mobileLessonDetailSchema,
+  mobileLessonSummarySchema,
   patchLessonRequestSchema,
   problemDetailsSchema,
   publishedLessonDetailSchema,
   readinessResponseSchema,
+  sourceIdParamsSchema,
+  updateSourceRequestSchema,
   uploadIntentResponseSchema,
   upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
@@ -173,6 +177,7 @@ test("Published Lesson audio stays private until the mobile projection", () => {
     id: 1,
     chapter: 1,
     version: 1,
+    versionPatch: 0,
     status: "PUBLISHED" as const,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -198,6 +203,7 @@ test("Published Lesson audio stays private until the mobile projection", () => {
       id: 1,
       chapter: 1,
       version: 1,
+      versionPatch: 0,
       languageCode: "th",
       title: "ไทย",
       content: "เนื้อหา",
@@ -211,6 +217,7 @@ test("Published Lesson audio stays private until the mobile projection", () => {
       id: 1,
       chapter: 1,
       version: 1,
+      versionPatch: 0,
       languageCode: "th",
       title: "ไทย",
       content: "เนื้อหา",
@@ -230,6 +237,7 @@ test("Published Lesson audio stays private until the mobile projection", () => {
       id: 1,
       chapter: 1,
       version: 1,
+      versionPatch: 0,
       languageCode: "th",
       title: "ไทย",
       content: "เนื้อหา",
@@ -304,28 +312,22 @@ test("admin current audio keeps storage identity internal and requires fresh pla
 });
 
 test("Lesson transport contracts are strict and keep database fields private", () => {
-  assert.deepEqual(
+  assert.deepEqual(createLessonRequestSchema.parse({ chapter: 1 }), {
+    chapter: 1,
+  });
+  assert.throws(() =>
     createLessonRequestSchema.parse({ chapter: 1, version: 2 }),
-    {
-      chapter: 1,
-      version: 2,
-    },
   );
   assert.throws(() =>
-    createLessonRequestSchema.parse({
-      chapter: 1,
-      version: 2,
-      status: "DRAFT",
-    }),
+    createLessonRequestSchema.parse({ chapter: 1, status: "DRAFT" }),
   );
-  assert.throws(() =>
-    createLessonRequestSchema.parse({ chapter: 0, version: 1 }),
-  );
+  assert.throws(() => createLessonRequestSchema.parse({ chapter: 0 }));
   assert.throws(() =>
     lessonDetailSchema.parse({
       id: 1,
       chapter: 1,
-      version: 1,
+      version: null,
+      versionPatch: null,
       status: "DRAFT",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -333,6 +335,65 @@ test("Lesson transport contracts are strict and keep database fields private", (
       lessonTexts: [],
       lessonSources: [],
       databaseRow: true,
+    }),
+  );
+});
+
+test("Lesson versions are a positive major and a non-negative patch, both absent on Drafts", () => {
+  const summary = {
+    id: 1,
+    chapter: 1,
+    status: "PUBLISHED" as const,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    availableLanguageCodes: [],
+  };
+  const detail = { ...summary, lessonTexts: [], lessonSources: [] };
+  for (const schema of [lessonSummarySchema, lessonDetailSchema]) {
+    const lesson = schema === lessonSummarySchema ? summary : detail;
+    for (const [version, versionPatch] of [
+      [null, null],
+      [1, 0],
+      [2, 1],
+      [1, 10],
+    ]) {
+      assert.deepEqual(schema.parse({ ...lesson, version, versionPatch }), {
+        ...lesson,
+        version,
+        versionPatch,
+      });
+    }
+    for (const [version, versionPatch] of [
+      [1, null],
+      [null, 0],
+      [0, 0],
+      [1, -1],
+      [1, 0.5],
+    ]) {
+      assert.throws(
+        () => schema.parse({ ...lesson, version, versionPatch }),
+        undefined,
+        `${version}.${versionPatch} was accepted`,
+      );
+    }
+    assert.throws(() => schema.parse({ ...lesson, version: 1 }));
+  }
+
+  const mobile = { id: 1, chapter: 1, languageCode: "th", title: "ไทย" };
+  assert.deepEqual(
+    mobileLessonSummarySchema.parse({ ...mobile, version: 2, versionPatch: 1 }),
+    { ...mobile, version: 2, versionPatch: 1 },
+  );
+  for (const versionPatch of [null, undefined, -1]) {
+    assert.throws(() =>
+      mobileLessonSummarySchema.parse({ ...mobile, version: 2, versionPatch }),
+    );
+  }
+  assert.throws(() =>
+    mobileLessonSummarySchema.parse({
+      ...mobile,
+      version: null,
+      versionPatch: null,
     }),
   );
 });
@@ -369,9 +430,65 @@ test("Lesson patches are strict and non-empty", () => {
   assert.throws(() => patchLessonRequestSchema.parse({}));
   assert.throws(() => patchLessonRequestSchema.parse({ chapter: undefined }));
   assert.throws(() => patchLessonRequestSchema.parse({ chapter: 0 }));
+  assert.throws(() => patchLessonRequestSchema.parse({ version: 2 }));
   assert.throws(() =>
     patchLessonRequestSchema.parse({ status: "DRAFT", extra: true }),
   );
+});
+
+test("a Lesson command carries one Language's whole, non-blank Lesson Text", () => {
+  const text = { languageCode: "da", title: "Titel", content: "Indhold" };
+  assert.deepEqual(patchLessonRequestSchema.parse({ text }), { text });
+  assert.deepEqual(patchLessonRequestSchema.parse({ chapter: 2, text }), {
+    chapter: 2,
+    text,
+  });
+  for (const field of ["title", "content"] as const) {
+    const result = patchLessonRequestSchema.safeParse({
+      chapter: 2,
+      text: { ...text, [field]: " " },
+    });
+    assert.deepEqual(
+      result.error?.issues.map((issue) => issue.path),
+      [["text", field]],
+    );
+  }
+  for (const invalid of [
+    { languageCode: "da", title: "Titel" },
+    { ...text, languageCode: "" },
+    { ...text, extra: true },
+  ]) {
+    assert.throws(() => patchLessonRequestSchema.parse({ text: invalid }));
+  }
+});
+
+test("only a publication carries a change kind, and only content or fix", () => {
+  for (const changeKind of ["content", "fix"] as const) {
+    assert.deepEqual(
+      patchLessonRequestSchema.parse({ status: "PUBLISHED", changeKind }),
+      { status: "PUBLISHED", changeKind },
+    );
+  }
+  assert.throws(() =>
+    patchLessonRequestSchema.parse({
+      status: "PUBLISHED",
+      changeKind: "minor",
+    }),
+  );
+  for (const body of [
+    { changeKind: "fix" },
+    { chapter: 2, changeKind: "content" },
+    { status: "ARCHIVED", changeKind: "fix" },
+    { status: "DRAFT", changeKind: "content" },
+  ]) {
+    const result = patchLessonRequestSchema.safeParse(body);
+    assert.equal(result.success, false, JSON.stringify(body));
+    if (body.chapter === undefined && body.status === undefined) continue;
+    assert.deepEqual(
+      result.error?.issues.map((issue) => issue.path),
+      [["changeKind"]],
+    );
+  }
 });
 
 test("Source contracts accept only trimmed HTTP URLs and offset timestamps", () => {
@@ -414,6 +531,41 @@ test("Source contracts accept only trimmed HTTP URLs and offset timestamps", () 
       extra: true,
     }),
   );
+});
+
+test("Source updates change the URL, the publication date, or both, validated as on creation", () => {
+  assert.deepEqual(
+    updateSourceRequestSchema.parse({ url: " https://example.com/moved " }),
+    { url: "https://example.com/moved" },
+  );
+  assert.deepEqual(updateSourceRequestSchema.parse({ publishedAt: null }), {
+    publishedAt: null,
+  });
+  assert.deepEqual(
+    updateSourceRequestSchema.parse({
+      url: "http://example.com",
+      publishedAt: "2026-01-01T02:00:00+02:00",
+    }),
+    { url: "http://example.com", publishedAt: "2026-01-01T02:00:00+02:00" },
+  );
+  for (const body of [
+    {},
+    { url: "ftp://example.com" },
+    { url: "/source" },
+    { url: null },
+    { publishedAt: "2026-01-01T00:00:00" },
+    { url: "https://example.com", extra: true },
+  ]) {
+    assert.equal(
+      updateSourceRequestSchema.safeParse(body).success,
+      false,
+      JSON.stringify(body),
+    );
+  }
+  assert.deepEqual(sourceIdParamsSchema.parse({ sourceId: "7" }), {
+    sourceId: 7,
+  });
+  assert.throws(() => sourceIdParamsSchema.parse({ sourceId: "0" }));
 });
 
 test("Lesson Source upserts allow absent locators but reject invalid pages", () => {

@@ -14,6 +14,14 @@ import {
 
 export type LessonReadFilters = { language?: string; status?: LessonStatus };
 
+// By chapter, then the newest first: Drafts, which have no version yet, then versions downwards.
+const catalogueOrder = [
+  asc(lesson.chapter),
+  desc(lesson.version),
+  desc(lesson.versionPatch),
+  desc(lesson.id),
+];
+
 export async function listLessons(
   database: DataDatabase,
   { language: languageCode, status: filteredStatus }: LessonReadFilters,
@@ -28,7 +36,7 @@ export async function listLessons(
       .select({ id: lesson.id })
       .from(lesson)
       .where(filteredStatus ? eq(lesson.status, filteredStatus) : undefined)
-      .orderBy(asc(lesson.chapter), desc(lesson.version));
+      .orderBy(...catalogueOrder);
     const items = (
       await Promise.all(rows.map(({ id }) => loadLessonDetail(database, id)))
     )
@@ -42,7 +50,7 @@ export async function listLessons(
     .select()
     .from(lesson)
     .where(filteredStatus ? eq(lesson.status, filteredStatus) : undefined)
-    .orderBy(asc(lesson.chapter), desc(lesson.version));
+    .orderBy(...catalogueOrder);
   const items = await Promise.all(
     rows.map(async ({ id }) => {
       const detail = await loadLessonDetail(database, id);
@@ -175,6 +183,7 @@ export async function loadLessonDetail(database: DataDatabase, id: number) {
     id: row.id,
     chapter: row.chapter,
     version: row.version,
+    versionPatch: row.versionPatch,
     status: row.status,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

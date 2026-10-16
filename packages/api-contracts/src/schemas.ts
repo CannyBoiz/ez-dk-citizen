@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const positiveInteger = z.number().int().positive();
+const nonNegativeInteger = z.number().int().nonnegative();
 const safePositiveInteger = positiveInteger.refine(Number.isSafeInteger);
 const positiveId = z
   .string()
@@ -37,6 +38,7 @@ export const lessonIdParamsSchema = z.strictObject({ lessonId: positiveId });
 export const mediaAssetIdParamsSchema = z.strictObject({
   mediaAssetId: positiveId,
 });
+export const sourceIdParamsSchema = z.strictObject({ sourceId: positiveId });
 export const lessonSourceParamsSchema = z.strictObject({
   lessonId: positiveId,
   sourceId: positiveId,
@@ -56,26 +58,40 @@ export const lessonReadQuerySchema = languageQuerySchema.extend({
 
 export const createLessonRequestSchema = z.strictObject({
   chapter: positiveInteger,
-  version: positiveInteger,
 });
 
-export const patchLessonRequestSchema = z
-  .strictObject({
-    chapter: positiveInteger.optional(),
-    version: positiveInteger.optional(),
-    status: lessonStatusSchema.optional(),
-  })
-  .refine(
-    (value) =>
-      value.chapter !== undefined ||
-      value.version !== undefined ||
-      value.status !== undefined,
-  );
+// How a later publication raises the chapter's highest version: a content change raises
+// major and resets patch (2.1 -> 3.0), a fix raises patch (2.1 -> 2.2).
+export const changeKindSchema = z.enum(["content", "fix"]);
 
 export const upsertLessonTextRequestSchema = z.strictObject({
   title: nonBlankText,
   content: nonBlankText,
 });
+
+export const patchLessonRequestSchema = z
+  .strictObject({
+    chapter: positiveInteger.optional(),
+    // One Language's Lesson Text, upserted with the rest of the command.
+    text: upsertLessonTextRequestSchema
+      .extend({ languageCode: z.string().min(1) })
+      .optional(),
+    status: lessonStatusSchema.optional(),
+    changeKind: changeKindSchema.optional(),
+  })
+  .refine(
+    (value) =>
+      value.chapter !== undefined ||
+      value.text !== undefined ||
+      value.status !== undefined,
+  )
+  .refine(
+    (value) => value.changeKind === undefined || value.status === "PUBLISHED",
+    {
+      path: ["changeKind"],
+      message: "A change kind is allowed only when publishing.",
+    },
+  );
 
 export const upsertLessonSourceRequestSchema = z
   .strictObject({
@@ -95,6 +111,16 @@ export const createSourceRequestSchema = z.strictObject({
   publishedAt: timestamp.nullable(),
 });
 
+// A correction to a canonical Source: its URL, its publication date (null means unknown), or both.
+export const updateSourceRequestSchema = z
+  .strictObject({
+    url: sourceUrl.optional(),
+    publishedAt: timestamp.nullable().optional(),
+  })
+  .refine(
+    (value) => value.url !== undefined || value.publishedAt !== undefined,
+  );
+
 export const sourceResponseSchema = z.strictObject({
   id: positiveInteger,
   url: sourceUrl,
@@ -105,15 +131,33 @@ export const sourceListResponseSchema = z.strictObject({
   items: z.array(sourceResponseSchema),
 });
 
-export const lessonSummarySchema = z.strictObject({
+// A Lesson's `major.patch` version, given when it is published: both parts or neither.
+const lessonVersionShape = {
+  version: positiveInteger.nullable(),
+  versionPatch: nonNegativeInteger.nullable(),
+};
+const hasWholeVersion = (value: {
+  version: number | null;
+  versionPatch: number | null;
+}) => (value.version === null) === (value.versionPatch === null);
+const wholeVersionIssue = {
+  path: ["versionPatch"],
+  message: "A version has both parts or neither.",
+};
+
+const lessonSummaryShape = {
   id: positiveInteger,
   chapter: positiveInteger,
-  version: positiveInteger,
+  ...lessonVersionShape,
   status: lessonStatusSchema,
   createdAt: timestamp,
   updatedAt: timestamp,
   availableLanguageCodes: z.array(z.string().min(1)),
-});
+};
+
+export const lessonSummarySchema = z
+  .strictObject(lessonSummaryShape)
+  .refine(hasWholeVersion, wholeVersionIssue);
 
 export const lessonTextResponseSchema = z.strictObject({
   languageCode: z.string().min(1),
@@ -130,11 +174,15 @@ export const lessonSourceResponseSchema = z.strictObject({
   sectionReference: z.string().nullable(),
 });
 
-export const lessonDetailSchema = z.strictObject({
-  ...lessonSummarySchema.shape,
+const lessonDetailShape = {
+  ...lessonSummaryShape,
   lessonTexts: z.array(lessonTextResponseSchema),
   lessonSources: z.array(lessonSourceResponseSchema),
-});
+};
+
+export const lessonDetailSchema = z
+  .strictObject(lessonDetailShape)
+  .refine(hasWholeVersion, wholeVersionIssue);
 
 export const lessonListResponseSchema = z.strictObject({
   items: z.array(lessonSummarySchema),
@@ -144,10 +192,12 @@ export const lessonDetailListResponseSchema = z.strictObject({
   items: z.array(lessonDetailSchema),
 });
 
+// Mobile lists Published Lessons only, so the version is always whole.
 export const mobileLessonSummarySchema = z.strictObject({
   id: positiveInteger,
   chapter: positiveInteger,
   version: positiveInteger,
+  versionPatch: nonNegativeInteger,
   languageCode: z.string().min(1),
   title: nonBlankText,
 });
@@ -278,13 +328,23 @@ export const adminLessonAudioResponseSchema = z.strictObject({
 });
 
 export const publishedLessonDetailSchema = z.strictObject({
-  ...lessonDetailSchema.shape,
+  ...lessonDetailShape,
+  version: positiveInteger,
+  versionPatch: nonNegativeInteger,
   currentAudio: publishedLessonAudioSchema.nullable(),
 });
 
 export const completeMediaAssetResponseSchema = z.strictObject({
   mediaAsset: completedMediaAssetResponseSchema,
   lessonAudio: lessonAudioResponseSchema,
+});
+
+// The Data Service's answer to deleting a Draft: the Media Assets it marked DELETED, whose
+// objects the BFF deletes. The BFF answers its own client with no body.
+export const deleteLessonResponseSchema = z.strictObject({
+  deletedMediaAssets: z.array(
+    z.strictObject({ id: safePositiveInteger, objectKey: audioObjectKey }),
+  ),
 });
 
 export const problemDetailsSchema = z.strictObject({
@@ -309,6 +369,7 @@ export type LivenessResponse = z.infer<typeof livenessResponseSchema>;
 export type ReadinessResponse = z.infer<typeof readinessResponseSchema>;
 export type CreateLessonRequest = z.infer<typeof createLessonRequestSchema>;
 export type PatchLessonRequest = z.infer<typeof patchLessonRequestSchema>;
+export type ChangeKind = z.infer<typeof changeKindSchema>;
 export type UpsertLessonTextRequest = z.infer<
   typeof upsertLessonTextRequestSchema
 >;
@@ -316,6 +377,7 @@ export type UpsertLessonSourceRequest = z.infer<
   typeof upsertLessonSourceRequestSchema
 >;
 export type CreateSourceRequest = z.infer<typeof createSourceRequestSchema>;
+export type UpdateSourceRequest = z.infer<typeof updateSourceRequestSchema>;
 export type SourceResponse = z.infer<typeof sourceResponseSchema>;
 export type SourceListResponse = z.infer<typeof sourceListResponseSchema>;
 export type LessonStatus = z.infer<typeof lessonStatusSchema>;
@@ -353,3 +415,4 @@ export type UploadIntentResponse = z.infer<typeof uploadIntentResponseSchema>;
 export type CompleteMediaAssetResponse = z.infer<
   typeof completeMediaAssetResponseSchema
 >;
+export type DeleteLessonResponse = z.infer<typeof deleteLessonResponseSchema>;

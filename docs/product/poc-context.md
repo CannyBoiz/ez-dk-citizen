@@ -96,6 +96,23 @@ Contains structural data such as chapter, version, status, and timestamps.
 
 A Lesson is not translated text and is not an audio file.
 
+A chapter may have many Lessons but at most one Published Lesson. A Lesson's
+**version** is given when it is published and is written `major.patch`, for
+example 2.1. A chapter's first publication is 1.0. After that, the admin names
+the kind of change, counted from the chapter's highest Published or Archived
+version: a **content change** raises major and resets patch (2.1 → 3.0), and a
+**fix** raises patch (2.1 → 2.2). The kind is the admin's judgement and is not
+checked. A Draft has no version yet. The version is for the admin; the learner
+is shown when a Lesson was last updated instead.
+
+A **new version** is a Draft Lesson of the same chapter, created from a
+Published or Archived Lesson by copying its Lesson Texts, Lesson Sources, and
+current Lesson Audio.
+
+A **replacement** archives a chapter's Published version and publishes another
+version of the chapter in one step, so the chapter is never left without a
+Published version.
+
 ## Lesson Text
 
 A localized textual representation of a Lesson in one Language.
@@ -131,9 +148,13 @@ A canonical external study source, for example an official PDF or government web
 
 A Source may support multiple Lessons.
 
-For the PoC, a Source is identified by its canonical URL. The URL is a trimmed,
-absolute HTTP(S) URL and must be unique by exact stored value. Recognizing two
-textually different URLs as the same Source remains an admin responsibility.
+A Source is the external document itself, not its address. Its canonical URL
+is a trimmed, absolute HTTP(S) URL and must be unique by exact stored value.
+Correcting the URL or publication date corrects the citation in every Lesson
+that cites the Source, including Published and Archived Lessons: Lesson
+immutability covers which Sources a Lesson cites and its page and section
+references, not the Source's own details. Recognizing two textually different
+URLs as the same Source remains an admin responsibility.
 
 Do not duplicate the same canonical Source row for each Lesson.
 
@@ -222,7 +243,7 @@ Lesson M:N Source
 Lesson   1 ───── 0..* Lesson Audio
 Language 1 ───── 0..* Lesson Audio
 
-Lesson Audio ─── Media Asset
+Media Asset 1 ── 0..* Lesson Audio   (shared across new versions, ADR-0008)
 ```
 
 ```mermaid
@@ -235,7 +256,7 @@ erDiagram
 
     LESSON ||--o{ LESSON_AUDIO : has
     LANGUAGE ||--o{ LESSON_AUDIO : "dubbed in"
-    MEDIA_ASSET ||--o| LESSON_AUDIO : backs
+    MEDIA_ASSET ||--o{ LESSON_AUDIO : backs
 ```
 
 ---
@@ -265,7 +286,8 @@ one database writer and does not require distributed or offline ID generation.
 lesson
 - id [PK]
 - chapter
-- version
+- version [nullable]
+- version_patch [nullable]
 - status
 - created_at
 - updated_at
@@ -275,9 +297,15 @@ Constraints:
 
 ```text
 chapter > 0
-version > 0
-UNIQUE(chapter, version)
+version >= 1, version_patch >= 0
+version and version_patch absent exactly when status = 'DRAFT'
+UNIQUE(chapter, version, version_patch)
 ```
+
+`version` is the major part and `version_patch` the patch part of a
+`major.patch` version. Stage 4b adds `version_patch` (existing versions N
+become N.0; Drafts lose theirs). APIs carry both as integers, and versions
+compare major first, then patch.
 
 Statuses:
 
@@ -289,17 +317,27 @@ ARCHIVED
 
 The PostgreSQL enum is named `lesson_status`.
 
-Multiple draft and archived versions may exist for a chapter, but at most one
-version may be `PUBLISHED`. PostgreSQL enforces this with a partial unique index
+Multiple Draft and Archived Lessons may exist for a chapter, but at most one
+Lesson may be `PUBLISHED`. PostgreSQL enforces this with a partial unique index
 on `chapter` where `status = 'PUBLISHED'`.
 
-New Lessons always begin as `DRAFT`. Allowed lifecycle transitions are:
+New Lessons always begin as `DRAFT`, with no version. Allowed lifecycle
+transitions are:
 
 ```text
 DRAFT -> PUBLISHED
-DRAFT -> ARCHIVED
 PUBLISHED -> ARCHIVED
 ```
+
+Publication gives the Lesson its version: 1.0 for the chapter's first
+publication, and otherwise the chapter's highest Published or Archived version
+raised by the admin's chosen kind of change (content change or fix). A replacement archives the
+chapter's Published Lesson and publishes the new one in one transaction; it is
+refused when the Draft's Lesson Texts and Lesson Source associations are
+identical to the Published Lesson's. A Draft that is no longer wanted is
+deleted with its Lesson Texts, Lesson Source associations, and Lesson Audio
+instead of being archived. Lessons archived as Drafts before Stage 4b keep
+their status and version.
 
 `ARCHIVED` is terminal. Lesson structure, Lesson Texts, and Lesson Source
 associations may be changed only while the Lesson is `DRAFT`. After it leaves
@@ -503,7 +541,8 @@ DELETED
 
 `FAILED` is terminal in Stage 3 and requires a new Upload Intent. Superseded
 `READY` Media Assets and their Lesson Audio rows remain as immutable history.
-Stage 3 does not implement `DELETED` behavior.
+Deleting a Draft (Stage 4b) marks each Media Asset that no remaining Lesson
+Audio uses as `DELETED` and removes its object from storage.
 
 The PostgreSQL enum is named `media_asset_status`; do not use the overloaded
 name `status` for the enum type.
@@ -559,9 +598,12 @@ Recommended constraints:
 
 ```text
 UNIQUE(lesson_id, language_code, audio_version)
-UNIQUE(media_asset_id)
+UNIQUE(lesson_id, language_code, media_asset_id)
 CHECK(audio_version > 0)
 ```
+
+A Media Asset may back Lesson Audio in several Lessons: a new version's copied
+current audio shares the original Media Asset (ADR-0008).
 
 Recommended PostgreSQL partial unique index:
 
@@ -629,9 +671,10 @@ localized Lesson Text exists.
 
 ## 8.3 Media Asset ↔ Lesson Audio during upload
 
-A `PENDING` Media Asset may exist without a Lesson Audio. The relationship is
-`Media Asset 1 → 0..1 Lesson Audio`, and Lesson Audio is created only after the
-stored object has been validated and the Media Asset is `READY`.
+A `PENDING` Media Asset may exist without a Lesson Audio. Lesson Audio is
+created only after the stored object has been validated and the Media Asset is
+`READY`. Completion creates exactly one Lesson Audio per Media Asset; new
+versions may later share that Media Asset (ADR-0008).
 
 ## 8.4 Object-storage provider
 
@@ -1525,8 +1568,9 @@ live S3 tracer runs; the credentials wizard follows that infrastructure work.
 
 ## Stage 4 — Admin UI
 
-Design confirmed through the Stage 4 interview. The requirements below describe
-agreed implementation scope, not completed functionality.
+Design confirmed through the Stage 4 interview and implemented. Stage 4b
+revises parts of it (saving, versions, replacement, Draft deletion, and Source
+editing); where the two disagree, Stage 4b wins.
 
 Stage 4 serves one trusted admin (the developer) and retains the existing
 single-admin authentication model. Multiple administrators, invitations,
@@ -1658,6 +1702,38 @@ status. Filter Sources by URL text. Pagination, title/full-text search, and
 server-side filtering are outside Stage 4. Authoring is desktop-first with a
 basically responsive layout; dedicated phone authoring is not an acceptance
 requirement.
+
+## Stage 4b — Admin revisions
+
+Design confirmed through the 2026-10-11 interview that followed Stage 4's
+manual acceptance. The requirements describe agreed scope, not completed
+functionality. The spec is `.scratch/admin-revisions-stage-4b/spec.md`. Stage 4b
+runs before Stage 5 so that mobile builds on the final contracts.
+
+- Each Language tab has one Save that stores the chapter and that Language's
+  Lesson Text in one transaction. Lesson Source references keep their own Save.
+- **Create draft** opens a form that asks for the chapter; nothing is written
+  until the admin confirms. Published and Archived Lessons offer **Create new
+  version**, which copies Lesson Texts, Lesson Sources, and current Lesson
+  Audio (sharing its Media Assets, ADR-0008) into a new Draft of the same
+  chapter.
+- Drafts have no version. Publishing gives one automatically, written
+  `major.patch`: 1.0 for a chapter's first publication, and otherwise the admin
+  picks **content change** (2.1 → 3.0) or **fix** (2.1 → 2.2), counted from
+  the chapter's highest Published or Archived version.
+- Publishing over an existing Published version is a replacement: one
+  confirmation and one transaction. It is refused when Lesson Texts and
+  citations are unchanged. There is no undo; roll back by copying the Archived
+  version and replacing again.
+- Drafts can be deleted; audio that no other Lesson uses is marked `DELETED`
+  and removed from S3. `DRAFT -> ARCHIVED` is removed.
+- Canonical Sources become editable (URL and publication date), even when
+  Published or Archived Lessons cite them. Sources are still never deleted.
+- Every Admin confirmation is shown in the page; only tab close and refresh
+  keep the browser's warning.
+- The learner sees an "Updated" date (the Lesson's last change: publication or
+  audio replacement), never the version. Stage 5 adds the date to the mobile
+  contract.
 
 ## Stage 5 — Mobile
 
@@ -1840,6 +1916,9 @@ Accepted:
 0003 - Use a container-first local application runtime
 0004 - Use AWS S3 for PoC object storage
 0005 - Transfer media directly between clients and S3
+0006 - Use IAM Roles Anywhere for the external BFF workload
+0007 - Serve the Admin from a private, same-origin admin site
+0008 - Share Media Assets between Lesson versions
 ```
 
 Consider additional ADRs when these decisions become final and retain useful

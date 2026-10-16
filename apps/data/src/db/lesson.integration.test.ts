@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import { test } from "node:test";
 
 import { eq, sql } from "drizzle-orm";
@@ -15,46 +17,40 @@ const database = useIntegrationDatabase();
 test("Lessons preserve valid versions, statuses, and database timestamps", async () => {
   const [draft] = await database
     .insert(lesson)
-    .values({
-      chapter: 1,
-      version: 1,
-      status: "DRAFT",
-    })
+    .values({ chapter: 1, status: "DRAFT" })
     .returning();
   const [published] = await database
     .insert(lesson)
-    .values({
-      chapter: 1,
-      version: 2,
-      status: "PUBLISHED",
-    })
+    .values({ chapter: 1, version: 2, versionPatch: 1, status: "PUBLISHED" })
     .returning();
   const [archived] = await database
     .insert(lesson)
-    .values({
-      chapter: 1,
-      version: 3,
-      status: "ARCHIVED",
-    })
+    .values({ chapter: 1, version: 3, versionPatch: 0, status: "ARCHIVED" })
     .returning();
   await database.insert(lesson).values([
-    { chapter: 1, version: 4, status: "DRAFT" },
-    { chapter: 1, version: 5, status: "ARCHIVED" },
+    { chapter: 1, status: "DRAFT" },
+    { chapter: 1, version: 1, versionPatch: 10, status: "ARCHIVED" },
   ]);
 
-  assert.equal(draft.status, "DRAFT");
-  assert.equal(published.status, "PUBLISHED");
-  assert.equal(archived.status, "ARCHIVED");
+  assert.deepEqual(
+    [draft, published, archived].map(({ version, versionPatch, status }) => ({
+      version,
+      versionPatch,
+      status,
+    })),
+    [
+      { version: null, versionPatch: null, status: "DRAFT" },
+      { version: 2, versionPatch: 1, status: "PUBLISHED" },
+      { version: 3, versionPatch: 0, status: "ARCHIVED" },
+    ],
+  );
   assert.ok(draft.createdAt instanceof Date);
   assert.ok(draft.updatedAt instanceof Date);
 
   const explicitlyAdvancedAt = new Date(draft.updatedAt.getTime() + 60_000);
   const [updated] = await database
     .update(lesson)
-    .set({
-      status: "ARCHIVED",
-      updatedAt: explicitlyAdvancedAt,
-    })
+    .set({ chapter: 2, updatedAt: explicitlyAdvancedAt })
     .where(eq(lesson.id, draft.id))
     .returning();
 
@@ -62,45 +58,109 @@ test("Lessons preserve valid versions, statuses, and database timestamps", async
 });
 
 test("PostgreSQL rejects invalid or conflicting Lesson versions", async () => {
-  await expectPostgresError(
-    database.insert(lesson).values({
-      chapter: 0,
-      version: 1,
-      status: "DRAFT",
-    }),
-    postgresErrorCode.checkViolation,
-  );
-  await expectPostgresError(
-    database.insert(lesson).values({
-      chapter: 1,
-      version: 0,
-      status: "DRAFT",
-    }),
-    postgresErrorCode.checkViolation,
-  );
+  for (const invalid of [
+    { chapter: 0, status: "DRAFT" },
+    { chapter: 1, version: 0, versionPatch: 0, status: "PUBLISHED" },
+    { chapter: 1, version: 1, versionPatch: -1, status: "PUBLISHED" },
+    { chapter: 1, version: 1, status: "PUBLISHED" },
+    { chapter: 1, versionPatch: 0, status: "ARCHIVED" },
+    { chapter: 1, status: "PUBLISHED" },
+    { chapter: 1, status: "ARCHIVED" },
+    { chapter: 1, version: 1, versionPatch: 0, status: "DRAFT" },
+  ] as const) {
+    await expectPostgresError(
+      database.insert(lesson).values(invalid),
+      postgresErrorCode.checkViolation,
+    );
+  }
 
-  await database
-    .insert(lesson)
-    .values({ chapter: 2, version: 1, status: "DRAFT" });
+  await database.insert(lesson).values([
+    { chapter: 2, status: "DRAFT" },
+    { chapter: 2, status: "DRAFT" },
+    { chapter: 2, version: 1, versionPatch: 0, status: "ARCHIVED" },
+    { chapter: 2, version: 1, versionPatch: 1, status: "ARCHIVED" },
+    { chapter: 3, version: 1, versionPatch: 0, status: "ARCHIVED" },
+  ]);
   await expectPostgresError(
     database
       .insert(lesson)
-      .values({ chapter: 2, version: 1, status: "ARCHIVED" }),
+      .values({ chapter: 2, version: 1, versionPatch: 1, status: "PUBLISHED" }),
     postgresErrorCode.uniqueViolation,
   );
 
   await database
     .insert(lesson)
-    .values({ chapter: 3, version: 1, status: "PUBLISHED" });
+    .values({ chapter: 4, version: 1, versionPatch: 0, status: "PUBLISHED" });
   await expectPostgresError(
     database
       .insert(lesson)
-      .values({ chapter: 3, version: 2, status: "PUBLISHED" }),
+      .values({ chapter: 4, version: 2, versionPatch: 0, status: "PUBLISHED" }),
     postgresErrorCode.uniqueViolation,
   );
-  await database
-    .insert(lesson)
-    .values({ chapter: 4, version: 1, status: "PUBLISHED" });
+});
+
+test("the Stage 4b migration keeps versions N as N.0 after publication and clears them on Drafts", async () => {
+  const migrationsFolder = path.resolve(process.cwd(), "drizzle");
+  const migrations = (await readdir(migrationsFolder)).sort();
+  const target = migrations.find((name) =>
+    name.endsWith("_give_versions_at_publication"),
+  );
+  assert.ok(target, "The Stage 4b migration was not found.");
+  const apply = async (
+    transaction: Parameters<Parameters<typeof database.transaction>[0]>[0],
+    name: string,
+  ) => {
+    const migration = await readFile(
+      path.join(migrationsFolder, name, "migration.sql"),
+      "utf8",
+    );
+    for (const statement of migration.split("--> statement-breakpoint")) {
+      if (statement.trim()) await transaction.execute(sql.raw(statement));
+    }
+  };
+  const rolledBack = new Error("roll back the scratch schema");
+
+  // Replays the migrations in a scratch schema inside one transaction, which is then rolled back.
+  await assert.rejects(
+    database.transaction(async (transaction) => {
+      await transaction.execute(sql`create schema stage_4b_migration`);
+      await transaction.execute(
+        sql`set local search_path to stage_4b_migration`,
+      );
+      // Migration folders sort by their timestamp prefix.
+      for (const name of migrations.filter((name) => name < target)) {
+        await apply(transaction, name);
+      }
+      await transaction.execute(sql`
+        insert into lesson (chapter, version, status) values
+          (1, 1, 'ARCHIVED'),
+          (1, 2, 'PUBLISHED'),
+          (1, 3, 'DRAFT'),
+          (2, 1, 'DRAFT'),
+          (2, 2, 'ARCHIVED')
+      `);
+      await apply(transaction, target);
+
+      const { rows } = await transaction.execute<{
+        chapter: number;
+        version: number | null;
+        version_patch: number | null;
+        status: string;
+      }>(sql`
+        select chapter, version, version_patch, status from lesson order by id
+      `);
+      assert.deepEqual(rows, [
+        { chapter: 1, version: 1, version_patch: 0, status: "ARCHIVED" },
+        { chapter: 1, version: 2, version_patch: 0, status: "PUBLISHED" },
+        { chapter: 1, version: null, version_patch: null, status: "DRAFT" },
+        { chapter: 2, version: null, version_patch: null, status: "DRAFT" },
+        // Archived as a Draft before Stage 4b: it keeps its version and status.
+        { chapter: 2, version: 2, version_patch: 0, status: "ARCHIVED" },
+      ]);
+      throw rolledBack;
+    }),
+    (error) => error === rolledBack,
+  );
 });
 
 test("Languages and localized Lesson Texts retain complete unique identities", async () => {
@@ -109,7 +169,7 @@ test("Languages and localized Lesson Texts retain complete unique identities", a
 
   const [localizedLesson] = await database
     .insert(lesson)
-    .values({ chapter: 5, version: 1, status: "DRAFT" })
+    .values({ chapter: 5, status: "DRAFT" })
     .returning();
   await database
     .insert(language)

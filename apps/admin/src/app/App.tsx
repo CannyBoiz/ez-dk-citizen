@@ -10,6 +10,7 @@ import {
   LessonView,
 } from "../features/lesson";
 import { SourceFinder } from "../features/source";
+import { ConfirmButton } from "../shared/components/ConfirmButton";
 import { BffError, type Call, request } from "../shared/lib/bff";
 import type { Network } from "../shared/lib/network";
 
@@ -63,11 +64,10 @@ export function App({ network }: { network: Network }) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [warnOnUnload]);
 
-  const confirmLeave = () =>
-    losses.length === 0 || window.confirm(`${losses.join(" ")} Leave anyway?`);
+  const leaveWarning =
+    losses.length === 0 ? null : `${losses.join(" ")} Leave anyway?`;
 
   function disconnect() {
-    if (!confirmLeave()) return;
     setToken(null);
     setReentry(false);
     setScreen("catalogue");
@@ -98,9 +98,14 @@ export function App({ network }: { network: Network }) {
       <header className="app-header">
         <h1>ez-dk-citizen Admin</h1>
         {token !== null && (
-          <button type="button" className="danger" onClick={disconnect}>
+          <ConfirmButton
+            className="danger"
+            message={leaveWarning}
+            confirmLabel="Disconnect"
+            onConfirm={disconnect}
+          >
             Disconnect
-          </button>
+          </ConfirmButton>
         )}
       </header>
       <main id="content" ref={mainRef} tabIndex={-1}>
@@ -120,27 +125,32 @@ export function App({ network }: { network: Network }) {
               onOpen={(lessonId) => setScreen({ lessonId })}
             />
           </>
-        ) : screen === "sources" ? (
-          <section>
+        ) : (
+          <>
+            {/* An upload in progress keeps its Lesson open. */}
             <div className="toolbar">
-              <button
-                type="button"
-                onClick={() => confirmLeave() && setScreen("catalogue")}
+              <ConfirmButton
+                disabled={upload === "active"}
+                message={leaveWarning}
+                confirmLabel="Leave"
+                onConfirm={() => setScreen("catalogue")}
               >
                 Back to catalogue
-              </button>
+              </ConfirmButton>
             </div>
-            <SourceFinder call={call} onUnsavedChange={setUnsaved} />
-          </section>
-        ) : (
-          <LessonView
-            call={call}
-            putObject={network.putObject}
-            lessonId={screen.lessonId}
-            onBack={() => confirmLeave() && setScreen("catalogue")}
-            onUnsavedChange={setUnsaved}
-            onUploadChange={setUpload}
-          />
+            {screen === "sources" ? (
+              <SourceFinder call={call} onUnsavedChange={setUnsaved} />
+            ) : (
+              <LessonView
+                call={call}
+                putObject={network.putObject}
+                lessonId={screen.lessonId}
+                onUnsavedChange={setUnsaved}
+                onUploadChange={setUpload}
+                onDelete={() => setScreen("catalogue")}
+              />
+            )}
+          </>
         )}
         {token !== null && reentry && (
           <div className="overlay">
@@ -161,9 +171,13 @@ export function App({ network }: { network: Network }) {
                   setReentry(false);
                 }}
               />
-              <button type="button" onClick={disconnect}>
+              <ConfirmButton
+                message={leaveWarning}
+                confirmLabel="Disconnect"
+                onConfirm={disconnect}
+              >
                 Disconnect
-              </button>
+              </ConfirmButton>
             </div>
           </div>
         )}

@@ -2,6 +2,7 @@ import {
   type CreateLessonRequest,
   createLessonRequestSchema,
   currentLessonAudioResponseSchema,
+  deleteLessonResponseSchema,
   type LessonStatus,
   lessonDetailListResponseSchema,
   lessonDetailSchema,
@@ -29,6 +30,7 @@ import type { DataDatabase } from "../../db/database.js";
 import { isPostgresError } from "../../db/errors.js";
 import {
   createLesson,
+  deleteLesson,
   deleteLessonSource,
   patchLesson,
   upsertLessonSource,
@@ -55,22 +57,10 @@ export function createLessonRoutes(database?: DataDatabase) {
       );
     }
 
-    try {
-      const id = await createLesson(database, input);
-      const detail = await loadLessonDetail(database, id);
-      if (!detail) throw new Error("Created Lesson could not be read.");
-      return c.json(lessonDetailSchema.parse(detail), 201);
-    } catch (error) {
-      if (isPostgresError(error, "23505")) {
-        return problem(
-          c,
-          409,
-          "lesson_version_conflict",
-          "A Lesson with this chapter and version already exists.",
-        );
-      }
-      throw error;
-    }
+    const id = await createLesson(database, input);
+    const detail = await loadLessonDetail(database, id);
+    if (!detail) throw new Error("Created Lesson could not be read.");
+    return c.json(lessonDetailSchema.parse(detail), 201);
   });
 
   app.patch(
@@ -98,6 +88,9 @@ export function createLessonRoutes(database?: DataDatabase) {
         if (outcome === "lesson_not_editable") {
           return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
         }
+        if (outcome === "unsupported_language") {
+          return problem(c, 422, outcome, "Language is not supported.");
+        }
         if (outcome === "lesson_lifecycle_conflict") {
           return problem(
             c,
@@ -106,12 +99,19 @@ export function createLessonRoutes(database?: DataDatabase) {
             "Lesson status transition is not allowed.",
           );
         }
-        if (outcome === "lesson_version_conflict") {
+        if (outcome === "change_kind_required") {
           return problem(
             c,
-            409,
-            outcome,
-            "A Lesson with this chapter and version already exists.",
+            422,
+            "validation_failed",
+            "A change kind is required to publish this Lesson.",
+            [
+              {
+                path: ["changeKind"],
+                message:
+                  "Choose a content change or a fix: this chapter already has a version.",
+              },
+            ],
           );
         }
         if (outcome === "published_lesson_conflict") {
@@ -156,6 +156,34 @@ export function createLessonRoutes(database?: DataDatabase) {
         }
         throw error;
       }
+    },
+  );
+
+  app.delete(
+    "/:lessonId",
+    validateRequest("param", lessonIdParamsSchema),
+    async (c) => {
+      const { lessonId: id } = c.req.valid("param") as { lessonId: number };
+      if (!database) {
+        return problem(
+          c,
+          500,
+          "internal_error",
+          "The request could not be completed.",
+        );
+      }
+
+      const outcome = await deleteLesson(database, id);
+
+      if (outcome === "lesson_not_found") {
+        return problem(c, 404, outcome, "Lesson was not found.");
+      }
+      if (outcome === "lesson_not_editable") {
+        return problem(c, 409, outcome, "Only Draft Lessons can be deleted.");
+      }
+      return c.json(
+        deleteLessonResponseSchema.parse({ deletedMediaAssets: outcome }),
+      );
     },
   );
 

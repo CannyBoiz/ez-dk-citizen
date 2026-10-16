@@ -2,9 +2,13 @@ import {
   type CreateSourceRequest,
   createSourceRequestSchema,
   type RequestIdEnvironment,
+  sourceIdParamsSchema,
   sourceListResponseSchema,
   sourceResponseSchema,
+  type UpdateSourceRequest,
+  updateSourceRequestSchema,
   validateJson,
+  validateRequest,
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
@@ -37,6 +41,36 @@ export function createAdminSourceRoutes(
         return mapDataServiceError(c, error);
       }
     })
+    .patch(
+      "/:sourceId",
+      validateRequest("param", sourceIdParamsSchema),
+      validateJson(updateSourceRequestSchema),
+      async (c) => {
+        const { sourceId } = c.req.valid("param") as { sourceId: number };
+        const input = c.req.valid("json") as UpdateSourceRequest;
+        if (!options.dataServiceClient) {
+          return problem(
+            c,
+            502,
+            "data_service_unavailable",
+            "The Data Service is unavailable.",
+          );
+        }
+        try {
+          return c.json(
+            sourceResponseSchema.parse(
+              await options.dataServiceClient.updateSource(
+                sourceId,
+                input,
+                c.get("requestId"),
+              ),
+            ),
+          );
+        } catch (error) {
+          return mapDataServiceError(c, error);
+        }
+      },
+    )
     .get("/", async (c) => {
       if (!options.dataServiceClient) {
         return problem(

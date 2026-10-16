@@ -4,21 +4,26 @@ import type {
   UpsertLessonSourceRequest,
   UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, notExists } from "drizzle-orm";
 
-import type { DataDatabase } from "../../db/database.js";
+import type { DataDatabase, DataTransaction } from "../../db/database.js";
 import {
   language,
   lesson,
+  lessonAudio,
   lessonSource,
   lessonText,
+  mediaAsset,
   source,
 } from "../../db/schema.js";
 import {
   isAllowedLessonTransition,
   isEditableLesson,
+  type LessonVersion,
   lockEditableDraft,
   nextUpdatedAt,
+  nextVersion,
+  selectHighestVersion,
   touchLesson,
 } from "./lifecycle.js";
 
@@ -29,11 +34,49 @@ export async function createLesson(
   const [created] = await database.transaction(async (transaction) =>
     transaction
       .insert(lesson)
-      .values({ ...input, status: "DRAFT" })
+      .values({ chapter: input.chapter, status: "DRAFT" })
       .returning({ id: lesson.id }),
   );
   if (!created) throw new Error("Lesson insert returned no row.");
   return created.id;
+}
+
+// Deletes a Draft with its Lesson Audio, and with its Lesson Texts and Lesson Sources by cascade.
+// Each Media Asset that audio used is marked DELETED once no remaining Lesson Audio uses it;
+// one shared with another Lesson stays. Returns the marked ones, whose objects are to go.
+// ponytail: the check takes no lock on the Media Assets, so two Drafts deleted at once that were
+// the only users of one asset would both leave it READY. That cannot happen while audio is shared
+// only by copying a Published or Archived Lesson, whose Lesson Audio is never deleted; lock the
+// assets FOR UPDATE first if Drafts ever share audio without such a Lesson.
+export async function deleteLesson(database: DataDatabase, id: number) {
+  return database.transaction(async (transaction) => {
+    const existing = await lockEditableDraft(transaction, id);
+    if (typeof existing === "string") return existing;
+
+    const deletedAudio = await transaction
+      .delete(lessonAudio)
+      .where(eq(lessonAudio.lessonId, id))
+      .returning({ mediaAssetId: lessonAudio.mediaAssetId });
+    await transaction.delete(lesson).where(eq(lesson.id, id));
+    return transaction
+      .update(mediaAsset)
+      .set({ status: "DELETED" })
+      .where(
+        and(
+          inArray(
+            mediaAsset.id,
+            deletedAudio.map(({ mediaAssetId }) => mediaAssetId),
+          ),
+          notExists(
+            transaction
+              .select({ id: lessonAudio.id })
+              .from(lessonAudio)
+              .where(eq(lessonAudio.mediaAssetId, mediaAsset.id)),
+          ),
+        ),
+      )
+      .returning({ id: mediaAsset.id, objectKey: mediaAsset.objectKey });
+  });
 }
 
 export async function patchLesson(
@@ -45,7 +88,6 @@ export async function patchLesson(
     const [existing] = await transaction
       .select({
         chapter: lesson.chapter,
-        version: lesson.version,
         status: lesson.status,
         updatedAt: lesson.updatedAt,
       })
@@ -54,9 +96,10 @@ export async function patchLesson(
       .for("update");
     if (!existing) return "lesson_not_found" as const;
 
-    const changesStructure =
-      input.chapter !== undefined || input.version !== undefined;
-    if (changesStructure && !isEditableLesson(existing.status)) {
+    if (
+      (input.chapter !== undefined || input.text !== undefined) &&
+      !isEditableLesson(existing.status)
+    ) {
       return "lesson_not_editable" as const;
     }
     if (
@@ -65,21 +108,17 @@ export async function patchLesson(
     ) {
       return "lesson_lifecycle_conflict" as const;
     }
+    if (
+      input.text &&
+      !(await isSupportedLanguage(transaction, input.text.languageCode))
+    ) {
+      return "unsupported_language" as const;
+    }
 
     const chapter = input.chapter ?? existing.chapter;
-    const version = input.version ?? existing.version;
     const status = input.status ?? existing.status;
-    const [identityConflict] = await transaction
-      .select({ id: lesson.id })
-      .from(lesson)
-      .where(
-        and(
-          eq(lesson.chapter, chapter),
-          eq(lesson.version, version),
-          ne(lesson.id, id),
-        ),
-      );
-    if (identityConflict) return "lesson_version_conflict" as const;
+    // The version publication gives; other changes leave it as it is.
+    let given: LessonVersion | undefined;
 
     if (status === "PUBLISHED") {
       const [published] = await transaction
@@ -106,7 +145,7 @@ export async function patchLesson(
         .where(eq(lessonSource.lessonId, id))
         .limit(1);
       const missing = [
-        ...(thaiText
+        ...(thaiText || input.text?.languageCode === "th"
           ? []
           : [
               {
@@ -124,13 +163,25 @@ export async function patchLesson(
             ]),
       ];
       if (missing.length) return { missing };
+
+      const next = nextVersion(
+        await selectHighestVersion(transaction, chapter),
+        input.changeKind,
+      );
+      if (next === "change_kind_required") return next;
+      given = next;
     }
 
+    // Every refusal comes before this point: a refusal commits, so nothing may be written yet.
+    if (input.text) {
+      const { languageCode, ...text } = input.text;
+      await writeLessonText(transaction, id, languageCode, text);
+    }
     await transaction
       .update(lesson)
       .set({
         chapter,
-        version,
+        ...given,
         status,
         updatedAt: nextUpdatedAt(existing.updatedAt),
       })
@@ -149,22 +200,39 @@ export async function upsertLessonText(
     const existing = await lockEditableDraft(transaction, id);
     if (typeof existing === "string") return existing;
 
-    const [supported] = await transaction
-      .select({ code: language.code })
-      .from(language)
-      .where(eq(language.code, languageCode));
-    if (!supported) return "unsupported_language" as const;
+    if (!(await isSupportedLanguage(transaction, languageCode)))
+      return "unsupported_language" as const;
 
-    await transaction
-      .insert(lessonText)
-      .values({ lessonId: id, languageCode, ...input })
-      .onConflictDoUpdate({
-        target: [lessonText.lessonId, lessonText.languageCode],
-        set: input,
-      });
+    await writeLessonText(transaction, id, languageCode, input);
     await touchLesson(transaction, id, existing.updatedAt);
     return id;
   });
+}
+
+async function isSupportedLanguage(
+  transaction: DataTransaction,
+  languageCode: string,
+) {
+  const [supported] = await transaction
+    .select({ code: language.code })
+    .from(language)
+    .where(eq(language.code, languageCode));
+  return supported !== undefined;
+}
+
+async function writeLessonText(
+  transaction: DataTransaction,
+  lessonId: number,
+  languageCode: string,
+  text: UpsertLessonTextRequest,
+) {
+  await transaction
+    .insert(lessonText)
+    .values({ lessonId, languageCode, ...text })
+    .onConflictDoUpdate({
+      target: [lessonText.lessonId, lessonText.languageCode],
+      set: text,
+    });
 }
 
 export async function upsertLessonSource(

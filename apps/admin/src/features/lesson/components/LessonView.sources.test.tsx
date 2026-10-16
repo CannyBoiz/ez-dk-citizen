@@ -1,4 +1,5 @@
-// Citing Sources from the Lesson editor: attach, reference editing, and detach (ticket 06).
+// Citing Sources from the Lesson editor: attach, reference editing, and detach (ticket 06),
+// and correcting a cited Source from its finder (Stage 4b ticket 03).
 import {
   fireEvent,
   render,
@@ -6,14 +7,16 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 
 import { App } from "../../../app/App";
 import {
+  answer,
   bookSource,
-  canonicalEditControls,
+  chapterForm,
   cited,
   connect,
+  editSource,
   fakeBackend,
   fieldError,
   finder,
@@ -21,11 +24,13 @@ import {
   hold,
   lawSource as law,
   lessonDetail,
+  movedLawUrl as moved,
   newSourceForm,
   openLesson,
   problem,
+  saveSource,
   settle,
-  structureForm,
+  sourceDeleteControls,
   textForm,
   thaiText,
   type,
@@ -52,7 +57,7 @@ function lessonSourceUrls() {
 async function openDraft(backend: ReturnType<typeof fakeBackend>) {
   render(<App network={backend.network} />);
   await connect(validToken);
-  await openLesson(1, 1);
+  await openLesson();
 }
 
 async function createSource(url: string) {
@@ -138,7 +143,6 @@ test("attaching a Source adds it to the Draft's Lesson Sources", async () => {
 });
 
 test("each Lesson Source saves its own references with saved/unsaved state and navigation warnings", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   const backend = fakeBackend([
     lessonDetail(1, {
       lessonSources: [cited(law), cited(guide, { pageFrom: 2 })],
@@ -157,7 +161,7 @@ test("each Lesson Source saves its own references with saved/unsaved state and n
   expect(within(lessonSourceForm(guide.url)).getByText("Saved")).toBeTruthy();
   expect(unloadBlocked()).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenCalledOnce();
+  answer("Cancel");
   expect(
     within(lessonSourceForm(law.url)).getByLabelText("Page to"),
   ).toHaveProperty("value", "5");
@@ -269,19 +273,20 @@ test("detaching a Source removes it from the Draft and keeps the canonical Sourc
   expect(attachButton(law.url)).toHaveProperty("disabled", false);
 });
 
-test("detaching a Lesson Source with unsaved references asks before discarding them", async () => {
-  const confirm = vi
-    .spyOn(window, "confirm")
-    .mockReturnValueOnce(false)
-    .mockReturnValueOnce(true);
+test("detaching a Lesson Source with unsaved references asks in the page before discarding them", async () => {
   const backend = fakeBackend([
     lessonDetail(1, { lessonSources: [cited(law)] }),
   ]);
   await openDraft(backend);
+  const item = () => lessonSourceForm(law.url).closest("li")!;
 
   type("Section reference", "unsaved", lessonSourceForm(law.url));
   fireEvent.click(screen.getByRole("button", { name: `Detach ${law.url}` }));
-  expect(confirm).toHaveBeenCalledOnce();
+  within(item()).getByRole("alertdialog", {
+    name: "Detach this Source and discard its unsaved references?",
+  });
+  answer("Cancel", item());
+  await settle();
   expect(backend.requests.some((request) => request.method === "DELETE")).toBe(
     false,
   );
@@ -290,8 +295,8 @@ test("detaching a Lesson Source with unsaved references asks before discarding t
   ).toHaveProperty("value", "unsaved");
 
   fireEvent.click(screen.getByRole("button", { name: `Detach ${law.url}` }));
+  answer("Detach", item());
   await waitFor(() => expect(lessonSourceUrls()).toEqual([]));
-  expect(confirm).toHaveBeenCalledTimes(2);
   await waitFor(() => expect(unloadBlocked()).toBe(false));
 });
 
@@ -330,7 +335,7 @@ test("Detach waits for Lesson changes in flight, and changes wait for a detach",
     ).toHaveProperty("readOnly", true),
   );
   expect(
-    within(structureForm()).queryByRole("button", { name: "Save" }),
+    within(chapterForm()).queryByRole("button", { name: "Save" }),
   ).toBeNull();
   expect(attachButton(bookSource.url)).toHaveProperty("disabled", true);
   expect(
@@ -352,7 +357,6 @@ test("Detach waits for Lesson changes in flight, and changes wait for a detach",
 });
 
 test("a New Source draft keeps its text and its unsaved-changes warnings while a detach runs", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   const backend = fakeBackend(
     [lessonDetail(1, { lessonSources: [cited(law)] })],
     { sources: [guide] },
@@ -373,7 +377,7 @@ test("a New Source draft keeps its text and its unsaved-changes warnings while a
   expect(draftUrl()).toHaveProperty("value", "https://example.dk/half-typed");
   expect(unloadBlocked()).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenCalledOnce();
+  answer("Cancel");
 
   releaseDelete();
   await waitFor(() => expect(lessonSourceUrls()).toEqual([]));
@@ -438,14 +442,13 @@ test("a failed detach keeps the Lesson Source and shows the error", async () => 
 });
 
 test("an uncreated New Source counts as an unsaved edit in the Lesson editor", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
   await openDraft(fakeBackend([lessonDetail(1)]));
 
   type("Source URL", "https://example.dk/half-typed", newSourceForm());
   expect(unloadBlocked()).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  expect(confirm).toHaveBeenCalledOnce();
-  expect(canonicalEditControls()).toEqual([]);
+  answer("Cancel");
+  expect(sourceDeleteControls()).toEqual([]);
 });
 
 test.each(["PUBLISHED", "ARCHIVED"] as const)(
@@ -489,3 +492,27 @@ test.each(["PUBLISHED", "ARCHIVED"] as const)(
     ).toBeNull();
   },
 );
+
+test("correcting a Source from a Published Lesson's finder shows it among the Lesson Sources", async () => {
+  await openDraft(
+    fakeBackend([
+      lessonDetail(1, {
+        status: "PUBLISHED",
+        lessonSources: [cited(law, { pageFrom: 4 })],
+      }),
+    ]),
+  );
+
+  const form = editSource(law.url);
+  type("Source URL", moved, form);
+  expect(unloadBlocked()).toBe(true);
+  saveSource(form);
+  answer("Save", form);
+
+  await waitFor(() => expect(lessonSourceUrls()).toEqual([moved]));
+  await waitFor(() => expect(unloadBlocked()).toBe(false));
+  expect(screen.getAllByRole("link", { name: moved })).toHaveLength(2);
+  expect(
+    within(lessonSourceForm(moved)).getByLabelText("Page from"),
+  ).toHaveProperty("value", "4");
+});

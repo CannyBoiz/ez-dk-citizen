@@ -1,48 +1,126 @@
-// The publication checklist and the lifecycle actions. The checklist mirrors the backend's
-// publication prerequisites; the backend stays the authority, and its refusals are shown.
-// Replacing a Published version is two separate actions: archive it, then publish the Draft.
+// The publication checklist and the lifecycle actions: Publish and Delete on a Draft, Archive on
+// a Published Lesson. The checklist mirrors the backend's publication prerequisites; the
+// backend stays the authority, and its refusals are shown.
+// Publishing asks in the page which version the Draft becomes, from the chapter's versions as
+// the backend holds them then. Replacing a Published version is two separate actions: archive
+// it, then publish the Draft.
 import {
+  type ChangeKind,
+  changeKindSchema,
   type LessonDetail,
-  type LessonStatus,
   lessonDetailSchema,
+  lessonListResponseSchema,
   type PatchLessonRequest,
 } from "@ez-dk-citizen/api-contracts/schemas";
+import { useId, useRef, useState } from "react";
 
+import { ConfirmButton } from "../../../shared/components/ConfirmButton";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
 import { BffError, type Call } from "../../../shared/lib/bff";
 import { useAction } from "../../../shared/lib/useAction";
 import { hasLessonText } from "../utils/lessonTexts";
+import {
+  changeKindLabels,
+  formatVersion,
+  highestVersion,
+  raiseVersion,
+} from "../utils/versions";
 
 const archiveWarning =
   "Archive this Lesson? Archiving is terminal: the Lesson becomes read-only and can never be " +
-  "published again. A Published Lesson is also removed from the learner catalogue.";
+  "published again. It is also removed from the learner catalogue.";
+const deleteWarning =
+  "Delete this Draft? Its Lesson Texts, Lesson Source references, and Lesson Audio will be " +
+  "lost. Canonical Sources stay. Deleting cannot be undone.";
+
+// The chapter's versions as last read for the publish confirmation.
+type VersionsRead =
+  | { state: "reading" }
+  | { state: "failed"; error: unknown }
+  | { state: "read"; highest: ReturnType<typeof highestVersion> };
 
 export function Publication({
   call,
+  writeCall,
   lesson,
   dirty,
   busy,
   onChange,
+  onDelete,
 }: {
   call: Call;
+  // `call` for changing the Lesson.
+  writeCall: Call;
   lesson: LessonDetail;
-  // Publish waits for every edit to be saved; both actions wait for an upload or detach in progress.
+  // Publish waits for every edit to be saved; every action waits for an upload or detach in progress.
   dirty: boolean;
   busy: boolean;
   onChange: (lesson: LessonDetail) => void;
+  onDelete: () => void;
 }) {
-  const transitioning = useAction<LessonStatus>();
+  const archiving = useAction<"archive">();
+  const [versions, setVersions] = useState<VersionsRead>({ state: "reading" });
+  const [changeKind, setChangeKind] = useState<ChangeKind | null>(null);
+  // Only the latest read may answer, if the confirmation is reopened while one is in flight.
+  const reads = useRef(0);
+  const choiceName = useId();
   const saved = (state: boolean) => (state ? "Saved" : "Missing");
-  const failure = transitioning.failure?.error;
 
-  function transition(status: LessonStatus) {
-    void transitioning.run(status, async () =>
+  async function readVersions() {
+    const read = ++reads.current;
+    setVersions({ state: "reading" });
+    setChangeKind(null);
+    try {
+      const { items } = await call(
+        { method: "GET", path: "/api/admin/lessons" },
+        lessonListResponseSchema,
+      );
+      if (read === reads.current)
+        setVersions({
+          state: "read",
+          highest: highestVersion(items, lesson.chapter),
+        });
+    } catch (error) {
+      if (read === reads.current) setVersions({ state: "failed", error });
+    }
+  }
+
+  // The backend gives the version. A kind is chosen only when the chapter already has one.
+  async function publish() {
+    try {
       onChange(
-        await call(
+        await writeCall(
           {
             method: "PATCH",
             path: `/api/admin/lessons/${lesson.id}`,
-            body: { status } satisfies PatchLessonRequest,
+            body: {
+              status: "PUBLISHED",
+              ...(changeKind && { changeKind }),
+            } satisfies PatchLessonRequest,
+          },
+          lessonDetailSchema,
+        ),
+      );
+    } catch (error) {
+      // The chapter gained a version after the confirmation read them: read again, so the
+      // choice the backend asks for appears beside its refusal.
+      if (
+        error instanceof BffError &&
+        error.errors?.some((entry) => entry.path[0] === "changeKind")
+      )
+        void readVersions();
+      throw error;
+    }
+  }
+
+  function archive() {
+    void archiving.run("archive", async () =>
+      onChange(
+        await writeCall(
+          {
+            method: "PATCH",
+            path: `/api/admin/lessons/${lesson.id}`,
+            body: { status: "ARCHIVED" } satisfies PatchLessonRequest,
           },
           lessonDetailSchema,
         ),
@@ -50,13 +128,24 @@ export function Publication({
     );
   }
 
-  const waiting = busy || transitioning.pending !== null;
-  const confirmArchive = () =>
-    window.confirm(
-      dirty
-        ? `${archiveWarning} Unsaved changes on this Lesson will be discarded.`
-        : archiveWarning,
+  async function deleteDraft() {
+    await writeCall(
+      { method: "DELETE", path: `/api/admin/lessons/${lesson.id}` },
+      { parse: () => undefined },
     );
+    onDelete();
+  }
+
+  const highest = versions.state === "read" ? versions.highest : undefined;
+  const publishMessage =
+    versions.state === "reading"
+      ? "Reading this chapter's versions…"
+      : versions.state === "failed"
+        ? "Could not read this chapter's versions."
+        : highest
+          ? `Publish this Draft as a content change or a fix? The chapter's highest version is ${formatVersion(highest)}.`
+          : "Publish as version 1.0?";
+  const waiting = busy || archiving.pending !== null;
   return (
     <section className="card" aria-label="Publication">
       <h3>Publication</h3>
@@ -75,45 +164,78 @@ export function Publication({
       )}
       {busy && (
         <p>
-          Publishing and archiving wait until the upload or detach in progress
-          finishes.
+          Publishing, archiving, and deleting wait until the upload or detach in
+          progress finishes.
         </p>
       )}
       {dirty && lesson.status === "DRAFT" && (
         <p>Save every change before publishing.</p>
       )}
       {lesson.status === "DRAFT" && (
-        <button
-          type="button"
+        <ConfirmButton
           className="primary"
           disabled={dirty || waiting}
-          onClick={() => transition("PUBLISHED")}
+          message={publishMessage}
+          details={
+            versions.state === "failed" ? (
+              <ErrorMessage
+                error={versions.error}
+                onRetry={() => void readVersions()}
+              />
+            ) : (
+              highest && (
+                <fieldset>
+                  <legend>Kind of change</legend>
+                  {changeKindSchema.options.map((kind) => (
+                    <label key={kind}>
+                      <input
+                        type="radio"
+                        name={choiceName}
+                        checked={changeKind === kind}
+                        onChange={() => setChangeKind(kind)}
+                      />
+                      {changeKindLabels[kind]} →{" "}
+                      {formatVersion(raiseVersion(highest, kind))}
+                    </label>
+                  ))}
+                </fieldset>
+              )
+            )
+          }
+          confirmLabel="Publish"
+          confirmDisabled={
+            versions.state !== "read" ||
+            (highest !== undefined && changeKind === null)
+          }
+          onOpen={() => void readVersions()}
+          onConfirm={publish}
         >
           Publish
-        </button>
+        </ConfirmButton>
       )}
-      {lesson.status !== "ARCHIVED" && (
-        <button
-          type="button"
+      {lesson.status === "DRAFT" && (
+        <ConfirmButton
           className="danger"
           disabled={waiting}
-          onClick={() => confirmArchive() && transition("ARCHIVED")}
+          message={deleteWarning}
+          confirmLabel="Delete"
+          onConfirm={deleteDraft}
+        >
+          Delete
+        </ConfirmButton>
+      )}
+      {lesson.status === "PUBLISHED" && (
+        <ConfirmButton
+          className="danger"
+          disabled={waiting}
+          message={archiveWarning}
+          confirmLabel="Archive"
+          onConfirm={archive}
         >
           Archive
-        </button>
+        </ConfirmButton>
       )}
-      {failure !== undefined && (
-        <ErrorMessage error={failure}>
-          {/* A refused publication lists each unmet prerequisite. */}
-          {failure instanceof BffError && !!failure.errors?.length && (
-            <ul>
-              {failure.errors.map((entry) => (
-                <li key={entry.path.join(".")}>{entry.message}</li>
-              ))}
-            </ul>
-          )}
-        </ErrorMessage>
-      )}
+      {archiving.failure && <ErrorMessage error={archiving.failure.error} />}
     </section>
   );
 }

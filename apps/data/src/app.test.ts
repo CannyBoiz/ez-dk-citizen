@@ -70,7 +70,6 @@ test("Data Service rejects write bodies above 1 MiB with Problem Details", async
     },
     body: JSON.stringify({
       chapter: 1,
-      version: 1,
       padding: "x".repeat(1024 * 1024),
     }),
   });
@@ -88,7 +87,7 @@ const internalRequests = [
   {
     method: "POST",
     path: "/internal/lessons",
-    body: { chapter: 1, version: 1 },
+    body: { chapter: 1 },
   },
   {
     method: "PATCH",

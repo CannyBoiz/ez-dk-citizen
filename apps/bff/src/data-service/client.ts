@@ -11,6 +11,8 @@ import {
   createPendingMediaAssetRequestSchema,
   createSourceRequestSchema,
   currentLessonAudioResponseSchema,
+  type DeleteLessonResponse,
+  deleteLessonResponseSchema,
   type LessonDetail,
   type LessonDetailListResponse,
   type LessonListResponse,
@@ -30,8 +32,10 @@ import {
   type SourceResponse,
   sourceListResponseSchema,
   sourceResponseSchema,
+  type UpdateSourceRequest,
   type UpsertLessonSourceRequest,
   type UpsertLessonTextRequest,
+  updateSourceRequestSchema,
   upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
 } from "@ez-dk-citizen/api-contracts";
@@ -65,11 +69,17 @@ export interface DataServiceClient {
     input: PatchLessonRequest,
     requestId: string,
   ): Promise<LessonDetail>;
+  deleteLesson(id: number, requestId: string): Promise<DeleteLessonResponse>;
   createSource(
     input: CreateSourceRequest,
     requestId: string,
   ): Promise<SourceResponse>;
   listSources(requestId: string): Promise<SourceListResponse>;
+  updateSource(
+    id: number,
+    input: UpdateSourceRequest,
+    requestId: string,
+  ): Promise<SourceResponse>;
   upsertLessonSource(
     lessonId: number,
     sourceId: number,
@@ -203,6 +213,14 @@ export function createDataServiceClient(
         patchLessonRequestSchema.parse(input),
         lessonDetailSchema.parse,
       ),
+    deleteLesson: (id, requestId) =>
+      call(
+        `/internal/lessons/${id}`,
+        "DELETE",
+        requestId,
+        undefined,
+        deleteLessonResponseSchema.parse,
+      ),
     createSource: (input, requestId) =>
       call(
         "/internal/sources",
@@ -218,6 +236,14 @@ export function createDataServiceClient(
         requestId,
         undefined,
         sourceListResponseSchema.parse,
+      ),
+    updateSource: (id, input, requestId) =>
+      call(
+        `/internal/sources/${id}`,
+        "PATCH",
+        requestId,
+        updateSourceRequestSchema.parse(input),
+        sourceResponseSchema.parse,
       ),
     upsertLessonSource: (lessonId, sourceId, input, requestId) =>
       call(

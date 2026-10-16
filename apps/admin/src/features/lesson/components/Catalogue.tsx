@@ -1,4 +1,5 @@
 // The Lesson catalogue: every Lesson filtered in the browser, plus the New Draft Lesson form.
+// A Draft has no version until it is published, so it is shown with its creation date.
 import {
   type CreateLessonRequest,
   type LessonSummary,
@@ -13,6 +14,7 @@ import { ErrorMessage } from "../../../shared/components/ErrorMessage";
 import type { Call } from "../../../shared/lib/bff";
 import type { CatalogueFilters } from "../types";
 import { statusLabels } from "../utils/statusLabels";
+import { lessonLabel, versionLabel } from "../utils/versions";
 
 // Mounted afresh whenever the admin returns to it, so it always reloads from the backend.
 export function Catalogue({
@@ -79,21 +81,17 @@ export function Catalogue({
         name="New Draft Lesson"
         fields={[
           { name: "chapter", label: "New Draft chapter", kind: "number" },
-          { name: "version", label: "New Draft version", kind: "number" },
         ]}
         value={newDraft}
         onChange={changeNewDraft}
         submitLabel="Create Draft"
         className="inline-form"
-        onSave={async ({ chapter, version }) => {
+        onSave={async ({ chapter }) => {
           const created = await call(
             {
               method: "POST",
               path: "/api/admin/lessons",
-              body: {
-                chapter: Number(chapter),
-                version: Number(version),
-              } satisfies CreateLessonRequest,
+              body: { chapter: Number(chapter) } satisfies CreateLessonRequest,
             },
             lessonDetailSchema,
           );
@@ -156,7 +154,7 @@ export function Catalogue({
                   {visibleLessons!.map((lesson) => (
                     <tr key={lesson.id}>
                       <td>{lesson.chapter}</td>
-                      <td>{lesson.version}</td>
+                      <td>{versionLabel(lesson)}</td>
                       <td>
                         <span className="badge" data-status={lesson.status}>
                           {statusLabels[lesson.status]}
@@ -169,7 +167,7 @@ export function Catalogue({
                         <button
                           type="button"
                           className="primary"
-                          aria-label={`Open chapter ${lesson.chapter}, version ${lesson.version}`}
+                          aria-label={`Open ${lessonLabel(lesson)}`}
                           onClick={() => onOpen(lesson.id)}
                         >
                           Open
@@ -194,12 +192,9 @@ const newDraftKey = "ez-dk-citizen.admin.newDraft";
 function readNewDraft(): Values {
   try {
     const stored = JSON.parse(localStorage.getItem(newDraftKey) ?? "{}");
-    return {
-      chapter: String(stored.chapter ?? ""),
-      version: String(stored.version ?? ""),
-    };
+    return { chapter: String(stored.chapter ?? "") };
   } catch {
-    return { chapter: "", version: "" };
+    return { chapter: "" };
   }
 }
 

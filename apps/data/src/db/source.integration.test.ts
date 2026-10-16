@@ -16,8 +16,8 @@ test("Sources are canonical and reusable across Lessons in both directions", asy
   const [firstLesson, secondLesson] = await database
     .insert(lesson)
     .values([
-      { chapter: 10, version: 1, status: "DRAFT" },
-      { chapter: 11, version: 1, status: "DRAFT" },
+      { chapter: 10, status: "DRAFT" },
+      { chapter: 11, status: "DRAFT" },
     ])
     .returning();
   const knownPublication = new Date("2025-01-15T12:00:00.000Z");
@@ -100,7 +100,7 @@ test("Sources are canonical and reusable across Lessons in both directions", asy
 test("Lesson Source locators accept useful partial shapes and reject invalid pages", async () => {
   const [citingLesson] = await database
     .insert(lesson)
-    .values({ chapter: 12, version: 1, status: "DRAFT" })
+    .values({ chapter: 12, status: "DRAFT" })
     .returning();
   const sources = await database
     .insert(source)

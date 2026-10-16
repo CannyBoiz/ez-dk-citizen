@@ -1,4 +1,5 @@
-// The publication checklist, Publish, and Archive in the Lesson editor (ticket 07).
+// The publication checklist, Publish with its version, Archive, and Delete in the Lesson editor
+// (Stage 4 ticket 07, Stage 4b tickets 02 and 04).
 import type {
   LessonDetail,
   PatchLessonRequest,
@@ -10,30 +11,34 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 
 import { App } from "../../../app/App";
 import type { BffRequest, BffResponse } from "../../../shared/lib/network";
 import {
+  answer,
+  chapterForm,
+  confirmation,
   connect,
   fakeBackend,
   finder,
+  firstOnly,
   hold,
   lawSource,
   lessonDetail,
+  lessonSummary,
   newSourceForm,
   openLesson,
   problem,
   rows,
   settle,
-  storedAudio,
-  structureForm,
+  tab,
   textForm,
   thaiText,
   type,
-  unloadBlocked,
   validToken,
 } from "../../../shared/test/support";
+import { statusLabels } from "../utils/statusLabels";
 
 const citedLaw = {
   ...lawSource,
@@ -65,12 +70,33 @@ function publishButton() {
 
 async function openFirst(
   backend: ReturnType<typeof fakeBackend>,
-  chapter = 1,
-  version = 1,
+  lesson: string | number = 1,
 ) {
   render(<App network={backend.network} />);
   await connect(validToken);
-  await openLesson(chapter, version);
+  await openLesson(lesson);
+}
+
+const draftOfChapterOne = "Chapter 1 · Draft, created 11 Oct 2026";
+
+// The radio choices the publish confirmation offers, by label, and whether each is chosen.
+function choices() {
+  return within(confirmation(publication()))
+    .queryAllByRole("radio")
+    .map(
+      (radio) =>
+        `${radio.closest("label")?.textContent}${(radio as HTMLInputElement).checked ? " (chosen)" : ""}`,
+    );
+}
+
+function confirmButton() {
+  return within(confirmation(publication())).getByRole("button", {
+    name: "Publish",
+  });
+}
+
+function patches(backend: ReturnType<typeof fakeBackend>) {
+  return backend.requests.filter((request) => request.method === "PATCH");
 }
 
 test("the checklist shows the required items from what the backend holds, and the optional ones", async () => {
@@ -105,12 +131,9 @@ test("Publish is disabled while any form on the Lesson is unsaved", async () => 
   await openFirst(fakeBackend([complete(1)]));
   expect(publishButton()).toHaveProperty("disabled", false);
 
-  type("Version", "2", structureForm());
+  type("Chapter", "2", chapterForm());
   expect(publishButton()).toHaveProperty("disabled", true);
-  expect(
-    within(publication()).getByRole("button", { name: "Archive" }),
-  ).toHaveProperty("disabled", false);
-  type("Version", "1", structureForm());
+  type("Chapter", "1", chapterForm());
   expect(publishButton()).toHaveProperty("disabled", false);
 
   type("Content", "แก้ไข", textForm());
@@ -135,30 +158,230 @@ test("Publish is disabled while any form on the Lesson is unsaved", async () => 
   expect(publishButton()).toHaveProperty("disabled", true);
 });
 
-test("publishing a complete Draft makes it Published and read-only, and the catalogue reflects it", async () => {
+test("a chapter's first publication confirms in the page as version 1.0 with no choice, and the catalogue reflects it", async () => {
   const backend = fakeBackend([complete(1)]);
   await openFirst(backend);
+  const sent = backend.requests.length;
 
   fireEvent.click(publishButton());
 
-  await waitFor(() => expect(screen.getByText("Published")).toBeTruthy());
-  expect(backend.requests.at(-1)).toEqual({
-    method: "PATCH",
-    path: "/api/admin/lessons/1",
-    token: validToken,
-    body: { status: "PUBLISHED" },
-  });
+  // The confirmation reads the Lesson list fresh before it says which version this becomes.
+  await waitFor(() =>
+    expect(confirmation(publication()).textContent).toContain(
+      "Publish as version 1.0",
+    ),
+  );
+  expect(backend.requests.slice(sent)).toEqual([
+    { method: "GET", path: "/api/admin/lessons", token: validToken },
+  ]);
+  expect(choices()).toEqual([]);
+  expect(confirmButton()).toHaveProperty("disabled", false);
+
+  fireEvent.click(confirmButton());
+
+  await screen.findByRole("heading", { name: "Chapter 1, version 1.0" });
+  expect(screen.getByText("Published")).toBeTruthy();
+  expect(patches(backend)).toEqual([
+    {
+      method: "PATCH",
+      path: "/api/admin/lessons/1",
+      token: validToken,
+      body: { status: "PUBLISHED" },
+    },
+  ]);
+  expect(within(publication()).queryByRole("alertdialog")).toBeNull();
   expect(
     within(publication()).queryByRole("button", { name: "Publish" }),
   ).toBeNull();
-  expect(within(structureForm()).getByLabelText("Version")).toHaveProperty(
+  expect(within(chapterForm()).getByLabelText("Chapter")).toHaveProperty(
     "readOnly",
     true,
   );
 
   fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
   await screen.findByRole("table");
-  expect(rows()).toEqual([["1", "1", "Published", "th"]]);
+  expect(rows()).toEqual([["1", "1.0", "Published", "th"]]);
+});
+
+test("a later publication requires choosing a content change or a fix, each showing the version it produces", async () => {
+  const backend = fakeBackend([
+    complete(1),
+    complete(2, { chapter: 1, status: "ARCHIVED" }),
+    complete(3, {
+      chapter: 1,
+      status: "ARCHIVED",
+      version: 2,
+      versionPatch: 1,
+    }),
+  ]);
+  await openFirst(backend, draftOfChapterOne);
+
+  fireEvent.click(publishButton());
+  await waitFor(() =>
+    expect(choices()).toEqual(["Content change → 3.0", "Fix → 2.2"]),
+  );
+  expect(confirmation(publication()).textContent).toContain("2.1");
+  expect(confirmButton()).toHaveProperty("disabled", true);
+
+  fireEvent.click(
+    within(confirmation(publication())).getByLabelText("Fix → 2.2"),
+  );
+  expect(choices()).toEqual(["Content change → 3.0", "Fix → 2.2 (chosen)"]);
+  expect(confirmButton()).toHaveProperty("disabled", false);
+
+  // Cancelling sends nothing, and the next confirmation starts with nothing chosen.
+  answer("Cancel", publication());
+  await settle();
+  expect(patches(backend)).toEqual([]);
+  fireEvent.click(publishButton());
+  await waitFor(() =>
+    expect(choices()).toEqual(["Content change → 3.0", "Fix → 2.2"]),
+  );
+  expect(confirmButton()).toHaveProperty("disabled", true);
+
+  fireEvent.click(
+    within(confirmation(publication())).getByLabelText("Content change → 3.0"),
+  );
+  fireEvent.click(confirmButton());
+
+  await screen.findByRole("heading", { name: "Chapter 1, version 3.0" });
+  expect(patches(backend)).toEqual([
+    {
+      method: "PATCH",
+      path: "/api/admin/lessons/1",
+      token: validToken,
+      body: { status: "PUBLISHED", changeKind: "content" },
+    },
+  ]);
+});
+
+test("the choice counts from the chapter's versions as the backend holds them when the confirmation opens", async () => {
+  let elsewhere = false;
+  const backend = fakeBackend([complete(1)], {
+    // Another tab published and archived version 4.0 of chapter 1 after this editor opened.
+    override: (request) =>
+      elsewhere &&
+      request.method === "GET" &&
+      request.path === "/api/admin/lessons"
+        ? {
+            status: 200,
+            body: {
+              items: [
+                lessonSummary(1, { availableLanguageCodes: ["th"] }),
+                lessonSummary(2, {
+                  chapter: 1,
+                  status: "ARCHIVED",
+                  version: 4,
+                  versionPatch: 0,
+                }),
+                lessonSummary(3, {
+                  chapter: 2,
+                  status: "ARCHIVED",
+                  version: 9,
+                }),
+              ],
+            },
+          }
+        : undefined,
+  });
+  await openFirst(backend);
+  elsewhere = true;
+
+  fireEvent.click(publishButton());
+
+  await waitFor(() =>
+    expect(choices()).toEqual(["Content change → 5.0", "Fix → 4.1"]),
+  );
+});
+
+test("backend refusals appear inside the confirmation, which then offers the choice the backend asks for", async () => {
+  // The confirmation's first read is stale: it misses the version the backend holds.
+  let stale = false;
+  const backend = fakeBackend(
+    [complete(1), complete(2, { chapter: 1, status: "ARCHIVED" })],
+    {
+      override: (request) => {
+        if (
+          !stale ||
+          request.method !== "GET" ||
+          request.path !== "/api/admin/lessons"
+        )
+          return undefined;
+        stale = false;
+        return {
+          status: 200,
+          body: {
+            items: [lessonSummary(1, { availableLanguageCodes: ["th"] })],
+          },
+        };
+      },
+    },
+  );
+  await openFirst(backend, draftOfChapterOne);
+  stale = true;
+
+  fireEvent.click(publishButton());
+  await waitFor(() =>
+    expect(confirmation(publication()).textContent).toContain(
+      "Publish as version 1.0",
+    ),
+  );
+  fireEvent.click(confirmButton());
+
+  const alert = await within(confirmation(publication())).findByRole("alert");
+  expect(alert.textContent).toContain(
+    "A change kind is required to publish this Lesson.",
+  );
+  expect(alert.textContent).toContain(
+    "Choose a content change or a fix: this chapter already has a version.",
+  );
+  expect(alert.textContent).toContain("req-422-change-kind");
+  expect(screen.getByText("Draft")).toBeTruthy();
+
+  // The versions are read again, so the choice appears beside the refusal.
+  await waitFor(() =>
+    expect(choices()).toEqual(["Content change → 2.0", "Fix → 1.1"]),
+  );
+  expect(within(confirmation(publication())).getByRole("alert")).toBe(alert);
+  fireEvent.click(
+    within(confirmation(publication())).getByLabelText("Fix → 1.1"),
+  );
+  fireEvent.click(confirmButton());
+  await screen.findByRole("heading", { name: "Chapter 1, version 1.1" });
+});
+
+test("a failed read of the Lesson list is shown inside the confirmation and can be retried", async () => {
+  let outage = false;
+  const backend = fakeBackend([complete(1)], {
+    override: (request) =>
+      outage &&
+      request.method === "GET" &&
+      request.path === "/api/admin/lessons"
+        ? problem(
+            502,
+            "data_service_unavailable",
+            "The Data Service is unavailable.",
+            "req-502-list",
+          )
+        : undefined,
+  });
+  await openFirst(backend);
+  outage = true;
+
+  fireEvent.click(publishButton());
+  const alert = await within(confirmation(publication())).findByRole("alert");
+  expect(alert.textContent).toContain("req-502-list");
+  expect(confirmButton()).toHaveProperty("disabled", true);
+
+  outage = false;
+  fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+  await waitFor(() =>
+    expect(confirmation(publication()).textContent).toContain(
+      "Publish as version 1.0",
+    ),
+  );
+  expect(confirmButton()).toHaveProperty("disabled", false);
+  expect(patches(backend)).toEqual([]);
 });
 
 // The backend's publication refusals, injected for a PATCH that publishes.
@@ -200,8 +423,12 @@ test("an incomplete Draft shows the backend's refusal with each missing requirem
   );
 
   fireEvent.click(publishButton());
+  await waitFor(() =>
+    expect(confirmButton()).toHaveProperty("disabled", false),
+  );
+  fireEvent.click(confirmButton());
 
-  const alert = await within(publication()).findByRole("alert");
+  const alert = await within(confirmation(publication())).findByRole("alert");
   expect(alert.textContent).toContain(
     "Lesson is missing publication prerequisites.",
   );
@@ -211,16 +438,13 @@ test("an incomplete Draft shows the backend's refusal with each missing requirem
     "At least one Lesson Source is required.",
   );
   expect(screen.getByText("Draft")).toBeTruthy();
-  expect(publishButton()).toHaveProperty("disabled", false);
+  expect(confirmButton()).toHaveProperty("disabled", false);
 });
 
 test("another Published version of the chapter is reported, and no action replaces it in one step", async () => {
   await openFirst(
     fakeBackend(
-      [
-        complete(1, { status: "PUBLISHED" }),
-        complete(2, { chapter: 1, version: 2 }),
-      ],
+      [complete(1, { status: "PUBLISHED" }), complete(2, { chapter: 1 })],
       refusePublication(
         problem(
           409,
@@ -230,127 +454,138 @@ test("another Published version of the chapter is reported, and no action replac
         ),
       ),
     ),
-    1,
-    2,
+    draftOfChapterOne,
   );
 
   fireEvent.click(publishButton());
+  await waitFor(() =>
+    expect(choices()).toEqual(["Content change → 2.0", "Fix → 1.1"]),
+  );
+  fireEvent.click(
+    within(confirmation(publication())).getByLabelText("Fix → 1.1"),
+  );
+  fireEvent.click(confirmButton());
 
-  const alert = await within(publication()).findByRole("alert");
+  const alert = await within(confirmation(publication())).findByRole("alert");
   expect(alert.textContent).toContain(
     "This chapter already has a Published Lesson.",
   );
   expect(alert.textContent).toContain("req-409-published");
   expect(screen.getByText("Draft")).toBeTruthy();
+  answer("Cancel", publication());
   expect(
     within(publication())
       .getAllByRole("button")
       .map((button) => button.textContent),
-  ).toEqual(["Publish", "Archive"]);
+  ).toEqual(["Publish", "Delete"]);
 });
 
-test.each(["DRAFT", "PUBLISHED"] as const)(
-  "archiving a %s Lesson asks first, and cancelling sends nothing",
-  async (status) => {
-    const confirm = vi
-      .spyOn(window, "confirm")
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
-    const backend = fakeBackend([complete(1, { status })]);
-    await openFirst(backend);
-    const sent = backend.requests.length;
+test.each([
+  ["DRAFT", ["Publish", "Delete"]],
+  ["PUBLISHED", ["Archive"]],
+  ["ARCHIVED", []],
+] as const)("a %s Lesson offers %j", async (status, actions) => {
+  await openFirst(fakeBackend([complete(1, { status })]));
 
-    fireEvent.click(
-      within(publication()).getByRole("button", { name: "Archive" }),
-    );
-    expect(confirm).toHaveBeenCalledOnce();
-    const message = confirm.mock.calls[0]![0]!;
-    expect(message).toContain("terminal");
-    expect(message).toContain("read-only");
-    expect(message).toContain("learner catalogue");
-    expect(backend.requests.length).toBe(sent);
-
-    fireEvent.click(
-      within(publication()).getByRole("button", { name: "Archive" }),
-    );
-    await waitFor(() => expect(screen.getByText("Archived")).toBeTruthy());
-    expect(backend.requests.at(-1)).toMatchObject({
-      method: "PATCH",
-      body: { status: "ARCHIVED" },
-    });
-  },
-);
-
-test("archiving with unsaved edits warns that they will be discarded, then discards them", async () => {
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-  await openFirst(fakeBackend([complete(1)]));
-
-  type("Content", "ยังไม่บันทึก", textForm());
-  type("Source URL", "https://example.dk/half-typed", newSourceForm());
-  expect(unloadBlocked()).toBe(true);
-  fireEvent.click(
-    within(publication()).getByRole("button", { name: "Archive" }),
-  );
-  expect(confirm.mock.calls[0]![0]).toContain(
-    "Unsaved changes on this Lesson will be discarded.",
-  );
-
-  await waitFor(() => expect(screen.getByText("Archived")).toBeTruthy());
-  expect(within(textForm()).getByLabelText("Content")).toHaveProperty(
-    "value",
-    thaiText.content,
-  );
-  expect(within(newSourceForm()).getByLabelText("Source URL")).toHaveProperty(
-    "value",
-    "",
-  );
-  await waitFor(() => expect(unloadBlocked()).toBe(false));
+  expect(
+    within(publication())
+      .queryAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(actions);
 });
 
-test("a save that finishes after archiving cannot reopen the Archived Lesson", async () => {
-  vi.spyOn(window, "confirm").mockReturnValue(true);
-  const backend = fakeBackend([complete(1)], {
-    audio: { "1:th": storedAudio() },
+test("deleting a Draft asks in the page what will be lost, and then returns to the catalogue without it", async () => {
+  const backend = fakeBackend([
+    complete(1, { status: "PUBLISHED" }),
+    complete(2, { chapter: 1 }),
+  ]);
+  await openFirst(backend, draftOfChapterOne);
+  const sent = backend.requests.length;
+  const deleteButton = () =>
+    within(publication()).getByRole("button", { name: "Delete" });
+
+  fireEvent.click(deleteButton());
+  const message = confirmation(publication()).textContent;
+  expect(message).toContain(
+    "Lesson Texts, Lesson Source references, and Lesson Audio",
+  );
+  expect(message).toContain("Canonical Sources stay");
+  expect(message).toContain("cannot be undone");
+  answer("Cancel", publication());
+  expect(within(publication()).queryByRole("alertdialog")).toBeNull();
+  await settle();
+  expect(backend.requests.length).toBe(sent);
+
+  fireEvent.click(deleteButton());
+  answer("Delete", publication());
+
+  await screen.findByRole("table");
+  expect(rows()).toEqual([["1", "1.0", "Published", "th"]]);
+  expect(backend.requests.slice(sent)).toContainEqual({
+    method: "DELETE",
+    path: "/api/admin/lessons/2",
+    token: validToken,
   });
+});
+
+test("archiving a Published Lesson asks in the page first, and cancelling sends nothing", async () => {
+  const backend = fakeBackend([complete(1, { status: "PUBLISHED" })]);
+  await openFirst(backend);
+  const sent = backend.requests.length;
+  const archive = () =>
+    within(publication()).getByRole("button", { name: "Archive" });
+
+  fireEvent.click(archive());
+  const message = confirmation(publication()).textContent;
+  expect(message).toContain("terminal");
+  expect(message).toContain("read-only");
+  expect(message).toContain("learner catalogue");
+  answer("Cancel", publication());
+  expect(within(publication()).queryByRole("alertdialog")).toBeNull();
+  await settle();
+  expect(backend.requests.length).toBe(sent);
+  expect(screen.getByText(statusLabels.PUBLISHED)).toBeTruthy();
+
+  fireEvent.click(archive());
+  answer("Archive", publication());
+  await waitFor(() => expect(screen.getByText("Archived")).toBeTruthy());
+  expect(backend.requests.at(-1)).toMatchObject({
+    method: "PATCH",
+    body: { status: "ARCHIVED" },
+  });
+});
+
+test("a save answered after a newer change never replaces the newer Lesson", async () => {
+  const backend = fakeBackend([complete(1)]);
   await openFirst(backend);
   const releaseSave = hold(
     backend.network,
-    (request) => request.method === "PUT",
+    firstOnly((request) => request.method === "PATCH"),
     "response",
   );
 
-  type("Content", "บันทึกก่อนเก็บถาวร", textForm());
+  type("Content", "บันทึกช้า", textForm());
   fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
-  await waitFor(() =>
-    expect(backend.requests.some((request) => request.method === "PUT")).toBe(
-      true,
-    ),
-  );
-  fireEvent.click(
-    within(publication()).getByRole("button", { name: "Archive" }),
-  );
-  await waitFor(() => expect(screen.getByText("Archived")).toBeTruthy());
+  await waitFor(() => expect(patches(backend)).toHaveLength(1));
+  // Saved from another tab, as the th tab's Save is still in flight.
+  type("Chapter", "2", chapterForm());
+  fireEvent.click(tab("da"));
+  fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
+  await screen.findByRole("heading", {
+    name: "Chapter 2 · Draft, created 11 Oct 2026",
+  });
 
+  // The late answer still holds chapter 1, from before the chapter was saved.
   releaseSave();
-  await waitFor(() =>
-    expect(within(textForm()).getByLabelText("Content")).toHaveProperty(
-      "value",
-      "บันทึกก่อนเก็บถาวร",
-    ),
-  );
-  // Let the late save and its narration check settle.
   await settle();
-  expect(screen.getByText("Archived")).toBeTruthy();
-  // Text can no longer change, so there is no narration to warn about.
-  expect(within(screen.getByRole("tabpanel")).queryByRole("status")).toBeNull();
-  expect(within(textForm()).getByLabelText("Content")).toHaveProperty(
-    "readOnly",
-    true,
+  expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(
+    "Chapter 2 · Draft, created 11 Oct 2026",
   );
-  expect(within(publication()).queryAllByRole("button")).toEqual([]);
-  expect(
-    within(structureForm()).queryByRole("button", { name: "Save" }),
-  ).toBeNull();
+  fireEvent.click(tab("th"));
+  expect(within(textForm()).getByLabelText("Content")).toHaveProperty(
+    "value",
+    "บันทึกช้า",
+  );
 });
 
 test("an Archived Lesson stays readable with every mutation disabled", async () => {
@@ -383,7 +618,7 @@ test("an Archived Lesson stays readable with every mutation disabled", async () 
   ).toHaveProperty("readOnly", true);
   expect(within(publication()).queryAllByRole("button")).toEqual([]);
   expect(
-    within(structureForm()).queryByRole("button", { name: "Save" }),
+    within(chapterForm()).queryByRole("button", { name: "Save" }),
   ).toBeNull();
   expect(within(textForm()).queryByRole("button", { name: "Save" })).toBeNull();
   expect(
