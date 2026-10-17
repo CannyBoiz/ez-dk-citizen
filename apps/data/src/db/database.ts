@@ -12,8 +12,14 @@ export function requireDatabaseUrl(environment = process.env): string {
   return databaseUrl;
 }
 
-export function createDataDatabase(databaseUrl: string) {
-  const pool = new Pool({ connectionString: databaseUrl });
+export function createDataDatabase(
+  databaseUrl: string,
+  connectionTimeoutMs?: number,
+) {
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: connectionTimeoutMs,
+  });
   const database = drizzle({ client: pool, relations: schemaRelations });
 
   return { database, pool };

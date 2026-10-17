@@ -60,7 +60,6 @@ export async function failMediaAsset(
       .update(mediaAsset)
       .set({ status: "FAILED" })
       .where(eq(mediaAsset.id, mediaAssetId));
-    return "failed" as const;
   });
 }
 

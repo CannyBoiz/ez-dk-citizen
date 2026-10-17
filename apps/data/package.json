@@ -2,6 +2,12 @@
   "name": "@ez-dk-citizen/data",
   "license": "AGPL-3.0-only",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/data-module.ts",
+      "default": "./dist/src/data-module.js"
+    }
+  },
   "files": [
     "dist",
     "drizzle",

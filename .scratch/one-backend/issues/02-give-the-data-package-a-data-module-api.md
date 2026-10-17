@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The data package's public entry is the data module factory and its types; Drizzle, the schema, and the pool are not exported
-- [ ] Every Data Service route calls the data module and only maps outcome codes to Problem Details
-- [ ] The Data Service's HTTP integration tests and schema-level integration tests pass unchanged
-- [ ] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:integration`, and `pnpm test:e2e` pass
+- [x] The data package's public entry is the data module factory and its types; Drizzle, the schema, and the pool are not exported
+- [x] Every Data Service route calls the data module and only maps outcome codes to Problem Details
+- [x] The Data Service's HTTP integration tests and schema-level integration tests pass unchanged
+- [x] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:integration`, and `pnpm test:e2e` pass

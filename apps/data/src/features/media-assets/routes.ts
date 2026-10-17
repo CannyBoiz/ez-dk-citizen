@@ -2,11 +2,8 @@ import {
   type CompleteMediaAssetRequest,
   type CreatePendingMediaAssetRequest,
   completeMediaAssetRequestSchema,
-  completeMediaAssetResponseSchema,
   createPendingMediaAssetRequestSchema,
   mediaAssetIdParamsSchema,
-  mediaAssetLookupResponseSchema,
-  mediaAssetResponseSchema,
   problem,
   type RequestIdEnvironment,
   validateJson,
@@ -14,20 +11,9 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
-import type { DataDatabase } from "../../db/database.js";
-import {
-  completeMediaAsset,
-  createPendingMediaAsset,
-  failMediaAsset,
-} from "./mutations.js";
-import { findMediaAsset } from "./queries.js";
-import {
-  toCompletedMediaAsset,
-  toLessonAudio,
-  toMediaAsset,
-} from "./serializers.js";
+import type { DataOperations } from "../../data-operations.js";
 
-export function createMediaAssetRoutes(database?: DataDatabase) {
+export function createMediaAssetRoutes(data: DataOperations) {
   const app = new Hono<RequestIdEnvironment>();
 
   app.post(
@@ -35,20 +21,11 @@ export function createMediaAssetRoutes(database?: DataDatabase) {
     validateJson(createPendingMediaAssetRequestSchema),
     async (c) => {
       const input = c.req.valid("json") as CreatePendingMediaAssetRequest;
-      if (!database) {
-        return problem(
-          c,
-          500,
-          "internal_error",
-          "The request could not be completed.",
-        );
-      }
-
-      const created = await createPendingMediaAsset(database, input);
+      const created = await data.createPendingMediaAsset(input);
       if (created === "unsupported_language") {
         return problem(c, 422, created, "Language is not supported.");
       }
-      return c.json(mediaAssetResponseSchema.parse(toMediaAsset(created)), 201);
+      return c.json(created, 201);
     },
   );
 
@@ -59,23 +36,11 @@ export function createMediaAssetRoutes(database?: DataDatabase) {
       const { mediaAssetId } = c.req.valid("param") as {
         mediaAssetId: number;
       };
-      if (!database) {
-        return problem(
-          c,
-          500,
-          "internal_error",
-          "The request could not be completed.",
-        );
+      const asset = await data.getMediaAsset(mediaAssetId);
+      if (asset === "media_asset_not_found") {
+        return problem(c, 404, asset, "Media Asset was not found.");
       }
-      const asset = await findMediaAsset(database, mediaAssetId);
-      if (!asset)
-        return problem(
-          c,
-          404,
-          "media_asset_not_found",
-          "Media Asset was not found.",
-        );
-      return c.json(mediaAssetLookupResponseSchema.parse(toMediaAsset(asset)));
+      return c.json(asset);
     },
   );
 
@@ -86,16 +51,8 @@ export function createMediaAssetRoutes(database?: DataDatabase) {
       const { mediaAssetId } = c.req.valid("param") as {
         mediaAssetId: number;
       };
-      if (!database) {
-        return problem(
-          c,
-          500,
-          "internal_error",
-          "The request could not be completed.",
-        );
-      }
 
-      const outcome = await failMediaAsset(database, mediaAssetId);
+      const outcome = await data.failMediaAsset(mediaAssetId);
 
       if (outcome === "media_asset_not_found") {
         return problem(c, 404, outcome, "Media Asset was not found.");
@@ -116,16 +73,8 @@ export function createMediaAssetRoutes(database?: DataDatabase) {
         mediaAssetId: number;
       };
       const input = c.req.valid("json") as CompleteMediaAssetRequest;
-      if (!database) {
-        return problem(
-          c,
-          500,
-          "internal_error",
-          "The request could not be completed.",
-        );
-      }
 
-      const outcome = await completeMediaAsset(database, mediaAssetId, input);
+      const outcome = await data.completeMediaAsset(mediaAssetId, input);
 
       if (outcome === "media_asset_not_found") {
         return problem(c, 404, outcome, "Media Asset was not found.");
@@ -166,12 +115,7 @@ export function createMediaAssetRoutes(database?: DataDatabase) {
           "Media Asset is already bound to a different Lesson or Language.",
         );
       }
-      return c.json(
-        completeMediaAssetResponseSchema.parse({
-          mediaAsset: toCompletedMediaAsset(outcome.readyAsset),
-          lessonAudio: toLessonAudio(outcome.audio),
-        }),
-      );
+      return c.json(outcome);
     },
   );
 

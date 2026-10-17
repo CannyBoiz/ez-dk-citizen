@@ -83,13 +83,24 @@ export async function readLesson(
     );
     if (!text) return "lesson_text_not_found" as const;
   }
-  if (filteredStatus === "PUBLISHED" && languageCode) {
-    const currentAudio = await selectCurrentAudio(database, id, languageCode);
-    if (!currentAudio) return { ...detail, currentAudio: null };
-    const { originalFilename: _originalFilename, ...published } = currentAudio;
-    return { ...detail, currentAudio: published };
-  }
   return detail;
+}
+
+// A Published Lesson read in one Language, with that Language's current audio or null.
+export async function readPublishedLesson(
+  database: DataDatabase,
+  id: number,
+  languageCode: string,
+) {
+  const detail = await readLesson(database, id, {
+    language: languageCode,
+    status: "PUBLISHED",
+  });
+  if (typeof detail === "string") return detail;
+  const currentAudio = await selectCurrentAudio(database, id, languageCode);
+  if (!currentAudio) return { ...detail, currentAudio: null };
+  const { originalFilename: _originalFilename, ...published } = currentAudio;
+  return { ...detail, currentAudio: published };
 }
 
 // The current READY Lesson Audio for one Lesson and Language, whatever the Lesson's status.

@@ -1,21 +1,15 @@
 import {
   type CreateLessonRequest,
   createLessonRequestSchema,
-  currentLessonAudioResponseSchema,
-  deleteLessonResponseSchema,
   type LessonStatus,
-  lessonDetailListResponseSchema,
-  lessonDetailSchema,
   lessonIdParamsSchema,
   lessonLanguageParamsSchema,
-  lessonListResponseSchema,
   lessonReadQuerySchema,
   lessonSourceParamsSchema,
   lessonTextParamsSchema,
   type PatchLessonRequest,
   patchLessonRequestSchema,
   problem,
-  publishedLessonDetailSchema,
   type RequestIdEnvironment,
   type UpsertLessonSourceRequest,
   type UpsertLessonTextRequest,
@@ -26,41 +20,14 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
-import type { DataDatabase } from "../../db/database.js";
-import { isPostgresError } from "../../db/errors.js";
-import {
-  createLesson,
-  deleteLesson,
-  deleteLessonSource,
-  patchLesson,
-  upsertLessonSource,
-  upsertLessonText,
-} from "./mutations.js";
-import {
-  listLessons,
-  loadLessonDetail,
-  readCurrentLessonAudio,
-  readLesson,
-} from "./queries.js";
+import type { DataOperations } from "../../data-operations.js";
 
-export function createLessonRoutes(database?: DataDatabase) {
+export function createLessonRoutes(data: DataOperations) {
   const app = new Hono<RequestIdEnvironment>();
 
   app.post("/", validateJson(createLessonRequestSchema), async (c) => {
     const input = c.req.valid("json") as CreateLessonRequest;
-    if (!database) {
-      return problem(
-        c,
-        500,
-        "internal_error",
-        "The request could not be completed.",
-      );
-    }
-
-    const id = await createLesson(database, input);
-    const detail = await loadLessonDetail(database, id);
-    if (!detail) throw new Error("Created Lesson could not be read.");
-    return c.json(lessonDetailSchema.parse(detail), 201);
+    return c.json(await data.createLesson(input), 201);
   });
 
   app.patch(
@@ -70,92 +37,68 @@ export function createLessonRoutes(database?: DataDatabase) {
     async (c) => {
       const { lessonId: id } = c.req.valid("param") as { lessonId: number };
       const input = c.req.valid("json") as PatchLessonRequest;
-      if (!database) {
+
+      const outcome = await data.patchLesson(id, input);
+
+      if (outcome === "lesson_not_found") {
+        return problem(c, 404, outcome, "Lesson was not found.");
+      }
+      if (outcome === "lesson_not_editable") {
+        return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
+      }
+      if (outcome === "unsupported_language") {
+        return problem(c, 422, outcome, "Language is not supported.");
+      }
+      if (outcome === "lesson_lifecycle_conflict") {
         return problem(
           c,
-          500,
-          "internal_error",
-          "The request could not be completed.",
+          409,
+          outcome,
+          "Lesson status transition is not allowed.",
+        );
+      }
+      if (outcome === "change_kind_required") {
+        return problem(
+          c,
+          422,
+          "validation_failed",
+          "A change kind is required to publish this Lesson.",
+          [
+            {
+              path: ["changeKind"],
+              message:
+                "Choose a content change or a fix: this chapter already has a version.",
+            },
+          ],
+        );
+      }
+      if (outcome === "published_lesson_conflict") {
+        return problem(
+          c,
+          409,
+          outcome,
+          "This chapter already has a Published Lesson.",
+        );
+      }
+      if (outcome === "lesson_version_conflict") {
+        return problem(
+          c,
+          409,
+          outcome,
+          "A Lesson with this chapter and version already exists.",
+        );
+      }
+      if ("missing" in outcome) {
+        return problem(
+          c,
+          409,
+          "lesson_publication_incomplete",
+          "Lesson is missing publication prerequisites.",
+          outcome.missing,
         );
       }
 
-      try {
-        const outcome = await patchLesson(database, id, input);
-
-        if (outcome === "lesson_not_found") {
-          return problem(c, 404, outcome, "Lesson was not found.");
-        }
-        if (outcome === "lesson_not_editable") {
-          return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
-        }
-        if (outcome === "unsupported_language") {
-          return problem(c, 422, outcome, "Language is not supported.");
-        }
-        if (outcome === "lesson_lifecycle_conflict") {
-          return problem(
-            c,
-            409,
-            outcome,
-            "Lesson status transition is not allowed.",
-          );
-        }
-        if (outcome === "change_kind_required") {
-          return problem(
-            c,
-            422,
-            "validation_failed",
-            "A change kind is required to publish this Lesson.",
-            [
-              {
-                path: ["changeKind"],
-                message:
-                  "Choose a content change or a fix: this chapter already has a version.",
-              },
-            ],
-          );
-        }
-        if (outcome === "published_lesson_conflict") {
-          return problem(
-            c,
-            409,
-            outcome,
-            "This chapter already has a Published Lesson.",
-          );
-        }
-        if (typeof outcome === "object") {
-          return problem(
-            c,
-            409,
-            "lesson_publication_incomplete",
-            "Lesson is missing publication prerequisites.",
-            outcome.missing,
-          );
-        }
-
-        const detail = await loadLessonDetail(database, outcome);
-        if (!detail) throw new Error("Updated Lesson could not be read.");
-        return c.json(lessonDetailSchema.parse(detail));
-      } catch (error) {
-        if (
-          isPostgresError(error, "23505", "lesson_one_published_per_chapter")
-        ) {
-          return problem(
-            c,
-            409,
-            "published_lesson_conflict",
-            "This chapter already has a Published Lesson.",
-          );
-        }
-        if (isPostgresError(error, "23505")) {
-          return problem(
-            c,
-            409,
-            "lesson_version_conflict",
-            "A Lesson with this chapter and version already exists.",
-          );
-        }
-        throw error;
-      }
+      return c.json(outcome);
     },
   );
 
@@ -164,16 +107,8 @@ export function createLessonRoutes(database?: DataDatabase) {
     validateRequest("param", lessonIdParamsSchema),
     async (c) => {
       const { lessonId: id } = c.req.valid("param") as { lessonId: number };
-      if (!database) {
-        return problem(
-          c,
-          500,
-          "internal_error",
-          "The request could not be completed.",
-        );
-      }
 
-      const outcome = await deleteLesson(database, id);
+      const outcome = await data.deleteLesson(id);
 
       if (outcome === "lesson_not_found") {
         return problem(c, 404, outcome, "Lesson was not found.");
@@ -181,9 +116,7 @@ export function createLessonRoutes(database?: DataDatabase) {
       if (outcome === "lesson_not_editable") {
         return problem(c, 409, outcome, "Only Draft Lessons can be deleted.");
       }
-      return c.json(
-        deleteLessonResponseSchema.parse({ deletedMediaAssets: outcome }),
-      );
+      return c.json(outcome);
     },
   );
 
@@ -197,16 +130,8 @@ export function createLessonRoutes(database?: DataDatabase) {
         languageCode: string;
       };
       const input = c.req.valid("json") as UpsertLessonTextRequest;
-      if (!database) {
-        return problem(
-          c,
-          500,
-          "internal_error",
-          "The request could not be completed.",
-        );
-      }
 
-      const outcome = await upsertLessonText(database, id, languageCode, input);
+      const outcome = await data.upsertLessonText(id, languageCode, input);
 
       if (outcome === "lesson_not_found") {
         return problem(c, 404, outcome, "Lesson was not found.");
@@ -217,10 +142,7 @@ export function createLessonRoutes(database?: DataDatabase) {
       if (outcome === "unsupported_language") {
         return problem(c, 422, outcome, "Language is not supported.");
       }
-
-      const detail = await loadLessonDetail(database, outcome);
-      if (!detail) throw new Error("Updated Lesson could not be read.");
-      return c.json(lessonDetailSchema.parse(detail));
+      return c.json(outcome);
     },
   );
 
@@ -234,21 +156,8 @@ export function createLessonRoutes(database?: DataDatabase) {
         sourceId: number;
       };
       const input = c.req.valid("json") as UpsertLessonSourceRequest;
-      if (!database) {
-        return problem(
-          c,
-          500,
-          "internal_error",
-          "The request could not be completed.",
-        );
-      }
 
-      const outcome = await upsertLessonSource(
-        database,
-        lessonId,
-        sourceId,
-        input,
-      );
+      const outcome = await data.upsertLessonSource(lessonId, sourceId, input);
 
       if (outcome === "lesson_not_found") {
         return problem(c, 404, outcome, "Lesson was not found.");
@@ -259,10 +168,7 @@ export function createLessonRoutes(database?: DataDatabase) {
       if (outcome === "lesson_not_editable") {
         return problem(c, 409, outcome, "Only Draft Lessons can be edited.");
       }
-
-      const detail = await loadLessonDetail(database, outcome);
-      if (!detail) throw new Error("Updated Lesson could not be read.");
-      return c.json(lessonDetailSchema.parse(detail));
+      return c.json(outcome);
     },
   );
 
@@ -274,16 +180,8 @@ export function createLessonRoutes(database?: DataDatabase) {
         lessonId: number;
         sourceId: number;
       };
-      if (!database) {
-        return problem(
-          c,
-          500,
-          "internal_error",
-          "The request could not be completed.",
-        );
-      }
 
-      const outcome = await deleteLessonSource(database, lessonId, sourceId);
+      const outcome = await data.deleteLessonSource(lessonId, sourceId);
 
       if (outcome === "lesson_not_found") {
         return problem(c, 404, outcome, "Lesson was not found.");
@@ -299,30 +197,20 @@ export function createLessonRoutes(database?: DataDatabase) {
   );
 
   app.get("/", validateRequest("query", lessonReadQuerySchema), async (c) => {
-    if (!database) {
-      return problem(
-        c,
-        500,
-        "internal_error",
-        "The request could not be completed.",
-      );
-    }
-
     const { language: languageCode, status: filteredStatus } = c.req.valid(
       "query",
     ) as { language?: string; status?: LessonStatus };
-    const result = await listLessons(database, {
-      language: languageCode,
-      status: filteredStatus,
-    });
+    if (languageCode === undefined) {
+      return c.json(await data.listLessons(filteredStatus));
+    }
+    const result = await data.listLessonsInLanguage(
+      languageCode,
+      filteredStatus,
+    );
     if (result === "unsupported_language") {
       return problem(c, 422, result, "Language is not supported.");
     }
-    return c.json(
-      languageCode !== undefined
-        ? lessonDetailListResponseSchema.parse(result)
-        : lessonListResponseSchema.parse(result),
-    );
+    return c.json(result);
   });
 
   app.get(
@@ -331,22 +219,16 @@ export function createLessonRoutes(database?: DataDatabase) {
     validateRequest("query", lessonReadQuerySchema),
     async (c) => {
       const { lessonId: id } = c.req.valid("param") as { lessonId: number };
-      if (!database) {
-        return problem(
-          c,
-          500,
-          "internal_error",
-          "The request could not be completed.",
-        );
-      }
-
       const { language: languageCode, status: filteredStatus } = c.req.valid(
         "query",
       ) as { language?: string; status?: LessonStatus };
-      const detail = await readLesson(database, id, {
-        language: languageCode,
-        status: filteredStatus,
-      });
+      const detail =
+        filteredStatus === "PUBLISHED" && languageCode
+          ? await data.getPublishedLesson(id, languageCode)
+          : await data.getLesson(id, {
+              language: languageCode,
+              status: filteredStatus,
+            });
       if (detail === "unsupported_language") {
         return problem(c, 422, detail, "Language is not supported.");
       }
@@ -356,11 +238,7 @@ export function createLessonRoutes(database?: DataDatabase) {
       if (detail === "lesson_text_not_found") {
         return problem(c, 404, detail, "Lesson Text was not found.");
       }
-      return c.json(
-        filteredStatus === "PUBLISHED" && languageCode
-          ? publishedLessonDetailSchema.parse(detail)
-          : lessonDetailSchema.parse(detail),
-      );
+      return c.json(detail);
     },
   );
 
@@ -372,23 +250,15 @@ export function createLessonRoutes(database?: DataDatabase) {
         lessonId: number;
         languageCode: string;
       };
-      if (!database) {
-        return problem(
-          c,
-          500,
-          "internal_error",
-          "The request could not be completed.",
-        );
-      }
 
-      const outcome = await readCurrentLessonAudio(database, id, languageCode);
+      const outcome = await data.getCurrentLessonAudio(id, languageCode);
       if (outcome === "unsupported_language") {
         return problem(c, 422, outcome, "Language is not supported.");
       }
       if (outcome === "lesson_not_found") {
         return problem(c, 404, outcome, "Lesson was not found.");
       }
-      return c.json(currentLessonAudioResponseSchema.parse(outcome));
+      return c.json(outcome);
     },
   );
 
