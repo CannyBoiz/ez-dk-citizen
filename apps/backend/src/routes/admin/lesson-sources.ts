@@ -1,5 +1,4 @@
 import {
-  lessonDetailSchema,
   lessonSourceParamsSchema,
   type RequestIdEnvironment,
   type UpsertLessonSourceRequest,
@@ -7,14 +6,27 @@ import {
   validateJson,
   validateRequest,
 } from "@ez-dk-citizen/api-contracts";
+import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
-import type { BackendAppOptions } from "../../app.js";
-import { mapDataServiceError } from "../../errors/downstream.js";
 import { problem } from "../../errors/problem-details.js";
-export function createAdminLessonSourceRoutes(
-  options: Pick<BackendAppOptions, "dataServiceClient">,
+
+// The refusals both Lesson Source routes answer.
+const refusals = {
+  lesson_not_found: [404, "Lesson was not found."],
+  source_not_found: [404, "Source was not found."],
+  lesson_not_editable: [409, "Only Draft Lessons can be edited."],
+} as const;
+
+function refuse(
+  c: Parameters<typeof problem>[0],
+  outcome: keyof typeof refusals,
 ) {
+  const [status, detail] = refusals[outcome];
+  return problem(c, status, outcome, detail);
+}
+
+export function createAdminLessonSourceRoutes(data: DataModule) {
   return new Hono<RequestIdEnvironment>()
     .put(
       "/:lessonId/sources/:sourceId",
@@ -25,29 +37,14 @@ export function createAdminLessonSourceRoutes(
           lessonId: number;
           sourceId: number;
         };
-        const input = c.req.valid("json") as UpsertLessonSourceRequest;
-        if (!options.dataServiceClient) {
-          return problem(
-            c,
-            502,
-            "data_service_unavailable",
-            "The Data Service is unavailable.",
-          );
-        }
-        try {
-          return c.json(
-            lessonDetailSchema.parse(
-              await options.dataServiceClient.upsertLessonSource(
-                lessonId,
-                sourceId,
-                input,
-                c.get("requestId"),
-              ),
-            ),
-          );
-        } catch (error) {
-          return mapDataServiceError(c, error);
-        }
+        const outcome = await data.upsertLessonSource(
+          lessonId,
+          sourceId,
+          c.req.valid("json") as UpsertLessonSourceRequest,
+        );
+        return typeof outcome === "string"
+          ? refuse(c, outcome)
+          : c.json(outcome);
       },
     )
     .delete(
@@ -58,24 +55,8 @@ export function createAdminLessonSourceRoutes(
           lessonId: number;
           sourceId: number;
         };
-        if (!options.dataServiceClient) {
-          return problem(
-            c,
-            502,
-            "data_service_unavailable",
-            "The Data Service is unavailable.",
-          );
-        }
-        try {
-          await options.dataServiceClient.deleteLessonSource(
-            lessonId,
-            sourceId,
-            c.get("requestId"),
-          );
-          return c.body(null, 204);
-        } catch (error) {
-          return mapDataServiceError(c, error);
-        }
+        const outcome = await data.deleteLessonSource(lessonId, sourceId);
+        return outcome ? refuse(c, outcome) : c.body(null, 204);
       },
     );
 }

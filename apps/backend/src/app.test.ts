@@ -34,7 +34,8 @@ test("Backend composition root uses runtime configuration, the supplied client, 
   const app = createApp({
     config,
     dataClient: createTestDataServiceClient({
-      async listLessons(requestId) {
+      async listPublishedLessons(languageCode, requestId) {
+        assert.equal(languageCode, "th");
         assert.equal(requestId, "composition-request");
         return { items: [] };
       },
@@ -43,30 +44,31 @@ test("Backend composition root uses runtime configuration, the supplied client, 
 
   assert.equal((await app.request("/health")).status, 200);
   assert.equal(readiness.mock.callCount(), 0);
-  const lessons = await app.request("/api/admin/lessons", {
-    headers: {
-      Authorization: "Bearer configured-admin-token",
-      Origin: "https://admin.example",
-      "X-Request-ID": "composition-request",
-    },
+  const lessons = await app.request("/api/mobile/lessons", {
+    headers: { "X-Request-ID": "composition-request" },
   });
   assert.equal(lessons.status, 200);
   assert.deepEqual(await lessons.json(), { items: [] });
-  assert.equal(
-    lessons.headers.get("access-control-allow-origin"),
-    "https://admin.example",
-  );
   assert.equal((await app.request("/ready")).status, 200);
   ready = false;
   assert.equal((await app.request("/ready")).status, 503);
   assert.equal(readiness.mock.callCount(), 2);
 
-  const started = performance.now();
-  const sources = await app.request("/api/admin/sources", {
-    headers: { Authorization: "Bearer configured-admin-token" },
-  });
-  assert.ok(performance.now() - started < 1_000);
-  assert.equal(sources.status, 503);
+  for (const path of ["/api/admin/sources", "/api/admin/lessons"]) {
+    const started = performance.now();
+    const response = await app.request(path, {
+      headers: {
+        Authorization: "Bearer configured-admin-token",
+        Origin: "https://admin.example",
+      },
+    });
+    assert.ok(performance.now() - started < 1_000, path);
+    assert.equal(response.status, 503, path);
+    assert.equal(
+      response.headers.get("access-control-allow-origin"),
+      "https://admin.example",
+    );
+  }
 });
 
 test("Backend answers 503 database_unavailable within the timeout when PostgreSQL is unreachable or stops answering", async (context) => {

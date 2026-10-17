@@ -4,11 +4,11 @@
 
 **Blocked by:** 03 — Serve Sources from the data module in-process
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Every Lesson, Lesson Text, and Lesson Source route keeps today's statuses and Problem Details codes, including `lesson_not_found`, `lesson_not_editable`, `lesson_lifecycle_conflict`, `lesson_version_conflict`, `published_lesson_conflict`, `lesson_publication_incomplete`, and `unsupported_language`, and `422 validation_failed` on `changeKind` when publishing without a change kind
-- [ ] Draft deletion removes from storage exactly the objects of Media Assets that no remaining Lesson Audio uses
-- [ ] Route tests in the default tier stub the data module's outcome codes and need no Docker
-- [ ] The `/internal/lessons` HTTP tests run as Admin API tests against real PostgreSQL in `test:integration`
-- [ ] The Data Service client's Lesson, Lesson Text, and Lesson Source methods and their stubs are deleted
-- [ ] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:integration`, and `pnpm test:e2e` pass
+- [x] Every Lesson, Lesson Text, and Lesson Source route keeps today's statuses and Problem Details codes, including `lesson_not_found`, `lesson_not_editable`, `lesson_lifecycle_conflict`, `lesson_version_conflict`, `published_lesson_conflict`, `lesson_publication_incomplete`, and `unsupported_language`, and `422 validation_failed` on `changeKind` when publishing without a change kind
+- [x] Draft deletion removes from storage exactly the objects of Media Assets that no remaining Lesson Audio uses
+- [x] Route tests in the default tier stub the data module's outcome codes and need no Docker
+- [x] The `/internal/lessons` HTTP tests run as Admin API tests against real PostgreSQL in `test:integration`
+- [x] The Data Service client's Lesson, Lesson Text, and Lesson Source methods and their stubs are deleted
+- [x] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:integration`, and `pnpm test:e2e` pass

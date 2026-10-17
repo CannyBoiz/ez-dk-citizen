@@ -1,35 +1,21 @@
 import {
   type CompleteMediaAssetRequest,
   type CompleteMediaAssetResponse,
-  type CreateLessonRequest,
   type CreatePendingMediaAssetRequest,
   type CurrentLessonAudioResponse,
   completeMediaAssetRequestSchema,
   completeMediaAssetResponseSchema,
-  createLessonRequestSchema,
   createPendingMediaAssetRequestSchema,
   currentLessonAudioResponseSchema,
-  type DeleteLessonResponse,
-  deleteLessonResponseSchema,
-  type LessonDetail,
   type LessonDetailListResponse,
-  type LessonListResponse,
   lessonDetailListResponseSchema,
-  lessonDetailSchema,
-  lessonListResponseSchema,
   type MediaAssetResponse,
   mediaAssetLookupResponseSchema,
   mediaAssetResponseSchema,
-  type PatchLessonRequest,
   type ProblemDetails,
   type PublishedLessonDetail,
-  patchLessonRequestSchema,
   problemDetailsSchema,
   publishedLessonDetailSchema,
-  type UpsertLessonSourceRequest,
-  type UpsertLessonTextRequest,
-  upsertLessonSourceRequestSchema,
-  upsertLessonTextRequestSchema,
 } from "@ez-dk-citizen/api-contracts";
 
 export interface DataServiceClient {
@@ -44,35 +30,6 @@ export interface DataServiceClient {
     input: CompleteMediaAssetRequest,
     requestId: string,
   ): Promise<CompleteMediaAssetResponse>;
-  createLesson(
-    input: CreateLessonRequest,
-    requestId: string,
-  ): Promise<LessonDetail>;
-  upsertLessonText(
-    lessonId: number,
-    languageCode: string,
-    input: UpsertLessonTextRequest,
-    requestId: string,
-  ): Promise<LessonDetail>;
-  listLessons(requestId: string): Promise<LessonListResponse>;
-  getLesson(id: number, requestId: string): Promise<LessonDetail>;
-  patchLesson(
-    id: number,
-    input: PatchLessonRequest,
-    requestId: string,
-  ): Promise<LessonDetail>;
-  deleteLesson(id: number, requestId: string): Promise<DeleteLessonResponse>;
-  upsertLessonSource(
-    lessonId: number,
-    sourceId: number,
-    input: UpsertLessonSourceRequest,
-    requestId: string,
-  ): Promise<LessonDetail>;
-  deleteLessonSource(
-    lessonId: number,
-    sourceId: number,
-    requestId: string,
-  ): Promise<void>;
   listPublishedLessons(
     languageCode: string,
     requestId: string,
@@ -107,7 +64,7 @@ export function createDataServiceClient(
   const base = new URL(baseUrl);
   const call = <T>(
     path: string,
-    method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT",
+    method: "GET" | "POST",
     requestId: string,
     body: unknown,
     parse: (value: unknown) => T,
@@ -155,70 +112,6 @@ export function createDataServiceClient(
         completeMediaAssetRequestSchema.parse(input),
         completeMediaAssetResponseSchema.parse,
       ),
-    createLesson: (input, requestId) =>
-      call(
-        "/internal/lessons",
-        "POST",
-        requestId,
-        createLessonRequestSchema.parse(input),
-        lessonDetailSchema.parse,
-      ),
-    upsertLessonText: (lessonId, languageCode, input, requestId) =>
-      call(
-        `/internal/lessons/${lessonId}/texts/${languageCode}`,
-        "PUT",
-        requestId,
-        upsertLessonTextRequestSchema.parse(input),
-        lessonDetailSchema.parse,
-      ),
-    listLessons: (requestId) =>
-      call(
-        "/internal/lessons",
-        "GET",
-        requestId,
-        undefined,
-        lessonListResponseSchema.parse,
-      ),
-    getLesson: (id, requestId) =>
-      call(
-        `/internal/lessons/${id}`,
-        "GET",
-        requestId,
-        undefined,
-        lessonDetailSchema.parse,
-      ),
-    patchLesson: (id, input, requestId) =>
-      call(
-        `/internal/lessons/${id}`,
-        "PATCH",
-        requestId,
-        patchLessonRequestSchema.parse(input),
-        lessonDetailSchema.parse,
-      ),
-    deleteLesson: (id, requestId) =>
-      call(
-        `/internal/lessons/${id}`,
-        "DELETE",
-        requestId,
-        undefined,
-        deleteLessonResponseSchema.parse,
-      ),
-    upsertLessonSource: (lessonId, sourceId, input, requestId) =>
-      call(
-        `/internal/lessons/${lessonId}/sources/${sourceId}`,
-        "PUT",
-        requestId,
-        upsertLessonSourceRequestSchema.parse(input),
-        lessonDetailSchema.parse,
-      ),
-    deleteLessonSource: (lessonId, sourceId, requestId) =>
-      call(
-        `/internal/lessons/${lessonId}/sources/${sourceId}`,
-        "DELETE",
-        requestId,
-        undefined,
-        () => undefined,
-      ),
     listPublishedLessons: (languageCode, requestId) =>
       call(
         `/internal/lessons?status=PUBLISHED&language=${encodeURIComponent(languageCode)}`,
@@ -248,7 +141,7 @@ export function createDataServiceClient(
 
 async function request<T>(
   url: URL,
-  method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT",
+  method: "GET" | "POST",
   token: string,
   requestId: string,
   body: unknown,

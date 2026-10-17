@@ -10,7 +10,10 @@ test("Data Service client preserves boundary failures and correlation", async (c
     let calls = 0;
     globalThis.fetch = async (input, init) => {
       calls += 1;
-      assert.equal(input.toString(), "http://data.example/internal/lessons");
+      assert.equal(
+        input.toString(),
+        "http://data.example/internal/lessons?status=PUBLISHED&language=th",
+      );
       assert.equal(
         init?.headers && new Headers(init.headers).get("Authorization"),
         "Bearer data-token",
@@ -27,7 +30,7 @@ test("Data Service client preserves boundary failures and correlation", async (c
         await createDataServiceClient(
           "http://data.example",
           "data-token",
-        ).listLessons("request-1"),
+        ).listPublishedLessons("th", "request-1"),
         { items: [] },
       );
       assert.equal(calls, 1);
@@ -128,7 +131,7 @@ test("Data Service client preserves boundary failures and correlation", async (c
         createDataServiceClient(
           "http://data.example",
           "data-token",
-        ).listLessons("request-2"),
+        ).listPublishedLessons("th", "request-2"),
         (error: unknown) =>
           error instanceof DataServiceError &&
           error.status === 502 &&
@@ -154,7 +157,7 @@ test("Data Service client preserves boundary failures and correlation", async (c
           "http://data.example",
           "data-token",
           1,
-        ).listLessons("request-3"),
+        ).listPublishedLessons("th", "request-3"),
         (error: unknown) =>
           error instanceof DataServiceError &&
           error.status === 504 &&
@@ -173,7 +176,7 @@ test("Data Service client preserves boundary failures and correlation", async (c
         createDataServiceClient(
           "http://data.example",
           "data-token",
-        ).listLessons("request-4"),
+        ).listPublishedLessons("th", "request-4"),
         (error: unknown) =>
           error instanceof DataServiceError &&
           error.status === 502 &&
@@ -201,10 +204,10 @@ test("Data Service client preserves boundary failures and correlation", async (c
 
     try {
       await assert.rejects(
-        createDataServiceClient("http://data.example", "data-token").getLesson(
-          99,
-          "request-5",
-        ),
+        createDataServiceClient(
+          "http://data.example",
+          "data-token",
+        ).getPublishedLesson(99, "th", "request-5"),
         (error: unknown) =>
           error instanceof DataServiceError &&
           error.status === 404 &&

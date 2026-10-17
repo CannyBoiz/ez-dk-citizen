@@ -97,16 +97,24 @@ test("Admin API Source updates correct a Source cited by a Published Lesson with
     "2025-03-09T00:00:00.000Z",
   );
   const other = await createSource("https://example.com/other", null);
-  // Lesson routes still call the Data Service, so the Lesson is set up and read
-  // through the data module.
-  const lesson = await data.createLesson({ chapter: 75 });
-  await data.upsertLessonText(lesson.id, "th", {
+  const lessonRequest = async (path: string, method: string, body: unknown) =>
+    (
+      await app.request(`/api/admin/lessons${path}`, {
+        method,
+        headers,
+        body: JSON.stringify(body),
+      })
+    ).json();
+  const lesson = await lessonRequest("", "POST", { chapter: 75 });
+  await lessonRequest(`/${lesson.id}/texts/th`, "PUT", {
     title: "Title",
     content: "Content",
   });
-  await data.upsertLessonSource(lesson.id, typo.id, { pageFrom: 3 });
+  await lessonRequest(`/${lesson.id}/sources/${typo.id}`, "PUT", {
+    pageFrom: 3,
+  });
   const published = lessonDetailSchema.parse(
-    await data.patchLesson(lesson.id, { status: "PUBLISHED" }),
+    await lessonRequest(`/${lesson.id}`, "PATCH", { status: "PUBLISHED" }),
   );
   const update = (id: number | string, body: unknown) =>
     app.request(`/api/admin/sources/${id}`, {
@@ -169,7 +177,11 @@ test("Admin API Source updates correct a Source cited by a Published Lesson with
   assert.equal(missing.status, 404);
   assert.equal((await missing.json()).code, "source_not_found");
 
-  const detail = lessonDetailSchema.parse(await data.getLesson(lesson.id));
+  const detail = lessonDetailSchema.parse(
+    await (
+      await app.request(`/api/admin/lessons/${lesson.id}`, { headers })
+    ).json(),
+  );
   assert.equal(detail.updatedAt, published.updatedAt);
   assert.deepEqual(detail.lessonSources, [
     {
@@ -181,6 +193,8 @@ test("Admin API Source updates correct a Source cited by a Published Lesson with
       sectionReference: null,
     },
   ]);
+  // Mobile routes still call the Data Service, so the data module reads the Published
+  // Lesson.
   const thai = publishedLessonDetailSchema.parse(
     await data.getPublishedLesson(lesson.id, "th"),
   );

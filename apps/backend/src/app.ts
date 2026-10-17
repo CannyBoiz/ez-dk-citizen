@@ -92,15 +92,13 @@ export function createBackendApp(
     }),
   );
 
+  const data = options.data ?? withoutDataModule;
   return app
     .route("/", createHealthRoutes(checkDataServiceReadiness))
     .route("/api/admin/media", createAdminMediaRoutes(options))
-    .route("/api/admin/lessons", createAdminLessonRoutes(options))
-    .route(
-      "/api/admin/sources",
-      createAdminSourceRoutes(options.data ?? withoutDataModule),
-    )
-    .route("/api/admin/lessons", createAdminLessonSourceRoutes(options))
+    .route("/api/admin/lessons", createAdminLessonRoutes(data, options))
+    .route("/api/admin/sources", createAdminSourceRoutes(data))
+    .route("/api/admin/lessons", createAdminLessonSourceRoutes(data))
     .route("/api/admin/lessons", createAdminLessonAudioRoutes(options))
     .route("/api/mobile/lessons", createMobileLessonRoutes(options));
 }

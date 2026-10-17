@@ -356,7 +356,12 @@ async function verifyTracerLogs() {
           return [];
         }
       })
-      .filter((entry) => entry.requestId === "stage-2-tracer");
+      // Only the completion tracer's Media Asset calls still reach the Data Service.
+      .filter((entry) =>
+        ["stage-2-tracer", "stage-3-completion-tracer"].includes(
+          entry.requestId,
+        ),
+      );
     assert.ok(entries.length > 0, "Expected completion logs for the tracer.");
     for (const entry of entries) {
       assert.equal(typeof entry.method, "string");

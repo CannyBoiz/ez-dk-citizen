@@ -6,10 +6,9 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 
 import { createBackendApp } from "../../app.js";
-import { DataServiceError } from "../../data-service/client.js";
-import { createTestDataServiceClient } from "../../testing/data-service-client.js";
+import { createTestDataModule } from "../../testing/data-module.js";
 
-test("Backend replaces and detaches Draft Lesson Sources through its client seam", async (context) => {
+test("Backend replaces and detaches Draft Lesson Sources through the data module", async (context) => {
   const log = context.mock.method(console, "log", () => undefined);
   const detail = lessonDetailSchema.parse({
     id: 7,
@@ -32,31 +31,21 @@ test("Backend replaces and detaches Draft Lesson Sources through its client seam
       },
     ],
   });
-  const sourceNotFound = new DataServiceError(
-    problemDetailsSchema.parse({
-      type: "https://ez-dk-citizen.invalid/problems/source_not_found",
-      title: "Not Found",
-      status: 404,
-      detail: "Source was not found.",
-      instance: "/internal/lessons/7/sources/99",
-      code: "source_not_found",
-      requestId: "downstream",
-    }),
-  );
   const calls: string[] = [];
-  const client = createTestDataServiceClient({
-    async upsertLessonSource(lessonId, sourceId, input, requestId) {
-      if (sourceId === 99) throw sourceNotFound;
-      calls.push(`${lessonId}:${sourceId}:${input.pageFrom}:${requestId}`);
+  const data = createTestDataModule({
+    async upsertLessonSource(lessonId, sourceId, input) {
+      if (sourceId === 99) return "source_not_found";
+      calls.push(`${lessonId}:${sourceId}:${input.pageFrom}`);
       return detail;
     },
-    async deleteLessonSource(lessonId, sourceId, requestId) {
-      calls.push(`delete:${lessonId}:${sourceId}:${requestId}`);
+    async deleteLessonSource(lessonId, sourceId) {
+      calls.push(`delete:${lessonId}:${sourceId}`);
+      return undefined;
     },
   });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
-    dataServiceClient: client,
+    data,
   });
 
   const unauthorized = await app.request("/api/admin/lessons/7/sources/3", {
@@ -135,5 +124,50 @@ test("Backend replaces and detaches Draft Lesson Sources through its client seam
   assert.equal(detachedLog.requestId, "request-5");
   assert.equal(detachedLog.method, "DELETE");
   assert.equal(detachedLog.status, 204);
-  assert.deepEqual(calls, ["7:3:2:request-4", "delete:7:3:request-5"]);
+  assert.deepEqual(calls, ["7:3:2", "delete:7:3"]);
+});
+
+test("Backend maps Lesson Source refusals from the data module", async () => {
+  // The refusal the data module answers for each Lesson.
+  const refusals = {
+    1: "lesson_not_found",
+    2: "lesson_not_editable",
+    3: "source_not_found",
+  } as const;
+  const data = createTestDataModule({
+    async upsertLessonSource(lessonId) {
+      return refusals[lessonId as keyof typeof refusals];
+    },
+    async deleteLessonSource(lessonId) {
+      return refusals[lessonId as keyof typeof refusals];
+    },
+  });
+  const app = createBackendApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    data,
+  });
+
+  for (const method of ["PUT", "DELETE"]) {
+    for (const [lessonId, status, code, detail] of [
+      [1, 404, "lesson_not_found", "Lesson was not found."],
+      [2, 409, "lesson_not_editable", "Only Draft Lessons can be edited."],
+      [3, 404, "source_not_found", "Source was not found."],
+    ] as const) {
+      const refused = await app.request(
+        `/api/admin/lessons/${lessonId}/sources/3`,
+        {
+          method,
+          headers: {
+            Authorization: "Bearer admin-token",
+            "Content-Type": "application/json",
+          },
+          ...(method === "PUT" ? { body: "{}" } : {}),
+        },
+      );
+      assert.equal(refused.status, status, `${method} ${code}`);
+      const problem = problemDetailsSchema.parse(await refused.json());
+      assert.equal(problem.code, code);
+      assert.equal(problem.detail, detail);
+    }
+  }
 });

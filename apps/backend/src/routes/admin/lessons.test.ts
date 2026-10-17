@@ -4,13 +4,13 @@ import {
   lessonDetailSchema,
   problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts";
+import type { DataModule } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
-import { DataServiceError } from "../../data-service/client.js";
 import { FakeStorage } from "../../storage.js";
-import { createTestDataServiceClient } from "../../testing/data-service-client.js";
+import { createTestDataModule } from "../../testing/data-module.js";
 
-test("admin Lesson routes authenticate and use the Data Service client seam", async () => {
+test("admin Lesson routes authenticate and use the data module", async () => {
   const detail = lessonDetailSchema.parse({
     id: 7,
     chapter: 2,
@@ -34,24 +34,24 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
     updatedAt: detail.updatedAt,
     availableLanguageCodes: detail.availableLanguageCodes,
   };
-  const client = createTestDataServiceClient({
-    async createLesson(input, requestId) {
-      calls.push(`create:${JSON.stringify(input)}:${requestId}`);
+  const data = createTestDataModule({
+    async createLesson(input) {
+      calls.push(`create:${JSON.stringify(input)}`);
       return detail;
     },
-    async listLessons(requestId) {
-      calls.push(`list:${requestId}`);
+    async listLessons(status) {
+      calls.push(`list:${status}`);
       return { items: [summary] };
     },
-    async getLesson(id, requestId) {
-      calls.push(`get:${id}:${requestId}`);
-      return detail;
+    async getLesson(id, filters) {
+      calls.push(`get:${id}:${JSON.stringify(filters)}`);
+      return id === 99 ? "lesson_not_found" : detail;
     },
   });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     adminOrigins: ["https://admin.example"],
-    dataServiceClient: client,
+    data,
   });
 
   const unauthorized = await app.request("/api/admin/lessons", {
@@ -76,7 +76,6 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
     headers: {
       Authorization: "Bearer admin-token",
       "Content-Type": "application/json",
-      "X-Request-ID": "request-1",
     },
     body: JSON.stringify({ chapter: 2 }),
   });
@@ -95,8 +94,21 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
   });
   assert.equal(inspected.status, 200);
   assert.deepEqual(await inspected.json(), detail);
-  assert.equal(calls.length, 3);
-  assert.equal(calls[0], 'create:{"chapter":2}:request-1');
+
+  const missing = await app.request("/api/admin/lessons/99", {
+    headers: { Authorization: "Bearer admin-token" },
+  });
+  assert.equal(missing.status, 404);
+  assert.equal(missing.headers.get("content-type"), "application/problem+json");
+  const missingProblem = problemDetailsSchema.parse(await missing.json());
+  assert.equal(missingProblem.code, "lesson_not_found");
+  assert.equal(missingProblem.detail, "Lesson was not found.");
+  assert.deepEqual(calls, [
+    'create:{"chapter":2}',
+    "list:undefined",
+    "get:7:undefined",
+    "get:99:undefined",
+  ]);
 
   const corsResponse = await app.request("/api/admin/lessons", {
     method: "OPTIONS",
@@ -116,37 +128,7 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
   );
 });
 
-test("Backend preserves safe Data Service resource failures", async () => {
-  const details = problemDetailsSchema.parse({
-    type: "https://ez-dk-citizen.invalid/problems/lesson_not_found",
-    title: "Not Found",
-    status: 404,
-    detail: "Lesson was not found.",
-    instance: "/internal/lessons/99",
-    code: "lesson_not_found",
-    requestId: "downstream",
-  });
-  const app = createBackendApp(async () => undefined, {
-    adminApiToken: "admin-token",
-    dataServiceClient: createTestDataServiceClient({
-      async getLesson() {
-        throw new DataServiceError(details);
-      },
-    }),
-  });
-
-  const response = await app.request("/api/admin/lessons/99", {
-    headers: { Authorization: "Bearer admin-token" },
-  });
-  assert.equal(response.status, 404);
-  assert.equal(
-    response.headers.get("content-type"),
-    "application/problem+json",
-  );
-  assert.equal((await response.json()).code, "lesson_not_found");
-});
-
-test("Backend upserts a localized Lesson Text through its client seam", async () => {
+test("Backend upserts a localized Lesson Text through the data module", async () => {
   const detail = lessonDetailSchema.parse({
     id: 7,
     chapter: 2,
@@ -160,77 +142,68 @@ test("Backend upserts a localized Lesson Text through its client seam", async ()
     lessonSources: [],
   });
   const calls: string[] = [];
-  const client = createTestDataServiceClient({
-    async upsertLessonText(
-      lessonId: number,
-      languageCode: string,
-      input: { title: string; content: string },
-      requestId: string,
-    ) {
-      calls.push(
-        `${lessonId}:${languageCode}:${input.title}:${input.content}:${requestId}`,
-      );
+  const data = createTestDataModule({
+    async upsertLessonText(lessonId, languageCode, input) {
+      if (lessonId === 404) return "lesson_not_found";
+      if (lessonId === 409) return "lesson_not_editable";
+      if (languageCode === "zz") return "unsupported_language";
+      calls.push(`${lessonId}:${languageCode}:${input.title}:${input.content}`);
       return detail;
     },
   });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
-    dataServiceClient: client,
+    data,
   });
+  const upsert = (path: string) =>
+    app.request(path, {
+      method: "PUT",
+      headers: {
+        Authorization: "Bearer admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title: "บท", content: "เนื้อหา" }),
+    });
 
-  const response = await app.request("/api/admin/lessons/7/texts/th", {
-    method: "PUT",
-    headers: {
-      Authorization: "Bearer admin-token",
-      "Content-Type": "application/json",
-      "X-Request-ID": "request-2",
-    },
-    body: JSON.stringify({ title: "บท", content: "เนื้อหา" }),
-  });
-
+  const response = await upsert("/api/admin/lessons/7/texts/th");
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), detail);
-  assert.deepEqual(calls, ["7:th:บท:เนื้อหา:request-2"]);
+  assert.deepEqual(calls, ["7:th:บท:เนื้อหา"]);
 
-  const invalidId = await app.request("/api/admin/lessons/0/texts/th", {
-    method: "PUT",
-    headers: {
-      Authorization: "Bearer admin-token",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ title: "บท", content: "เนื้อหา" }),
-  });
+  const invalidId = await upsert("/api/admin/lessons/0/texts/th");
   assert.equal(invalidId.status, 422);
   assert.ok(problemDetailsSchema.parse(await invalidId.json()).errors?.length);
+
+  for (const [path, status, code, detail] of [
+    [
+      "/api/admin/lessons/404/texts/th",
+      404,
+      "lesson_not_found",
+      "Lesson was not found.",
+    ],
+    [
+      "/api/admin/lessons/409/texts/th",
+      409,
+      "lesson_not_editable",
+      "Only Draft Lessons can be edited.",
+    ],
+    [
+      "/api/admin/lessons/7/texts/zz",
+      422,
+      "unsupported_language",
+      "Language is not supported.",
+    ],
+  ] as const) {
+    const refused = await upsert(path);
+    assert.equal(refused.status, status, path);
+    const problem = problemDetailsSchema.parse(await refused.json());
+    assert.equal(problem.code, code);
+    assert.equal(problem.detail, detail);
+  }
+  assert.equal(calls.length, 1);
 });
 
-test("Backend hides unrecognized downstream failures", async () => {
-  const details = problemDetailsSchema.parse({
-    type: "https://ez-dk-citizen.invalid/problems/database_failure",
-    title: "Not Found",
-    status: 404,
-    detail: "select * from secret_table failed",
-    instance: "/internal/lessons/99",
-    code: "database_failure",
-    requestId: "downstream",
-  });
-  const app = createBackendApp(async () => undefined, {
-    adminApiToken: "admin-token",
-    dataServiceClient: createTestDataServiceClient({
-      async getLesson() {
-        throw new DataServiceError(details);
-      },
-    }),
-  });
-
-  const response = await app.request("/api/admin/lessons/99", {
-    headers: { Authorization: "Bearer admin-token" },
-  });
-  assert.equal(response.status, 502);
-  assert.equal((await response.json()).code, "data_service_unavailable");
-});
-
-test("Backend patches Lessons through its client seam", async () => {
+test("Backend patches Lessons through the data module and maps every refusal", async () => {
   const detail = lessonDetailSchema.parse({
     id: 7,
     chapter: 3,
@@ -243,97 +216,61 @@ test("Backend patches Lessons through its client seam", async () => {
     lessonTexts: [],
     lessonSources: [],
   });
-  const conflict = new DataServiceError(
-    problemDetailsSchema.parse({
-      type: "https://ez-dk-citizen.invalid/problems/published_lesson_conflict",
-      title: "Conflict",
-      status: 409,
-      detail: "This chapter already has a Published Lesson.",
-      instance: "/internal/lessons/7",
-      code: "published_lesson_conflict",
-      requestId: "downstream",
-    }),
-  );
-  const incompleteErrors = [
+  const missing = [
     { path: ["lessonTexts", "th"], message: "A Thai Lesson Text is required." },
     {
       path: ["lessonSources"],
       message: "At least one Lesson Source is required.",
     },
   ];
-  const incomplete = new DataServiceError(
-    problemDetailsSchema.parse({
-      type: "https://ez-dk-citizen.invalid/problems/lesson_publication_incomplete",
-      title: "Conflict",
-      status: 409,
-      detail: "Lesson is missing publication prerequisites.",
-      instance: "/internal/lessons/7",
-      code: "lesson_publication_incomplete",
-      requestId: "downstream",
-      errors: incompleteErrors,
-    }),
-  );
-  const changeKindErrors = [
-    {
-      path: ["changeKind"],
-      message:
-        "Choose a content change or a fix: this chapter already has a version.",
-    },
-  ];
-  const changeKindRequired = new DataServiceError(
-    problemDetailsSchema.parse({
-      type: "https://ez-dk-citizen.invalid/problems/validation_failed",
-      title: "Unprocessable Content",
-      status: 422,
-      detail: "A change kind is required to publish this Lesson.",
-      instance: "/internal/lessons/7",
-      code: "validation_failed",
-      requestId: "downstream",
-      errors: changeKindErrors,
-    }),
-  );
+  // The refusal the data module answers for each chapter.
+  const refusals: Record<
+    number,
+    Awaited<ReturnType<DataModule["patchLesson"]>>
+  > = {
+    90: "lesson_not_found",
+    91: "lesson_not_editable",
+    92: "lesson_lifecycle_conflict",
+    93: "unsupported_language",
+    94: "change_kind_required",
+    95: "published_lesson_conflict",
+    96: "lesson_version_conflict",
+    97: { missing },
+  };
   const calls: string[] = [];
-  const client = createTestDataServiceClient({
-    async patchLesson(id, input, requestId) {
-      if (input.chapter === 99) throw conflict;
-      if (input.chapter === 98) throw incomplete;
-      if (input.chapter === 97) throw changeKindRequired;
-      calls.push(`${id}:${JSON.stringify(input)}:${requestId}`);
+  const data = createTestDataModule({
+    async patchLesson(id, input) {
+      const refusal = refusals[input.chapter ?? 0];
+      if (refusal) return refusal;
+      calls.push(`${id}:${JSON.stringify(input)}`);
       return detail;
     },
   });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
-    dataServiceClient: client,
+    data,
   });
+  const patch = (body: unknown) =>
+    app.request("/api/admin/lessons/7", {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer admin-token",
+        "Content-Type": "application/json",
+      },
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
 
-  const invalid = await app.request("/api/admin/lessons/7", {
-    method: "PATCH",
-    headers: {
-      Authorization: "Bearer admin-token",
-      "Content-Type": "application/json",
-    },
-    body: "{}",
-  });
-  assert.equal(invalid.status, 422);
+  assert.equal((await patch("{}")).status, 422);
 
-  const patched = await app.request("/api/admin/lessons/7", {
-    method: "PATCH",
-    headers: {
-      Authorization: "Bearer admin-token",
-      "Content-Type": "application/json",
-      "X-Request-ID": "request-6",
-    },
-    body: JSON.stringify({
-      chapter: 3,
-      status: "PUBLISHED",
-      changeKind: "fix",
-    }),
+  const patched = await patch({
+    chapter: 3,
+    status: "PUBLISHED",
+    changeKind: "fix",
   });
   assert.equal(patched.status, 200);
   assert.deepEqual(await patched.json(), detail);
   assert.deepEqual(calls, [
-    '7:{"chapter":3,"status":"PUBLISHED","changeKind":"fix"}:request-6',
+    '7:{"chapter":3,"status":"PUBLISHED","changeKind":"fix"}',
   ]);
 
   for (const body of [
@@ -341,68 +278,68 @@ test("Backend patches Lessons through its client seam", async () => {
     { status: "ARCHIVED", changeKind: "fix" },
     { status: "PUBLISHED", changeKind: "major" },
   ]) {
-    const refused = await app.request("/api/admin/lessons/7", {
-      method: "PATCH",
-      headers: {
-        Authorization: "Bearer admin-token",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    assert.equal(refused.status, 422, JSON.stringify(body));
+    assert.equal((await patch(body)).status, 422, JSON.stringify(body));
   }
   assert.equal(calls.length, 1);
 
-  const kindRequired = await app.request("/api/admin/lessons/7", {
-    method: "PATCH",
-    headers: {
-      Authorization: "Bearer admin-token",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ chapter: 97, status: "PUBLISHED" }),
-  });
-  assert.equal(kindRequired.status, 422);
-  const kindRequiredBody = problemDetailsSchema.parse(
-    await kindRequired.json(),
-  );
-  assert.equal(kindRequiredBody.code, "validation_failed");
-  assert.deepEqual(kindRequiredBody.errors, changeKindErrors);
-
-  const publishedConflict = await app.request("/api/admin/lessons/7", {
-    method: "PATCH",
-    headers: {
-      Authorization: "Bearer admin-token",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ chapter: 99 }),
-  });
-  assert.equal(publishedConflict.status, 409);
-  assert.equal(
-    (await publishedConflict.json()).code,
-    "published_lesson_conflict",
-  );
-
-  const incompletePublication = await app.request("/api/admin/lessons/7", {
-    method: "PATCH",
-    headers: {
-      Authorization: "Bearer admin-token",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ chapter: 98, status: "PUBLISHED" }),
-  });
-  assert.equal(incompletePublication.status, 409);
-  const incompleteBody = problemDetailsSchema.parse(
-    await incompletePublication.json(),
-  );
-  assert.equal(incompleteBody.code, "lesson_publication_incomplete");
-  assert.deepEqual(incompleteBody.errors, incompleteErrors);
+  for (const [chapter, status, code, detail, errors] of [
+    [90, 404, "lesson_not_found", "Lesson was not found."],
+    [91, 409, "lesson_not_editable", "Only Draft Lessons can be edited."],
+    [
+      92,
+      409,
+      "lesson_lifecycle_conflict",
+      "Lesson status transition is not allowed.",
+    ],
+    [93, 422, "unsupported_language", "Language is not supported."],
+    [
+      94,
+      422,
+      "validation_failed",
+      "A change kind is required to publish this Lesson.",
+      [
+        {
+          path: ["changeKind"],
+          message:
+            "Choose a content change or a fix: this chapter already has a version.",
+        },
+      ],
+    ],
+    [
+      95,
+      409,
+      "published_lesson_conflict",
+      "This chapter already has a Published Lesson.",
+    ],
+    [
+      96,
+      409,
+      "lesson_version_conflict",
+      "A Lesson with this chapter and version already exists.",
+    ],
+    [
+      97,
+      409,
+      "lesson_publication_incomplete",
+      "Lesson is missing publication prerequisites.",
+      missing,
+    ],
+  ] as const) {
+    const refused = await patch({ chapter, status: "PUBLISHED" });
+    assert.equal(refused.status, status, code);
+    const problem = problemDetailsSchema.parse(await refused.json());
+    assert.equal(problem.code, code);
+    assert.equal(problem.detail, detail);
+    assert.deepEqual(problem.errors, errors);
+  }
+  assert.equal(calls.length, 1);
 });
 
 const deletedKeys = [
   "audio/123e4567-e89b-12d3-a456-426614174001.mp3",
   "audio/123e4567-e89b-12d3-a456-426614174002.mp3",
 ];
-// The Data Service's answer: the Media Assets it marked DELETED.
+// The data module's answer: the Media Assets it marked DELETED.
 const deletedMediaAssets = deletedKeys.map((objectKey, index) => ({
   id: 41 + index,
   objectKey,
@@ -419,7 +356,7 @@ function deleteDraft(app: ReturnType<typeof createBackendApp>) {
   });
 }
 
-test("deleting a Draft deletes exactly the objects of the Media Assets the Data Service marked DELETED, after it commits", async () => {
+test("deleting a Draft deletes exactly the objects of the Media Assets the data module marked DELETED, after it commits", async () => {
   const calls: string[] = [];
   const storage = new FakeStorage();
   for (const key of [...deletedKeys, unrelatedKey])
@@ -432,9 +369,9 @@ test("deleting a Draft deletes exactly the objects of the Media Assets the Data 
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
-    dataServiceClient: createTestDataServiceClient({
-      async deleteLesson(id, requestId) {
-        calls.push(`data:${id}:${requestId}`);
+    data: createTestDataModule({
+      async deleteLesson(id) {
+        calls.push(`data:${id}`);
         return { deletedMediaAssets };
       },
     }),
@@ -451,7 +388,7 @@ test("deleting a Draft deletes exactly the objects of the Media Assets the Data 
   assert.equal(response.status, 204);
   assert.equal(await response.text(), "");
   assert.deepEqual(calls, [
-    "data:7:delete-request",
+    "data:7",
     ...deletedKeys.map((key) => `storage:${key}`),
   ]);
   await assert.rejects(storage.inspectObject(deletedKeys[0]!));
@@ -478,7 +415,7 @@ test("a storage failure after the delete commits is logged safely and still answ
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
-    dataServiceClient: createTestDataServiceClient({
+    data: createTestDataModule({
       async deleteLesson() {
         return { deletedMediaAssets };
       },
@@ -524,19 +461,9 @@ test("a refused or missing Lesson deletes nothing from storage", async () => {
     const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
-      dataServiceClient: createTestDataServiceClient({
+      data: createTestDataModule({
         async deleteLesson() {
-          throw new DataServiceError(
-            problemDetailsSchema.parse({
-              type: `https://ez-dk-citizen.invalid/problems/${code}`,
-              title: "Problem",
-              status,
-              detail,
-              instance: "/internal/lessons/7",
-              code,
-              requestId: "downstream",
-            }),
-          );
+          return code;
         },
       }),
     });
