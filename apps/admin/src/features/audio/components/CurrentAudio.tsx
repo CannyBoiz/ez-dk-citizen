@@ -8,7 +8,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
-import type { Call } from "../../../shared/lib/bff";
+import type { Call } from "../../../shared/lib/backend";
 import type { AudioTarget } from "../types";
 import { formatSize } from "../utils/formatSize";
 

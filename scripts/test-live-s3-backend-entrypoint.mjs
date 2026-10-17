@@ -6,8 +6,8 @@ const require = createRequire("/app/package.json");
 const { serve } = require("@hono/node-server");
 const [
   { readinessResponseSchema },
-  { createBffApp },
-  { readBffConfig },
+  { createBackendApp },
+  { readBackendConfig },
   { createDataServiceClient },
   { createS3Storage },
 ] = await Promise.all([
@@ -18,8 +18,8 @@ const [
   import("/app/dist/storage.js"),
 ]);
 
-const config = readBffConfig();
-const app = createBffApp(
+const config = readBackendConfig();
+const app = createBackendApp(
   async () => {
     const response = await fetch(new URL("/ready", config.dataServiceUrl), {
       signal: AbortSignal.timeout(config.dataServiceTimeoutMs),

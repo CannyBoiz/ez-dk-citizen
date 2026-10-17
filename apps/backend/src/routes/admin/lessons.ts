@@ -16,13 +16,13 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
-import type { BffAppOptions } from "../../app.js";
+import type { BackendAppOptions } from "../../app.js";
 import { mapDataServiceError } from "../../errors/downstream.js";
 import { problem } from "../../errors/problem-details.js";
 import { logStorageFailure } from "../../errors/storage.js";
 
 export function createAdminLessonRoutes(
-  options: Pick<BffAppOptions, "dataServiceClient" | "storage">,
+  options: Pick<BackendAppOptions, "dataServiceClient" | "storage">,
 ) {
   return new Hono<RequestIdEnvironment>()
     .post("/", validateJson(createLessonRequestSchema), async (c) => {
@@ -109,7 +109,7 @@ export function createAdminLessonRoutes(
           return mapDataServiceError(c, error);
         }
         // The Draft is already gone, so a storage failure only leaves its object behind
-        // under the DELETED Media Asset; the keys never leave the BFF.
+        // under the DELETED Media Asset; the keys never leave the Backend.
         for (const asset of deleted.deletedMediaAssets) {
           try {
             await options.storage.deleteObject(asset.objectKey);

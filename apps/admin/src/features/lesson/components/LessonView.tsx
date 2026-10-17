@@ -19,12 +19,12 @@ import {
   type Values,
 } from "../../../shared/components/EditForm";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
-import { BffError, type Call } from "../../../shared/lib/bff";
+import { BackendError, type Call } from "../../../shared/lib/backend";
 import {
   type LanguageCode,
   languageCodes,
 } from "../../../shared/lib/languages";
-import type { BffRequest, Network } from "../../../shared/lib/network";
+import type { BackendRequest, Network } from "../../../shared/lib/network";
 import { useAction } from "../../../shared/lib/useAction";
 import { AudioUpload, CurrentAudio, type UploadStatus } from "../../audio";
 import { SourceFinder, SourceLabel } from "../../source";
@@ -108,7 +108,7 @@ export function LessonView({
 
   // `call` for a Lesson change, counted in `writes`.
   async function writeCall<T>(
-    request: Omit<BffRequest, "token">,
+    request: Omit<BackendRequest, "token">,
     schema: { parse(value: unknown): T },
   ) {
     setWrites((count) => count + 1);
@@ -215,7 +215,7 @@ export function LessonView({
   // Saves the submitted edits of one or more forms in one request.
   async function save(
     submitted: Partial<Record<Form, Values>>,
-    request: Omit<BffRequest, "token">,
+    request: Omit<BackendRequest, "token">,
   ) {
     applyLesson(await writeCall(request, lessonDetailSchema));
     // Edits made while the save was in flight stay unsaved.
@@ -255,7 +255,7 @@ export function LessonView({
       );
     } catch (caught) {
       const message =
-        caught instanceof BffError
+        caught instanceof BackendError
           ? caught.errors?.find((entry) => entry.path[0] === "chapter")?.message
           : undefined;
       setChapterErrors(message ? { chapter: message } : {});

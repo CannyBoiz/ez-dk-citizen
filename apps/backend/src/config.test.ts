@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { readBffConfig } from "./config.js";
+import { readBackendConfig } from "./config.js";
 
 const baseEnvironment = {
   DATA_SERVICE_URL: "http://data:3000",
@@ -11,8 +11,8 @@ const baseEnvironment = {
   S3_BUCKET: "citizenship-audio",
 };
 
-test("BFF accepts credential-free startup configuration", () => {
-  assert.deepEqual(readBffConfig(baseEnvironment), {
+test("Backend accepts credential-free startup configuration", () => {
+  assert.deepEqual(readBackendConfig(baseEnvironment), {
     dataServiceUrl: new URL("http://data:3000"),
     dataServiceTimeoutMs: 2000,
     adminApiToken: "admin-token",
@@ -24,9 +24,9 @@ test("BFF accepts credential-free startup configuration", () => {
 });
 
 for (const name of ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]) {
-  test(`BFF rejects ${name} when set without its pair`, () => {
+  test(`Backend rejects ${name} when set without its pair`, () => {
     assert.throws(
-      () => readBffConfig({ ...baseEnvironment, [name]: "stale-key" }),
+      () => readBackendConfig({ ...baseEnvironment, [name]: "stale-key" }),
       new RegExp(`${name} must not be set`),
     );
   });

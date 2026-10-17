@@ -1,4 +1,4 @@
-// Shared fixtures, a fake Network, and an in-memory BFF for the whole-app tests.
+// Shared fixtures, a fake Network, and an in-memory Backend for the whole-app tests.
 
 import type {
   AdminLessonAudio,
@@ -24,8 +24,8 @@ import {
 import { expect } from "vitest";
 
 import type {
-  BffRequest,
-  BffResponse,
+  BackendRequest,
+  BackendResponse,
   Network,
   ObjectUpload,
 } from "../lib/network";
@@ -60,7 +60,7 @@ export type PendingUpload = ObjectUpload & {
 };
 
 export function fakeNetwork(
-  respond: (request: BffRequest) => BffResponse = (request) =>
+  respond: (request: BackendRequest) => BackendResponse = (request) =>
     request.token === validToken
       ? { status: 200, body: lessons }
       : problem(
@@ -70,10 +70,10 @@ export function fakeNetwork(
           "req-401",
         ),
 ) {
-  const requests: BffRequest[] = [];
+  const requests: BackendRequest[] = [];
   const uploads: PendingUpload[] = [];
   const network: Network = {
-    async bff(request) {
+    async backend(request) {
       requests.push(request);
       // A snapshot, as over a real network: later backend changes never reach a sent response.
       return structuredClone(respond(request));
@@ -91,19 +91,19 @@ export function fakeNetwork(
   return { network, requests, uploads };
 }
 
-// Holds matching BFF calls until the returned release is called: before they reach the backend
-// ("request"), or after the backend has handled them, delaying only the response ("response").
+// Holds matching Backend calls until the returned release is called: before they reach the Backend
+// ("request"), or after the Backend has handled them, delaying only the response ("response").
 export function hold(
   network: Network,
-  matches: (request: BffRequest) => boolean,
+  matches: (request: BackendRequest) => boolean,
   at: "request" | "response" = "request",
 ) {
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  const bff = network.bff;
-  network.bff = async (request) => {
+  const backend = network.backend;
+  network.backend = async (request) => {
     if (at === "request" && matches(request)) await held;
-    const response = await bff(request);
+    const response = await backend(request);
     if (at === "response" && matches(request)) await held;
     return response;
   };
@@ -111,9 +111,9 @@ export function hold(
 }
 
 // Matches only the first request that `matches` would, so later ones pass straight through.
-export function firstOnly(matches: (request: BffRequest) => boolean) {
+export function firstOnly(matches: (request: BackendRequest) => boolean) {
   let matched = false;
-  return (request: BffRequest) => {
+  return (request: BackendRequest) => {
     if (matched || !matches(request)) return false;
     matched = true;
     return true;
@@ -135,7 +135,7 @@ export function storageOutage(requestId = "req-503") {
   );
 }
 
-// Current Lesson Audio as the BFF stores it, keyed by `${lessonId}:${languageCode}`.
+// Current Lesson Audio as the Backend stores it, keyed by `${lessonId}:${languageCode}`.
 export type StoredAudio = Omit<
   AdminLessonAudio,
   "playbackUrl" | "playbackExpiresAt"
@@ -226,7 +226,7 @@ export function lessonDetail(
   };
 }
 
-// An in-memory BFF for the editor tests; `override` injects failures, including 401s, per request.
+// An in-memory Backend for the editor tests; `override` injects failures, including 401s, per request.
 // Sources already cited by `initial` Lessons join the canonical `sources`.
 export function fakeBackend(
   initial: LessonDetail[] = [],
@@ -235,7 +235,7 @@ export function fakeBackend(
     sources: extraSources = [],
     audio = {},
   }: {
-    override?: (request: BffRequest) => BffResponse | undefined;
+    override?: (request: BackendRequest) => BackendResponse | undefined;
     sources?: SourceResponse[];
     audio?: Record<string, StoredAudio>;
   } = {},
@@ -265,7 +265,7 @@ export function fakeBackend(
     lesson: LessonDetail,
     status: LessonStatus,
     changeKind?: ChangeKind,
-  ): BffResponse {
+  ): BackendResponse {
     if (status === "PUBLISHED") {
       const [highest] = lessons
         .filter(

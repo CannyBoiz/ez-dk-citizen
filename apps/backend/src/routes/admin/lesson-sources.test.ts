@@ -5,11 +5,11 @@ import {
   problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts";
 
-import { createBffApp } from "../../app.js";
+import { createBackendApp } from "../../app.js";
 import { DataServiceError } from "../../data-service/client.js";
 import { createTestDataServiceClient } from "../../testing/data-service-client.js";
 
-test("BFF replaces and detaches Draft Lesson Sources through its client seam", async (context) => {
+test("Backend replaces and detaches Draft Lesson Sources through its client seam", async (context) => {
   const log = context.mock.method(console, "log", () => undefined);
   const detail = lessonDetailSchema.parse({
     id: 7,
@@ -54,7 +54,7 @@ test("BFF replaces and detaches Draft Lesson Sources through its client seam", a
       calls.push(`delete:${lessonId}:${sourceId}:${requestId}`);
     },
   });
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     dataServiceClient: client,
   });

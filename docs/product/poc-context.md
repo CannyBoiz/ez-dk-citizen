@@ -220,8 +220,8 @@ The one Hono application that serves the Admin API and the Mobile API, owns
 relational persistence, and holds the AWS identity. It is the only application
 with direct PostgreSQL access (ADR-0009).
 
-_Avoid_: BFF, Data Service. These were the names before ADR-0009; code and
-older sections keep them until the merge lands.
+_Avoid_: BFF, Data Service. These were the names before ADR-0009; the Data Service
+and older sections keep them until the merge lands.
 
 ## Admin API
 

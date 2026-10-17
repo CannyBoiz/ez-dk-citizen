@@ -51,7 +51,7 @@ services:
         - action: rebuild
           path: ./pnpm-workspace.yaml
 
-  bff:
+  backend:
     build:
       target: development
     environment:
@@ -63,18 +63,18 @@ services:
       AWS_REGION: ${AWS_REGION:-eu-north-1}
       S3_BUCKET: ${S3_BUCKET:-development-only-bucket}
       PORT: 3000
-    command: pnpm --filter @ez-dk-citizen/bff dev
+    command: pnpm --filter @ez-dk-citizen/backend dev
     ports:
-      - "127.0.0.1:${BFF_PORT:-3001}:3000"
+      - "127.0.0.1:${BACKEND_PORT:-3001}:3000"
     develop:
       watch:
         - action: sync
-          path: ./apps/bff/src
-          target: /workspace/apps/bff/src
+          path: ./apps/backend/src
+          target: /workspace/apps/backend/src
         - action: rebuild
-          path: ./apps/bff/Dockerfile
+          path: ./apps/backend/Dockerfile
         - action: rebuild
-          path: ./apps/bff/package.json
+          path: ./apps/backend/package.json
         - action: rebuild
           path: ./packages/api-contracts
         - action: rebuild
@@ -92,7 +92,7 @@ services:
       dockerfile: apps/admin/Dockerfile
       target: development
     environment:
-      VITE_BFF_BASE_URL: ${VITE_BFF_BASE_URL:-http://127.0.0.1:${BFF_PORT:-3001}}
+      VITE_BACKEND_BASE_URL: ${VITE_BACKEND_BASE_URL:-http://127.0.0.1:${BACKEND_PORT:-3001}}
     ports:
       - "127.0.0.1:${ADMIN_UI_PORT:-5173}:5173"
     develop:

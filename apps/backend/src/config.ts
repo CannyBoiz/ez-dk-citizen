@@ -1,4 +1,4 @@
-export type BffConfig = {
+export type BackendConfig = {
   dataServiceUrl: URL;
   dataServiceTimeoutMs: number;
   adminApiToken: string;
@@ -8,7 +8,9 @@ export type BffConfig = {
   adminOrigins: string[];
 };
 
-export function readBffConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
+export function readBackendConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): BackendConfig {
   for (const name of ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]) {
     if (Object.hasOwn(env, name)) {
       throw new Error(

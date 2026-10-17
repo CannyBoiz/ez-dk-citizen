@@ -16,7 +16,7 @@ import { useId, useRef, useState } from "react";
 
 import { ConfirmButton } from "../../../shared/components/ConfirmButton";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
-import { BffError, type Call } from "../../../shared/lib/bff";
+import { BackendError, type Call } from "../../../shared/lib/backend";
 import { useAction } from "../../../shared/lib/useAction";
 import { hasLessonText } from "../utils/lessonTexts";
 import {
@@ -105,7 +105,7 @@ export function Publication({
       // The chapter gained a version after the confirmation read them: read again, so the
       // choice the backend asks for appears beside its refusal.
       if (
-        error instanceof BffError &&
+        error instanceof BackendError &&
         error.errors?.some((entry) => entry.path[0] === "changeKind")
       )
         void readVersions();

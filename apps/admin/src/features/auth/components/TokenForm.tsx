@@ -3,7 +3,7 @@ import { lessonListResponseSchema } from "@ez-dk-citizen/api-contracts/schemas";
 import { type SubmitEvent, useState } from "react";
 
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
-import { BffError, request } from "../../../shared/lib/bff";
+import { BackendError, request } from "../../../shared/lib/backend";
 import type { Network } from "../../../shared/lib/network";
 
 export function TokenForm({
@@ -31,8 +31,8 @@ export function TokenForm({
       onConnected(value);
     } catch (caught) {
       setError(
-        caught instanceof BffError && caught.status === 401
-          ? new BffError("The admin token was rejected.", { ...caught })
+        caught instanceof BackendError && caught.status === 401
+          ? new BackendError("The admin token was rejected.", { ...caught })
           : caught,
       );
       setBusy(false);

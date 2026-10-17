@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 
 import { EditForm, type Values } from "../../../shared/components/EditForm";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
-import type { Call } from "../../../shared/lib/bff";
+import type { Call } from "../../../shared/lib/backend";
 import type { CatalogueFilters } from "../types";
 import { statusLabels } from "../utils/statusLabels";
 import { lessonLabel, versionLabel } from "../utils/versions";

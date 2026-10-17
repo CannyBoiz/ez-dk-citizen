@@ -1,9 +1,9 @@
 import { serve } from "@hono/node-server";
 
 import { createApp } from "./app.js";
-import { readBffConfig } from "./config.js";
+import { readBackendConfig } from "./config.js";
 
-const app = createApp({ config: readBffConfig() });
+const app = createApp({ config: readBackendConfig() });
 
 serve(
   {

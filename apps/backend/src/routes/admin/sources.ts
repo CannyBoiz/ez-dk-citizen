@@ -12,12 +12,12 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
-import type { BffAppOptions } from "../../app.js";
+import type { BackendAppOptions } from "../../app.js";
 import { mapDataServiceError } from "../../errors/downstream.js";
 import { problem } from "../../errors/problem-details.js";
 
 export function createAdminSourceRoutes(
-  options: Pick<BffAppOptions, "dataServiceClient">,
+  options: Pick<BackendAppOptions, "dataServiceClient">,
 ) {
   return new Hono<RequestIdEnvironment>()
     .post("/", validateJson(createSourceRequestSchema), async (c) => {

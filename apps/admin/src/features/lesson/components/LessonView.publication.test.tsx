@@ -14,7 +14,10 @@ import {
 import { expect, test } from "vitest";
 
 import { App } from "../../../app/App";
-import type { BffRequest, BffResponse } from "../../../shared/lib/network";
+import type {
+  BackendRequest,
+  BackendResponse,
+} from "../../../shared/lib/network";
 import {
   answer,
   chapterForm,
@@ -385,8 +388,8 @@ test("a failed read of the Lesson list is shown inside the confirmation and can 
 });
 
 // The backend's publication refusals, injected for a PATCH that publishes.
-const refusePublication = (response: BffResponse) => ({
-  override: (request: BffRequest) =>
+const refusePublication = (response: BackendResponse) => ({
+  override: (request: BackendRequest) =>
     request.method === "PATCH" &&
     (request.body as PatchLessonRequest).status === "PUBLISHED"
       ? response

@@ -13,7 +13,7 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
-import type { BffAppOptions } from "../../app.js";
+import type { BackendAppOptions } from "../../app.js";
 import { DataServiceError } from "../../data-service/client.js";
 import { mapDataServiceError } from "../../errors/downstream.js";
 import { problem } from "../../errors/problem-details.js";
@@ -24,7 +24,7 @@ import {
 
 export function createAdminMediaRoutes(
   options: Pick<
-    BffAppOptions,
+    BackendAppOptions,
     "dataServiceClient" | "storage" | "storageBucket" | "objectKeyGenerator"
   >,
 ) {

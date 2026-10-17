@@ -4,10 +4,10 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] No source, script, Compose file, or example environment still says `bff`, `BFF_PORT`, or `VITE_BFF_BASE_URL`; ADRs and `.scratch` history keep their wording
-- [ ] The Admin calls its page origin when `VITE_BACKEND_BASE_URL` is unset and the given URL when set
-- [ ] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:dev`, `pnpm test:integration`, and `pnpm test:e2e` pass
-- [ ] The container checks still prove that only `backend` receives the AWS profile and identity mounts
-- [ ] The ticket's comment log notes the local `.env` variables the developer must rename
+- [x] No source, script, Compose file, or example environment still says `bff`, `BFF_PORT`, or `VITE_BFF_BASE_URL`; ADRs and `.scratch` history keep their wording
+- [x] The Admin calls its page origin when `VITE_BACKEND_BASE_URL` is unset and the given URL when set
+- [x] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:dev`, `pnpm test:integration`, and `pnpm test:e2e` pass
+- [x] The container checks still prove that only `backend` receives the AWS profile and identity mounts
+- [x] The ticket's comment log notes the local `.env` variables the developer must rename

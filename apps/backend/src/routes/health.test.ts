@@ -5,11 +5,11 @@ import {
   readinessResponseSchema,
 } from "@ez-dk-citizen/api-contracts";
 
-import { createBffApp } from "../app.js";
+import { createBackendApp } from "../app.js";
 
-test("BFF health is independent of the Data Service", async () => {
+test("Backend health is independent of the Data Service", async () => {
   let checks = 0;
-  const app = createBffApp(async () => {
+  const app = createBackendApp(async () => {
     checks += 1;
   });
 
@@ -20,9 +20,9 @@ test("BFF health is independent of the Data Service", async () => {
   assert.equal(checks, 0);
 });
 
-test("BFF readiness reflects the Data Service", async (context) => {
+test("Backend readiness reflects the Data Service", async (context) => {
   await context.test("ready", async () => {
-    const app = createBffApp(async () => undefined);
+    const app = createBackendApp(async () => undefined);
     const response = await app.request("/ready");
 
     assert.equal(response.status, 200);
@@ -32,7 +32,7 @@ test("BFF readiness reflects the Data Service", async (context) => {
   });
 
   await context.test("unavailable", async () => {
-    const app = createBffApp(async () => {
+    const app = createBackendApp(async () => {
       throw new Error("Data Service is unavailable");
     });
     const response = await app.request("/ready");

@@ -5,7 +5,7 @@ import {
   problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts";
 
-import { createBffApp } from "../../app.js";
+import { createBackendApp } from "../../app.js";
 import { DataServiceError } from "../../data-service/client.js";
 import { FakeStorage } from "../../storage.js";
 import { createTestDataServiceClient } from "../../testing/data-service-client.js";
@@ -48,7 +48,7 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
       return detail;
     },
   });
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     adminOrigins: ["https://admin.example"],
     dataServiceClient: client,
@@ -116,7 +116,7 @@ test("admin Lesson routes authenticate and use the Data Service client seam", as
   );
 });
 
-test("BFF preserves safe Data Service resource failures", async () => {
+test("Backend preserves safe Data Service resource failures", async () => {
   const details = problemDetailsSchema.parse({
     type: "https://ez-dk-citizen.invalid/problems/lesson_not_found",
     title: "Not Found",
@@ -126,7 +126,7 @@ test("BFF preserves safe Data Service resource failures", async () => {
     code: "lesson_not_found",
     requestId: "downstream",
   });
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     dataServiceClient: createTestDataServiceClient({
       async getLesson() {
@@ -146,7 +146,7 @@ test("BFF preserves safe Data Service resource failures", async () => {
   assert.equal((await response.json()).code, "lesson_not_found");
 });
 
-test("BFF upserts a localized Lesson Text through its client seam", async () => {
+test("Backend upserts a localized Lesson Text through its client seam", async () => {
   const detail = lessonDetailSchema.parse({
     id: 7,
     chapter: 2,
@@ -173,7 +173,7 @@ test("BFF upserts a localized Lesson Text through its client seam", async () => 
       return detail;
     },
   });
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     dataServiceClient: client,
   });
@@ -204,7 +204,7 @@ test("BFF upserts a localized Lesson Text through its client seam", async () => 
   assert.ok(problemDetailsSchema.parse(await invalidId.json()).errors?.length);
 });
 
-test("BFF hides unrecognized downstream failures", async () => {
+test("Backend hides unrecognized downstream failures", async () => {
   const details = problemDetailsSchema.parse({
     type: "https://ez-dk-citizen.invalid/problems/database_failure",
     title: "Not Found",
@@ -214,7 +214,7 @@ test("BFF hides unrecognized downstream failures", async () => {
     code: "database_failure",
     requestId: "downstream",
   });
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     dataServiceClient: createTestDataServiceClient({
       async getLesson() {
@@ -230,7 +230,7 @@ test("BFF hides unrecognized downstream failures", async () => {
   assert.equal((await response.json()).code, "data_service_unavailable");
 });
 
-test("BFF patches Lessons through its client seam", async () => {
+test("Backend patches Lessons through its client seam", async () => {
   const detail = lessonDetailSchema.parse({
     id: 7,
     chapter: 3,
@@ -302,7 +302,7 @@ test("BFF patches Lessons through its client seam", async () => {
       return detail;
     },
   });
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     dataServiceClient: client,
   });
@@ -409,7 +409,7 @@ const deletedMediaAssets = deletedKeys.map((objectKey, index) => ({
 }));
 const unrelatedKey = "audio/123e4567-e89b-12d3-a456-426614174003.mp3";
 
-function deleteDraft(app: ReturnType<typeof createBffApp>) {
+function deleteDraft(app: ReturnType<typeof createBackendApp>) {
   return app.request("/api/admin/lessons/7", {
     method: "DELETE",
     headers: {
@@ -429,7 +429,7 @@ test("deleting a Draft deletes exactly the objects of the Media Assets the Data 
     calls.push(`storage:${key}`);
     await deleteObject(key);
   };
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
     dataServiceClient: createTestDataServiceClient({
@@ -475,7 +475,7 @@ test("a storage failure after the delete commits is logged safely and still answ
       );
     deleted.push(key);
   };
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
     dataServiceClient: createTestDataServiceClient({
@@ -521,7 +521,7 @@ test("a refused or missing Lesson deletes nothing from storage", async () => {
     storage.deleteObject = async () => {
       throw new Error("nothing may be deleted");
     };
-    const app = createBffApp(async () => undefined, {
+    const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
       dataServiceClient: createTestDataServiceClient({

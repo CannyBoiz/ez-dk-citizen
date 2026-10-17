@@ -7,7 +7,7 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
-import type { BffAppOptions } from "../../app.js";
+import type { BackendAppOptions } from "../../app.js";
 import { mapDataServiceError } from "../../errors/downstream.js";
 import { problem } from "../../errors/problem-details.js";
 import {
@@ -17,7 +17,7 @@ import {
 import { authorizePlayback } from "../../playback.js";
 
 export function createMobileLessonRoutes(
-  options: Pick<BffAppOptions, "dataServiceClient" | "storage">,
+  options: Pick<BackendAppOptions, "dataServiceClient" | "storage">,
 ) {
   return new Hono<RequestIdEnvironment>()
     .get("/", validateRequest("query", languageQuerySchema), async (c) => {

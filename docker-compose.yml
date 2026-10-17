@@ -55,11 +55,11 @@ services:
       start_period: 2s
     restart: unless-stopped
 
-  bff:
-    image: ez-dk-citizen-bff:local
+  backend:
+    image: ez-dk-citizen-backend:local
     build:
       context: .
-      dockerfile: apps/bff/Dockerfile
+      dockerfile: apps/backend/Dockerfile
     environment:
       DATA_SERVICE_URL: http://hono-data:3000
       DATA_SERVICE_TIMEOUT_MS: ${DATA_SERVICE_TIMEOUT_MS:-2000}

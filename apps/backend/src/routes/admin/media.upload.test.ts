@@ -5,12 +5,12 @@ import {
   problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts";
 
-import { createBffApp } from "../../app.js";
+import { createBackendApp } from "../../app.js";
 import { DataServiceError } from "../../data-service/client.js";
 import { FakeStorage } from "../../storage.js";
 import { createTestDataServiceClient } from "../../testing/data-service-client.js";
 
-test("BFF creates a pending Media Asset before a signed MP3 Upload Intent", async () => {
+test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", async () => {
   const storage = new FakeStorage();
   const calls: string[] = [];
   const createUploadAuthorization =
@@ -19,7 +19,7 @@ test("BFF creates a pending Media Asset before a signed MP3 Upload Intent", asyn
     calls.push("sign");
     return createUploadAuthorization(input);
   };
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
     storageBucket: "citizenship-audio",
@@ -108,9 +108,9 @@ test("BFF creates a pending Media Asset before a signed MP3 Upload Intent", asyn
   );
 });
 
-test("BFF accepts a test-only Upload Intent object-key generator", async () => {
+test("Backend accepts a test-only Upload Intent object-key generator", async () => {
   const storage = new FakeStorage();
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
     storageBucket: "citizenship-audio",
@@ -159,9 +159,9 @@ test("BFF accepts a test-only Upload Intent object-key generator", async () => {
   ]);
 });
 
-test("BFF does not sign when pending Media Asset persistence fails", async () => {
+test("Backend does not sign when pending Media Asset persistence fails", async () => {
   const storage = new FakeStorage();
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
     storageBucket: "citizenship-audio",
@@ -201,7 +201,7 @@ test("BFF does not sign when pending Media Asset persistence fails", async () =>
   assert.equal(storage.uploads.length, 0);
 });
 
-test("BFF leaves a pending Media Asset and logs safely when storage signing fails", async (context) => {
+test("Backend leaves a pending Media Asset and logs safely when storage signing fails", async (context) => {
   const log = context.mock.method(console, "log", () => undefined);
   const storage = new FakeStorage();
   storage.createUploadAuthorization = async () => {
@@ -213,7 +213,7 @@ test("BFF leaves a pending Media Asset and logs safely when storage signing fail
       },
     );
   };
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
     storageBucket: "citizenship-audio",

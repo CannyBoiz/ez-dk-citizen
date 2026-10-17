@@ -340,7 +340,7 @@ export const completeMediaAssetResponseSchema = z.strictObject({
 });
 
 // The Data Service's answer to deleting a Draft: the Media Assets it marked DELETED, whose
-// objects the BFF deletes. The BFF answers its own client with no body.
+// objects the Backend deletes. The Backend answers its own client with no body.
 export const deleteLessonResponseSchema = z.strictObject({
   deletedMediaAssets: z.array(
     z.strictObject({ id: safePositiveInteger, objectKey: audioObjectKey }),

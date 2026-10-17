@@ -5,11 +5,11 @@ import {
   sourceResponseSchema,
 } from "@ez-dk-citizen/api-contracts";
 
-import { createBffApp } from "../../app.js";
+import { createBackendApp } from "../../app.js";
 import { DataServiceError } from "../../data-service/client.js";
 import { createTestDataServiceClient } from "../../testing/data-service-client.js";
 
-test("BFF creates and lists canonical Sources through its client seam", async () => {
+test("Backend creates and lists canonical Sources through its client seam", async () => {
   const source = sourceResponseSchema.parse({
     id: 3,
     url: "https://example.com/source",
@@ -38,7 +38,7 @@ test("BFF creates and lists canonical Sources through its client seam", async ()
       return { items: [source] };
     },
   });
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     dataServiceClient: client,
   });
@@ -144,7 +144,7 @@ test("BFF creates and lists canonical Sources through its client seam", async ()
   assert.match(calls[1]!, /^list:[\da-f-]{36}$/);
 });
 
-test("BFF passes Source corrections and their refusals through its client seam", async () => {
+test("Backend passes Source corrections and their refusals through its client seam", async () => {
   const refusal = (status: number, code: string, detail: string) =>
     new DataServiceError(
       problemDetailsSchema.parse({
@@ -176,7 +176,7 @@ test("BFF passes Source corrections and their refusals through its client seam",
       };
     },
   });
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     dataServiceClient: client,
   });

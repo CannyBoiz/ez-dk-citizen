@@ -11,7 +11,7 @@ import {
 } from "../features/lesson";
 import { SourceFinder } from "../features/source";
 import { ConfirmButton } from "../shared/components/ConfirmButton";
-import { BffError, type Call, request } from "../shared/lib/bff";
+import { BackendError, type Call, request } from "../shared/lib/backend";
 import type { Network } from "../shared/lib/network";
 
 const listFormat = new Intl.ListFormat("en", { type: "conjunction" });
@@ -75,15 +75,16 @@ export function App({ network }: { network: Network }) {
   }
 
   const call = useCallback<Call>(
-    async (bffRequest, schema) => {
+    async (backendRequest, schema) => {
       try {
         return await request(
           network,
-          { ...bffRequest, token: token ?? "" },
+          { ...backendRequest, token: token ?? "" },
           schema,
         );
       } catch (error) {
-        if (error instanceof BffError && error.status === 401) setReentry(true);
+        if (error instanceof BackendError && error.status === 401)
+          setReentry(true);
         throw error;
       }
     },
@@ -162,7 +163,8 @@ export function App({ network }: { network: Network }) {
             >
               <h2 id={reentryTitle}>Re-enter admin token</h2>
               <p>
-                The BFF rejected the admin token. Enter it again, then retry.
+                The Backend rejected the admin token. Enter it again, then
+                retry.
               </p>
               <TokenForm
                 network={network}

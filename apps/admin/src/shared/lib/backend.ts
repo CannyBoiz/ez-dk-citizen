@@ -3,19 +3,19 @@ import {
   problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts/schemas";
 
-import type { BffRequest, BffResponse, Network } from "./network";
+import type { BackendRequest, BackendResponse, Network } from "./network";
 
-type BffErrorDetails = Partial<
+type BackendErrorDetails = Partial<
   Pick<ProblemDetails, "status" | "code" | "requestId" | "errors">
 >;
 
-export class BffError extends Error {
+export class BackendError extends Error {
   readonly status?: number;
   readonly code?: string;
   readonly requestId?: string;
   readonly errors?: ProblemDetails["errors"];
 
-  constructor(message: string, details: BffErrorDetails = {}) {
+  constructor(message: string, details: BackendErrorDetails = {}) {
     super(message);
     ({
       status: this.status,
@@ -28,35 +28,38 @@ export class BffError extends Error {
 
 // The authenticated request the screens use; App supplies the in-memory token.
 export type Call = <T>(
-  bffRequest: Omit<BffRequest, "token">,
+  backendRequest: Omit<BackendRequest, "token">,
   schema: { parse(value: unknown): T },
 ) => Promise<T>;
 
 export async function request<T>(
   network: Network,
-  bffRequest: BffRequest,
+  backendRequest: BackendRequest,
   schema: { parse(value: unknown): T },
 ): Promise<T> {
-  let response: BffResponse;
+  let response: BackendResponse;
   try {
-    response = await network.bff(bffRequest);
+    response = await network.backend(backendRequest);
   } catch {
-    throw new BffError("Could not reach the BFF.");
+    throw new BackendError("Could not reach the Backend.");
   }
 
   if (response.status < 200 || response.status > 299) {
     const problem = problemDetailsSchema.safeParse(response.body);
     throw problem.success
-      ? new BffError(problem.data.detail, problem.data)
-      : new BffError(`The BFF responded with status ${response.status}.`, {
-          status: response.status,
-        });
+      ? new BackendError(problem.data.detail, problem.data)
+      : new BackendError(
+          `The Backend responded with status ${response.status}.`,
+          {
+            status: response.status,
+          },
+        );
   }
 
   try {
     return schema.parse(response.body);
   } catch {
-    throw new BffError("The BFF returned an unexpected response.", {
+    throw new BackendError("The Backend returned an unexpected response.", {
       status: response.status,
     });
   }

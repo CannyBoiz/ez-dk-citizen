@@ -2,7 +2,7 @@ import { readinessResponseSchema } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 
-import type { BffConfig } from "./config.js";
+import type { BackendConfig } from "./config.js";
 import {
   createDataServiceClient,
   type DataServiceClient,
@@ -24,7 +24,7 @@ import { createHealthRoutes } from "./routes/health.js";
 import { createMobileLessonRoutes } from "./routes/mobile/lessons.js";
 import { createS3Storage, type Storage } from "./storage.js";
 
-export interface BffAppOptions {
+export interface BackendAppOptions {
   adminApiToken?: string;
   adminOrigins?: string[];
   dataServiceClient?: DataServiceClient;
@@ -41,10 +41,10 @@ export function createApp({
     config.dataServiceTimeoutMs,
   ),
 }: {
-  config: BffConfig;
+  config: BackendConfig;
   dataClient?: DataServiceClient;
 }) {
-  return createBffApp(
+  return createBackendApp(
     async () => {
       const response = await fetch(new URL("/ready", config.dataServiceUrl), {
         signal: AbortSignal.timeout(config.dataServiceTimeoutMs),
@@ -68,9 +68,9 @@ export function createApp({
   );
 }
 
-export function createBffApp(
+export function createBackendApp(
   checkDataServiceReadiness: () => Promise<void>,
-  options: BffAppOptions = {},
+  options: BackendAppOptions = {},
 ) {
   const app = new Hono<RequestIdEnvironment>();
 

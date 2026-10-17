@@ -1,5 +1,5 @@
 services:
-  bff:
+  backend:
     environment:
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?set ADMIN_API_TOKEN for the Roles Anywhere smoke test}
       DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:?set DATA_SERVICE_TOKEN for the Roles Anywhere smoke test}

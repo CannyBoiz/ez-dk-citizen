@@ -1,11 +1,11 @@
-export type BffRequest = {
+export type BackendRequest = {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   token: string;
   body?: unknown;
 };
 
-export type BffResponse = { status: number; body: unknown };
+export type BackendResponse = { status: number; body: unknown };
 
 // A direct PUT of the chosen file to its signed storage URL; progress runs from 0 to 1.
 export type ObjectUpload = {
@@ -15,19 +15,19 @@ export type ObjectUpload = {
   onProgress: (fraction: number) => void;
 };
 
-// A direct storage transfer that failed or whose outcome is unknown; it never reached the BFF.
+// A direct storage transfer that failed or whose outcome is unknown; it never reached the Backend.
 export class StorageError extends Error {}
 
 // The Admin's only network seam. Tests pass a fake; main.tsx passes createNetwork().
 export interface Network {
-  bff(request: BffRequest): Promise<BffResponse>;
+  backend(request: BackendRequest): Promise<BackendResponse>;
   // Resolves with the storage response status; rejects when the outcome is unknown.
   putObject(upload: ObjectUpload): Promise<{ status: number }>;
 }
 
 export function createNetwork(baseUrl: string): Network {
   return {
-    async bff({ method, path, token, body }) {
+    async backend({ method, path, token, body }) {
       const response = await fetch(new URL(path, baseUrl), {
         method,
         headers: {

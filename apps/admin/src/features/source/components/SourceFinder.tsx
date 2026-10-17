@@ -17,7 +17,7 @@ import {
   type Values,
 } from "../../../shared/components/EditForm";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
-import { BffError, type Call } from "../../../shared/lib/bff";
+import { BackendError, type Call } from "../../../shared/lib/backend";
 import { useAction } from "../../../shared/lib/useAction";
 import { publicationDate, toPublishedAt } from "../utils/publicationDate";
 import { SourceLabel } from "./SourceLabel";
@@ -140,7 +140,10 @@ export function SourceFinder({
       setNewSource({});
     } catch (caught) {
       if (
-        !(caught instanceof BffError && caught.code === "source_url_conflict")
+        !(
+          caught instanceof BackendError &&
+          caught.code === "source_url_conflict"
+        )
       )
         throw caught;
       // Point at the existing Source: search for its URL and reload in case it is new to this page.
@@ -153,7 +156,7 @@ export function SourceFinder({
         : existing && attach.attachedIds.includes(existing.id)
           ? "It is already attached to this Lesson."
           : "Attach the existing Source shown in the list instead.";
-      throw new BffError(`${caught.message} ${hint}`, caught);
+      throw new BackendError(`${caught.message} ${hint}`, caught);
     }
   }
 

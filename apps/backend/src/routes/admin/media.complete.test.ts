@@ -5,12 +5,12 @@ import {
   problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts";
 
-import { createBffApp } from "../../app.js";
+import { createBackendApp } from "../../app.js";
 import { DataServiceError } from "../../data-service/client.js";
 import { FakeStorage } from "../../storage.js";
 import { createTestDataServiceClient } from "../../testing/data-service-client.js";
 
-test("BFF completes matching stored media through the admin route", async () => {
+test("Backend completes matching stored media through the admin route", async () => {
   const storage = new FakeStorage();
   const asset = mediaAssetResponseSchema.parse({
     id: 9,
@@ -29,7 +29,7 @@ test("BFF completes matching stored media through the admin route", async () => 
     contentType: asset.contentType,
     sizeBytes: asset.sizeBytes,
   });
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
     dataServiceClient: createTestDataServiceClient({
@@ -96,7 +96,7 @@ test("BFF completes matching stored media through the admin route", async () => 
   assert.equal(unauthorized.status, 401);
 });
 
-test("BFF returns a completion retry for superseded audio as not current", async () => {
+test("Backend returns a completion retry for superseded audio as not current", async () => {
   const storage = new FakeStorage();
   const completion = {
     mediaAsset: {
@@ -116,7 +116,7 @@ test("BFF returns a completion retry for superseded audio as not current", async
       createdAt: "2026-01-01T00:01:00.000Z",
     },
   };
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
     dataServiceClient: createTestDataServiceClient({
@@ -154,7 +154,7 @@ test("BFF returns a completion retry for superseded audio as not current", async
   assert.deepEqual(await response.json(), completion);
 });
 
-test("BFF keeps incomplete uploads pending and fails invalid uploads before exact cleanup", async (context) => {
+test("Backend keeps incomplete uploads pending and fails invalid uploads before exact cleanup", async (context) => {
   const asset = mediaAssetResponseSchema.parse({
     id: 9,
     storageProvider: "s3",
@@ -168,7 +168,7 @@ test("BFF keeps incomplete uploads pending and fails invalid uploads before exac
     createdAt: "2026-01-01T00:00:00.000Z",
     uploadedAt: null,
   });
-  const request = (app: ReturnType<typeof createBffApp>) =>
+  const request = (app: ReturnType<typeof createBackendApp>) =>
     app.request("/api/admin/media/9/complete", {
       method: "POST",
       headers: {
@@ -181,7 +181,7 @@ test("BFF keeps incomplete uploads pending and fails invalid uploads before exac
 
   await context.test("reports a missing object as retryable", async () => {
     const storage = new FakeStorage();
-    const app = createBffApp(async () => undefined, {
+    const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
       dataServiceClient: createTestDataServiceClient({
@@ -207,7 +207,7 @@ test("BFF keeps incomplete uploads pending and fails invalid uploads before exac
         storage.inspectObject = async () => {
           throw Object.assign(new Error(name), { name });
         };
-        const app = createBffApp(async () => undefined, {
+        const app = createBackendApp(async () => undefined, {
           adminApiToken: "admin-token",
           storage,
           dataServiceClient: createTestDataServiceClient({
@@ -235,7 +235,7 @@ test("BFF keeps incomplete uploads pending and fails invalid uploads before exac
         { name: "SlowDown", $metadata: { requestId: "aws-request" } },
       );
     };
-    const app = createBffApp(async () => undefined, {
+    const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
       dataServiceClient: createTestDataServiceClient({
@@ -276,7 +276,7 @@ test("BFF keeps incomplete uploads pending and fails invalid uploads before exac
       assert.equal(key, asset.objectKey);
       calls.push("delete");
     };
-    const app = createBffApp(async () => undefined, {
+    const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
       dataServiceClient: createTestDataServiceClient({
@@ -307,7 +307,7 @@ test("BFF keeps incomplete uploads pending and fails invalid uploads before exac
           assert.equal(key, asset.objectKey);
           calls.push("delete");
         };
-        const app = createBffApp(async () => undefined, {
+        const app = createBackendApp(async () => undefined, {
           adminApiToken: "admin-token",
           storage,
           dataServiceClient: createTestDataServiceClient({
@@ -353,7 +353,7 @@ test("BFF keeps incomplete uploads pending and fails invalid uploads before exac
           { name: "AccessDenied", $metadata: { requestId: "aws-request" } },
         );
       };
-      const app = createBffApp(async () => undefined, {
+      const app = createBackendApp(async () => undefined, {
         adminApiToken: "admin-token",
         storage,
         dataServiceClient: createTestDataServiceClient({
@@ -394,7 +394,7 @@ test("BFF keeps incomplete uploads pending and fails invalid uploads before exac
   );
 });
 
-test("BFF preserves completion conflicts from the Data Service", async () => {
+test("Backend preserves completion conflicts from the Data Service", async () => {
   const asset = mediaAssetResponseSchema.parse({
     id: 9,
     storageProvider: "s3",
@@ -408,7 +408,7 @@ test("BFF preserves completion conflicts from the Data Service", async () => {
     createdAt: "2026-01-01T00:00:00.000Z",
     uploadedAt: "2026-01-01T00:01:00.000Z",
   });
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage: new FakeStorage(),
     dataServiceClient: createTestDataServiceClient({
@@ -444,7 +444,7 @@ test("BFF preserves completion conflicts from the Data Service", async () => {
   assert.equal((await response.json()).code, "lesson_text_not_found");
 });
 
-test("BFF retries ready media without inspecting storage", async () => {
+test("Backend retries ready media without inspecting storage", async () => {
   const asset = mediaAssetResponseSchema.parse({
     id: 9,
     storageProvider: "s3",
@@ -462,7 +462,7 @@ test("BFF retries ready media without inspecting storage", async () => {
   storage.inspectObject = async () => {
     throw new Error("matching retry must not inspect storage");
   };
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
     dataServiceClient: createTestDataServiceClient({

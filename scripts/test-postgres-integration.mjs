@@ -50,16 +50,16 @@ await withTeardown(
       "--wait",
       "--wait-timeout",
       "120",
-      endToEnd ? "bff" : "hono-data",
+      endToEnd ? "backend" : "hono-data",
     ]);
     if (endToEnd) {
-      await verifyBffReadiness();
+      await verifyBackendReadiness();
       await verifyDistinctCredentials();
       await runDocker([
         ...composeArguments,
         "exec",
         "-T",
-        "bff",
+        "backend",
         "node",
         "-e",
         tracer(),
@@ -68,7 +68,7 @@ await withTeardown(
         ...composeArguments,
         "exec",
         "-T",
-        "bff",
+        "backend",
         "node",
         "--input-type=module",
         "-e",
@@ -158,7 +158,7 @@ if (detail.content !== 'เนื้อหา' || !detail.availableLanguageCodes
 
 function completionTracer() {
   return String.raw`
-import { createBffApp } from './dist/app.js';
+import { createBackendApp } from './dist/app.js';
 import { createDataServiceClient } from './dist/data-service/client.js';
 import { FakeStorage } from './dist/storage.js';
 
@@ -166,7 +166,7 @@ const requestId = 'stage-3-completion-tracer';
 const headers = { Authorization: 'Bearer integration-only-admin-token', 'Content-Type': 'application/json', 'X-Request-ID': requestId };
 const storage = new FakeStorage();
 const dataServiceClient = createDataServiceClient('http://hono-data:3000', 'integration-only-data-service-token');
-const app = createBffApp(async () => undefined, {
+const app = createBackendApp(async () => undefined, {
   adminApiToken: 'integration-only-admin-token',
   storage,
   storageBucket: 'integration-only-bucket',
@@ -279,12 +279,12 @@ if (refusedDelete.response.status !== 409 || refusedDelete.body.code !== 'lesson
 `;
 }
 
-async function verifyBffReadiness() {
+async function verifyBackendReadiness() {
   await runDocker([
     ...composeArguments,
     "exec",
     "-T",
-    "bff",
+    "backend",
     "node",
     "-e",
     "Promise.all(['/health', '/ready'].map(async (path) => { const response = await fetch('http://127.0.0.1:3000' + path); if (!response.ok) throw new Error(path + ' is unavailable'); }))",
@@ -295,10 +295,10 @@ async function verifyBffReadiness() {
       ...composeArguments,
       "exec",
       "-T",
-      "bff",
+      "backend",
       "node",
       "-e",
-      "Promise.all([fetch('http://127.0.0.1:3000/health'), fetch('http://127.0.0.1:3000/ready')]).then(async ([health, ready]) => { if (!health.ok || ready.status !== 503) throw new Error('BFF liveness and readiness are not independent'); })",
+      "Promise.all([fetch('http://127.0.0.1:3000/health'), fetch('http://127.0.0.1:3000/ready')]).then(async ([health, ready]) => { if (!health.ok || ready.status !== 503) throw new Error('Backend liveness and readiness are not independent'); })",
     ]);
   } finally {
     await runDocker([...composeArguments, "unpause", "hono-data"]);
@@ -307,10 +307,10 @@ async function verifyBffReadiness() {
     ...composeArguments,
     "exec",
     "-T",
-    "bff",
+    "backend",
     "node",
     "-e",
-    "for (let attempt = 0; attempt < 20; attempt += 1) { if ((await fetch('http://127.0.0.1:3000/ready')).ok) process.exit(0); await new Promise((resolve) => setTimeout(resolve, 250)); } throw new Error('BFF did not become ready');",
+    "for (let attempt = 0; attempt < 20; attempt += 1) { if ((await fetch('http://127.0.0.1:3000/ready')).ok) process.exit(0); await new Promise((resolve) => setTimeout(resolve, 250)); } throw new Error('Backend did not become ready');",
   ]);
 }
 
@@ -319,7 +319,7 @@ async function verifyDistinctCredentials() {
     ...composeArguments,
     "exec",
     "-T",
-    "bff",
+    "backend",
     "node",
     "-e",
     "fetch('http://hono-data:3000/internal/lessons', { headers: { Authorization: 'Bearer integration-only-admin-token' } }).then((response) => { if (response.status !== 401) throw new Error('Admin credential reached the Data Service'); })",
@@ -328,7 +328,7 @@ async function verifyDistinctCredentials() {
 
 async function verifyTracerLogs() {
   const logs = await Promise.all(
-    ["bff", "hono-data"].map((service) =>
+    ["backend", "hono-data"].map((service) =>
       captureDocker([...composeArguments, "logs", "--no-log-prefix", service]),
     ),
   );
@@ -363,14 +363,17 @@ async function verifyTracerLogs() {
 function assertPrivateCompiledTopology(config) {
   assert.equal(config.services.postgres.ports, undefined);
   assert.equal(config.services["hono-data"].ports, undefined);
-  assert.equal(config.services.bff.ports, undefined);
-  assert.equal(config.services.bff.environment.AWS_ACCESS_KEY_ID, undefined);
+  assert.equal(config.services.backend.ports, undefined);
   assert.equal(
-    config.services.bff.environment.AWS_SECRET_ACCESS_KEY,
+    config.services.backend.environment.AWS_ACCESS_KEY_ID,
     undefined,
   );
   assert.equal(
-    config.services.bff.depends_on["hono-data"].condition,
+    config.services.backend.environment.AWS_SECRET_ACCESS_KEY,
+    undefined,
+  );
+  assert.equal(
+    config.services.backend.depends_on["hono-data"].condition,
     "service_healthy",
   );
   assert.equal(

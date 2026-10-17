@@ -17,24 +17,24 @@ RUN curl --fail --location --silent --show-error \
  && rm /tmp/aws_signing_helper
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/bff/package.json apps/bff/package.json
+COPY apps/backend/package.json apps/backend/package.json
 COPY packages/api-contracts/package.json packages/api-contracts/package.json
 RUN pnpm install --frozen-lockfile
 
-COPY --chown=node:node apps/bff apps/bff
+COPY --chown=node:node apps/backend apps/backend
 COPY --chown=node:node packages/api-contracts packages/api-contracts
 RUN pnpm --filter @ez-dk-citizen/api-contracts build
 
 USER node
 
-CMD ["pnpm", "--filter", "@ez-dk-citizen/bff", "dev"]
+CMD ["pnpm", "--filter", "@ez-dk-citizen/backend", "dev"]
 
 FROM development AS builder
 
 USER root
 
-RUN pnpm --filter @ez-dk-citizen/bff build
-RUN pnpm --filter @ez-dk-citizen/bff deploy --prod /bff
+RUN pnpm --filter @ez-dk-citizen/backend build
+RUN pnpm --filter @ez-dk-citizen/backend deploy --prod /backend
 
 FROM node:26-bookworm-slim AS runtime
 
@@ -45,7 +45,7 @@ RUN apt-get update \
  && apt-get install --no-install-recommends --yes ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder --chown=node:node /bff ./
+COPY --from=builder --chown=node:node /backend ./
 COPY --from=builder /usr/local/bin/aws_signing_helper /usr/local/bin/aws_signing_helper
 
 USER node

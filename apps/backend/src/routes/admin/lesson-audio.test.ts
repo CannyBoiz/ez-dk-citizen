@@ -5,7 +5,7 @@ import {
   problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts";
 
-import { createBffApp } from "../../app.js";
+import { createBackendApp } from "../../app.js";
 import { DataServiceError } from "../../data-service/client.js";
 import { FakeStorage } from "../../storage.js";
 import { createTestDataServiceClient } from "../../testing/data-service-client.js";
@@ -42,7 +42,7 @@ function downstreamProblem(status: number, code: string, detail: string) {
 }
 
 test("admin current audio requires the admin token", async () => {
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage: new FakeStorage(),
     dataServiceClient: createTestDataServiceClient({
@@ -73,7 +73,7 @@ test("admin current audio signs one fresh Playback URL and hides storage identit
       expiresAt: "2026-01-01T01:00:00.000Z",
     };
   };
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
     dataServiceClient: createTestDataServiceClient({
@@ -152,7 +152,7 @@ test("admin current audio passes Data Service problems through safely", async ()
     ],
     [new Error("socket hang up"), 502, "data_service_unavailable"],
   ] as const) {
-    const app = createBffApp(async () => undefined, {
+    const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage: new FakeStorage(),
       dataServiceClient: createTestDataServiceClient({
@@ -185,7 +185,7 @@ test("admin current audio maps signing failures to storage problems and logs the
         { name, $metadata: { requestId: "aws-request" } },
       );
     };
-    const app = createBffApp(async () => undefined, {
+    const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
       dataServiceClient: createTestDataServiceClient({

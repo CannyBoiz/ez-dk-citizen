@@ -6,12 +6,12 @@ import {
   publishedLessonDetailSchema,
 } from "@ez-dk-citizen/api-contracts";
 
-import { createBffApp } from "../../app.js";
+import { createBackendApp } from "../../app.js";
 import { DataServiceError } from "../../data-service/client.js";
 import { FakeStorage } from "../../storage.js";
 import { createTestDataServiceClient } from "../../testing/data-service-client.js";
 
-test("BFF composes localized mobile responses from Lesson aggregates", async () => {
+test("Backend composes localized mobile responses from Lesson aggregates", async () => {
   const detail = lessonDetailSchema.parse({
     id: 7,
     chapter: 2,
@@ -81,7 +81,7 @@ test("BFF composes localized mobile responses from Lesson aggregates", async () 
       return publishedDetail;
     },
   });
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     dataServiceClient: client,
   });
 
@@ -168,7 +168,7 @@ test("BFF composes localized mobile responses from Lesson aggregates", async () 
   assert.match(calls[3]!, /^list:xx:[\da-f-]{36}$/);
 });
 
-test("BFF returns fresh, allow-listed playback authorization for current mobile audio", async () => {
+test("Backend returns fresh, allow-listed playback authorization for current mobile audio", async () => {
   const lesson = publishedLessonDetailSchema.parse({
     id: 7,
     chapter: 2,
@@ -201,7 +201,7 @@ test("BFF returns fresh, allow-listed playback authorization for current mobile 
       expiresAt: "2026-01-01T01:00:00.000Z",
     };
   };
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     storage,
     dataServiceClient: createTestDataServiceClient({
       async getPublishedLesson() {
@@ -253,7 +253,7 @@ test("BFF returns fresh, allow-listed playback authorization for current mobile 
   assert.equal(keys.length, 2);
 });
 
-test("BFF keeps playback-signing failures correlated and storage-safe", async () => {
+test("Backend keeps playback-signing failures correlated and storage-safe", async () => {
   const key = "audio/123e4567-e89b-12d3-a456-426614174000.mp3";
   const storage = new FakeStorage();
   storage.createPlaybackAuthorization = async () => {
@@ -264,7 +264,7 @@ test("BFF keeps playback-signing failures correlated and storage-safe", async ()
       },
     );
   };
-  const app = createBffApp(async () => undefined, {
+  const app = createBackendApp(async () => undefined, {
     storage,
     dataServiceClient: createTestDataServiceClient({
       async getPublishedLesson() {

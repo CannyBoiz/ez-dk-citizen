@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { problemDetailsSchema } from "@ez-dk-citizen/api-contracts";
 
-import { createApp, createBffApp } from "./app.js";
-import { readBffConfig } from "./config.js";
+import { createApp, createBackendApp } from "./app.js";
+import { readBackendConfig } from "./config.js";
 import { createTestDataServiceClient } from "./testing/data-service-client.js";
 
-test("BFF composition root uses runtime configuration and the supplied client", async (context) => {
-  const config = readBffConfig({
+test("Backend composition root uses runtime configuration and the supplied client", async (context) => {
+  const config = readBackendConfig({
     DATA_SERVICE_URL: "http://data.example",
     ADMIN_API_TOKEN: "configured-admin-token",
     DATA_SERVICE_TOKEN: "configured-data-token",
@@ -56,9 +56,9 @@ test("BFF composition root uses runtime configuration and the supplied client", 
   assert.equal(readiness.mock.callCount(), 2);
 });
 
-test("BFF logs each response once with its validated or generated request ID", async (context) => {
+test("Backend logs each response once with its validated or generated request ID", async (context) => {
   const log = context.mock.method(console, "log", () => undefined);
-  const app = createBffApp(async () => undefined);
+  const app = createBackendApp(async () => undefined);
   for (const supplied of ["valid-request_1:2", "invalid request", undefined]) {
     const response = await app.request("/health", {
       headers: supplied ? { "X-Request-ID": supplied } : {},
@@ -91,8 +91,8 @@ test("BFF logs each response once with its validated or generated request ID", a
   assert.equal(log.mock.callCount(), 4);
 });
 
-test("BFF authenticates every admin route group before reading its body", async () => {
-  const app = createBffApp(async () => undefined, {
+test("Backend authenticates every admin route group before reading its body", async () => {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     adminOrigins: ["https://admin.example"],
   });
@@ -126,8 +126,8 @@ test("BFF authenticates every admin route group before reading its body", async 
   }
 });
 
-test("BFF handles admin preflight before authentication with explicit origins", async () => {
-  const app = createBffApp(async () => undefined, {
+test("Backend handles admin preflight before authentication with explicit origins", async () => {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     adminOrigins: ["https://admin.example"],
   });
@@ -163,8 +163,8 @@ test("BFF handles admin preflight before authentication with explicit origins", 
   }
 });
 
-test("BFF rejects write bodies above 1 MiB with Problem Details", async () => {
-  const app = createBffApp(async () => undefined, {
+test("Backend rejects write bodies above 1 MiB with Problem Details", async () => {
+  const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
   });
   const response = await app.request("/api/admin/lessons", {
@@ -186,8 +186,8 @@ test("BFF rejects write bodies above 1 MiB with Problem Details", async () => {
   );
 });
 
-test("BFF unmatched routes return Problem Details", async () => {
-  const app = createBffApp(async () => undefined);
+test("Backend unmatched routes return Problem Details", async () => {
+  const app = createBackendApp(async () => undefined);
 
   const response = await app.request("/missing");
 
