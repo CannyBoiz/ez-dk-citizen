@@ -12,5 +12,6 @@ Ticket 04 also edits the Data Service client and the integration tier, so run 04
 - [ ] Mobile API responses are unchanged, and every Playback URL is freshly created for the current audio
 - [ ] Route tests in the default tier stub the data module and use `FakeStorage`, and need no Docker
 - [ ] The `/internal/media-assets` HTTP tests are replaced by Admin API tests that go through the real Upload Intent and completion flow with `FakeStorage` against real PostgreSQL
+- [ ] The remaining `/internal/lessons` HTTP tests (Published localized detail, localized reads by status, and current Lesson Audio) run as Mobile API and Admin Lesson Audio tests against real PostgreSQL; their cases with no public equivalent (`?status=` and `?language=` answering 422, a status-only list) are deleted
 - [ ] The Data Service client has no operations left except what readiness needs
 - [ ] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:integration`, and `pnpm test:e2e` pass
