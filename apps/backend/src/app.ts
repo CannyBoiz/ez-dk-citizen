@@ -1,4 +1,5 @@
 import { readinessResponseSchema } from "@ez-dk-citizen/api-contracts";
+import { createDataModule, type DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 
@@ -27,6 +28,7 @@ import { createS3Storage, type Storage } from "./storage.js";
 export interface BackendAppOptions {
   adminApiToken?: string;
   adminOrigins?: string[];
+  data?: DataModule;
   dataServiceClient?: DataServiceClient;
   objectKeyGenerator?: () => string;
   storage?: Storage;
@@ -58,6 +60,7 @@ export function createApp({
     {
       adminApiToken: config.adminApiToken,
       adminOrigins: config.adminOrigins,
+      data: createDataModule(config.databaseUrl, config.databaseTimeoutMs),
       dataServiceClient: dataClient,
       storageBucket: config.s3Bucket,
       storage: createS3Storage({
@@ -93,8 +96,16 @@ export function createBackendApp(
     .route("/", createHealthRoutes(checkDataServiceReadiness))
     .route("/api/admin/media", createAdminMediaRoutes(options))
     .route("/api/admin/lessons", createAdminLessonRoutes(options))
-    .route("/api/admin/sources", createAdminSourceRoutes(options))
+    .route(
+      "/api/admin/sources",
+      createAdminSourceRoutes(options.data ?? withoutDataModule),
+    )
     .route("/api/admin/lessons", createAdminLessonSourceRoutes(options))
     .route("/api/admin/lessons", createAdminLessonAudioRoutes(options))
     .route("/api/mobile/lessons", createMobileLessonRoutes(options));
 }
+
+// Without a data module every operation throws, so its routes answer 500 internal_error.
+const withoutDataModule = new Proxy({} as DataModule, {
+  get: () => () => Promise.reject(new Error("No data module is configured.")),
+});

@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { once } from "node:events";
+import { type AddressInfo, createServer, type Socket } from "node:net";
+import { type TestContext, test } from "node:test";
 import { problemDetailsSchema } from "@ez-dk-citizen/api-contracts";
+import { createDataModule } from "@ez-dk-citizen/data";
 
 import { createApp, createBackendApp } from "./app.js";
 import { readBackendConfig } from "./config.js";
+import { createTestDataModule } from "./testing/data-module.js";
 import { createTestDataServiceClient } from "./testing/data-service-client.js";
 
-test("Backend composition root uses runtime configuration and the supplied client", async (context) => {
+test("Backend composition root uses runtime configuration, the supplied client, and the configured database", async (context) => {
   const config = readBackendConfig({
+    DATABASE_URL: await silentPostgres(context, false),
+    DATABASE_TIMEOUT_MS: "100",
     DATA_SERVICE_URL: "http://data.example",
     ADMIN_API_TOKEN: "configured-admin-token",
     DATA_SERVICE_TOKEN: "configured-data-token",
@@ -54,6 +60,60 @@ test("Backend composition root uses runtime configuration and the supplied clien
   ready = false;
   assert.equal((await app.request("/ready")).status, 503);
   assert.equal(readiness.mock.callCount(), 2);
+
+  const started = performance.now();
+  const sources = await app.request("/api/admin/sources", {
+    headers: { Authorization: "Bearer configured-admin-token" },
+  });
+  assert.ok(performance.now() - started < 1_000);
+  assert.equal(sources.status, 503);
+});
+
+test("Backend answers 503 database_unavailable within the timeout when PostgreSQL is unreachable or stops answering", async (context) => {
+  const timeoutMs = 200;
+  for (const databaseUrl of [
+    "postgresql://user:password@127.0.0.1:1/database",
+    await silentPostgres(context, false),
+    await silentPostgres(context, true),
+  ]) {
+    const data = createDataModule(databaseUrl, timeoutMs);
+    context.after(() => data.close());
+    const app = createBackendApp(async () => undefined, {
+      adminApiToken: "admin-token",
+      data,
+    });
+
+    const started = performance.now();
+    const response = await app.request("/api/admin/sources", {
+      headers: { Authorization: "Bearer admin-token" },
+    });
+
+    // The timeout plus scheduling slack.
+    assert.ok(performance.now() - started < timeoutMs + 200, databaseUrl);
+    assert.equal(response.status, 503, databaseUrl);
+    assert.equal(
+      problemDetailsSchema.parse(await response.json()).code,
+      "database_unavailable",
+    );
+  }
+});
+
+test("Backend answers 500 when the data module fails for any other reason", async () => {
+  const app = createBackendApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    data: createTestDataModule({
+      async listSources() {
+        throw new Error("A bug, not an outage.");
+      },
+    }),
+  });
+
+  const response = await app.request("/api/admin/sources", {
+    headers: { Authorization: "Bearer admin-token" },
+  });
+
+  assert.equal(response.status, 500);
+  assert.equal((await response.json()).code, "internal_error");
 });
 
 test("Backend logs each response once with its validated or generated request ID", async (context) => {
@@ -198,3 +258,29 @@ test("Backend unmatched routes return Problem Details", async () => {
   );
   assert.equal((await response.json()).code, "not_found");
 });
+
+// A PostgreSQL stand-in that never answers. With `startup`, it first completes the
+// startup handshake, like a server that stops answering a pooled connection.
+async function silentPostgres(context: TestContext, startup: boolean) {
+  const sockets = new Set<Socket>();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("error", () => undefined);
+    if (startup) {
+      // AuthenticationOk, then ReadyForQuery.
+      socket.once("data", () =>
+        socket.write(
+          Buffer.from([0x52, 0, 0, 0, 8, 0, 0, 0, 0, 0x5a, 0, 0, 0, 5, 0x49]),
+        ),
+      );
+    }
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => {
+    for (const socket of sockets) socket.destroy();
+    server.close();
+  });
+  const { port } = server.address() as AddressInfo;
+  return `postgresql://user:password@127.0.0.1:${port}/database`;
+}

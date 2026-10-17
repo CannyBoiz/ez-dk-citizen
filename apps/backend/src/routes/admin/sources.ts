@@ -3,43 +3,32 @@ import {
   createSourceRequestSchema,
   type RequestIdEnvironment,
   sourceIdParamsSchema,
-  sourceListResponseSchema,
-  sourceResponseSchema,
   type UpdateSourceRequest,
   updateSourceRequestSchema,
   validateJson,
   validateRequest,
 } from "@ez-dk-citizen/api-contracts";
+import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
-import type { BackendAppOptions } from "../../app.js";
-import { mapDataServiceError } from "../../errors/downstream.js";
 import { problem } from "../../errors/problem-details.js";
 
-export function createAdminSourceRoutes(
-  options: Pick<BackendAppOptions, "dataServiceClient">,
-) {
+export function createAdminSourceRoutes(data: DataModule) {
   return new Hono<RequestIdEnvironment>()
     .post("/", validateJson(createSourceRequestSchema), async (c) => {
-      const input = c.req.valid("json") as CreateSourceRequest;
-      if (!options.dataServiceClient) {
+      const created = await data.createSource(
+        c.req.valid("json") as CreateSourceRequest,
+      );
+      if (created === "source_url_conflict") {
         return problem(
           c,
-          502,
-          "data_service_unavailable",
-          "The Data Service is unavailable.",
+          409,
+          created,
+          "A Source with this URL already exists.",
         );
       }
-      try {
-        const source = await options.dataServiceClient.createSource(
-          input,
-          c.get("requestId"),
-        );
-        c.header("Location", `/api/admin/sources/${source.id}`);
-        return c.json(sourceResponseSchema.parse(source), 201);
-      } catch (error) {
-        return mapDataServiceError(c, error);
-      }
+      c.header("Location", `/api/admin/sources/${created.id}`);
+      return c.json(created, 201);
     })
     .patch(
       "/:sourceId",
@@ -47,47 +36,23 @@ export function createAdminSourceRoutes(
       validateJson(updateSourceRequestSchema),
       async (c) => {
         const { sourceId } = c.req.valid("param") as { sourceId: number };
-        const input = c.req.valid("json") as UpdateSourceRequest;
-        if (!options.dataServiceClient) {
+        const updated = await data.updateSource(
+          sourceId,
+          c.req.valid("json") as UpdateSourceRequest,
+        );
+        if (updated === "source_not_found") {
+          return problem(c, 404, updated, "Source was not found.");
+        }
+        if (updated === "source_url_conflict") {
           return problem(
             c,
-            502,
-            "data_service_unavailable",
-            "The Data Service is unavailable.",
+            409,
+            updated,
+            "A Source with this URL already exists.",
           );
         }
-        try {
-          return c.json(
-            sourceResponseSchema.parse(
-              await options.dataServiceClient.updateSource(
-                sourceId,
-                input,
-                c.get("requestId"),
-              ),
-            ),
-          );
-        } catch (error) {
-          return mapDataServiceError(c, error);
-        }
+        return c.json(updated);
       },
     )
-    .get("/", async (c) => {
-      if (!options.dataServiceClient) {
-        return problem(
-          c,
-          502,
-          "data_service_unavailable",
-          "The Data Service is unavailable.",
-        );
-      }
-      try {
-        return c.json(
-          sourceListResponseSchema.parse(
-            await options.dataServiceClient.listSources(c.get("requestId")),
-          ),
-        );
-      } catch (error) {
-        return mapDataServiceError(c, error);
-      }
-    });
+    .get("/", async (c) => c.json(await data.listSources()));
 }

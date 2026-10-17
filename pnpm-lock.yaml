@@ -67,6 +67,9 @@ importers:
       '@ez-dk-citizen/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
+      '@ez-dk-citizen/data':
+        specifier: workspace:*
+        version: link:../data
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.4)

@@ -1,4 +1,6 @@
 export type BackendConfig = {
+  databaseUrl: string;
+  databaseTimeoutMs: number;
   dataServiceUrl: URL;
   dataServiceTimeoutMs: number;
   adminApiToken: string;
@@ -26,7 +28,14 @@ export function readBackendConfig(
     throw new Error("ADMIN_API_TOKEN and DATA_SERVICE_TOKEN must differ.");
   }
 
+  const databaseTimeoutMs = Number(env.DATABASE_TIMEOUT_MS ?? 2000);
+  if (!Number.isInteger(databaseTimeoutMs) || databaseTimeoutMs <= 0) {
+    throw new Error("DATABASE_TIMEOUT_MS must be a positive whole number.");
+  }
+
   return {
+    databaseUrl: required(env, "DATABASE_URL"),
+    databaseTimeoutMs,
     dataServiceUrl: new URL(dataServiceUrl),
     dataServiceTimeoutMs: Number(env.DATA_SERVICE_TIMEOUT_MS ?? 2000),
     adminApiToken,

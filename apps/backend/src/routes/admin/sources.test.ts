@@ -6,41 +6,28 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 
 import { createBackendApp } from "../../app.js";
-import { DataServiceError } from "../../data-service/client.js";
-import { createTestDataServiceClient } from "../../testing/data-service-client.js";
+import { createTestDataModule } from "../../testing/data-module.js";
 
-test("Backend creates and lists canonical Sources through its client seam", async () => {
+test("Backend creates and lists canonical Sources through the data module", async () => {
   const source = sourceResponseSchema.parse({
     id: 3,
     url: "https://example.com/source",
     publishedAt: "2026-01-01T00:00:00.000Z",
   });
   const calls: string[] = [];
-  const conflict = new DataServiceError(
-    problemDetailsSchema.parse({
-      type: "https://ez-dk-citizen.invalid/problems/source_url_conflict",
-      title: "Conflict",
-      status: 409,
-      detail: "A Source with this URL already exists.",
-      instance: "/internal/sources",
-      code: "source_url_conflict",
-      requestId: "downstream",
-    }),
-  );
-  const client = createTestDataServiceClient({
-    async createSource(input, requestId) {
-      if (input.url.endsWith("conflict")) throw conflict;
-      calls.push(`${input.url}:${input.publishedAt}:${requestId}`);
+  const data = createTestDataModule({
+    async createSource(input) {
+      if (input.url.endsWith("conflict")) return "source_url_conflict";
+      calls.push(`${input.url}:${input.publishedAt}`);
       return source;
     },
-    async listSources(requestId) {
-      calls.push(`list:${requestId}`);
+    async listSources() {
       return { items: [source] };
     },
   });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
-    dataServiceClient: client,
+    data,
   });
 
   const unauthorized = await app.request("/api/admin/sources", {
@@ -137,38 +124,16 @@ test("Backend creates and lists canonical Sources through its client seam", asyn
   });
   assert.equal(listed.status, 200);
   assert.deepEqual(await listed.json(), { items: [source] });
-  assert.equal(
-    calls[0],
-    "https://example.com/source:2026-01-01T00:00:00Z:request-3",
-  );
-  assert.match(calls[1]!, /^list:[\da-f-]{36}$/);
+  assert.deepEqual(calls, ["https://example.com/source:2026-01-01T00:00:00Z"]);
 });
 
-test("Backend passes Source corrections and their refusals through its client seam", async () => {
-  const refusal = (status: number, code: string, detail: string) =>
-    new DataServiceError(
-      problemDetailsSchema.parse({
-        type: `https://ez-dk-citizen.invalid/problems/${code}`,
-        title: "Problem",
-        status,
-        detail,
-        instance: "/internal/sources/3",
-        code,
-        requestId: "downstream",
-      }),
-    );
+test("Backend maps Source corrections and their refusals from the data module", async () => {
   const calls: unknown[] = [];
-  const client = createTestDataServiceClient({
-    async updateSource(id, input, requestId) {
-      calls.push({ id, input, requestId });
-      if (id === 404)
-        throw refusal(404, "source_not_found", "Source was not found.");
-      if (input.url?.endsWith("conflict"))
-        throw refusal(
-          409,
-          "source_url_conflict",
-          "A Source with this URL already exists.",
-        );
+  const data = createTestDataModule({
+    async updateSource(id, input) {
+      calls.push({ id, input });
+      if (id === 404) return "source_not_found";
+      if (input.url?.endsWith("conflict")) return "source_url_conflict";
       return {
         id,
         url: input.url ?? "https://example.com/kept",
@@ -178,7 +143,7 @@ test("Backend passes Source corrections and their refusals through its client se
   });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
-    dataServiceClient: client,
+    data,
   });
   const update = (id: number | string, body: unknown) =>
     app.request(`/api/admin/sources/${id}`, {
@@ -221,7 +186,6 @@ test("Backend passes Source corrections and their refusals through its client se
     {
       id: 3,
       input: { url: "https://example.com/fixed", publishedAt: null },
-      requestId: "request-7",
     },
   ]);
 

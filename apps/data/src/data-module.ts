@@ -24,7 +24,10 @@ import { sql } from "drizzle-orm";
 
 import { createDataOperations } from "./data-operations.js";
 import { createDataDatabase } from "./db/database.js";
+import { databaseTimeoutMessage } from "./db/errors.js";
 import type { LessonReadFilters } from "./features/lessons/queries.js";
+
+export { isDatabaseUnavailable } from "./db/errors.js";
 
 // The package's only public API. Operations return contract-shaped results or outcome codes;
 // mapping those to HTTP is the caller's job.
@@ -139,20 +142,49 @@ export interface DataModule {
   close(): Promise<void>;
 }
 
-// A connection attempt that takes longer than connectionTimeoutMs fails.
+// Every operation, readiness included, fails after timeoutMs, and isDatabaseUnavailable
+// recognises the error.
 export function createDataModule(
   databaseUrl: string,
-  connectionTimeoutMs: number,
+  timeoutMs: number,
 ): DataModule {
-  const { database, pool } = createDataDatabase(
-    databaseUrl,
-    connectionTimeoutMs,
-  );
-  return {
+  const { database, pool } = createDataDatabase(databaseUrl, timeoutMs);
+  const operations: Omit<DataModule, "close"> = {
     ...createDataOperations(database),
     checkReadiness: async () => {
       await database.execute(sql`select 1`);
     },
-    close: () => pool.end(),
   };
+  const bounded = Object.fromEntries(
+    Object.entries(operations).map(([name, operation]) => [
+      name,
+      (...args: unknown[]) =>
+        withinTimeout(
+          (operation as (...args: unknown[]) => Promise<unknown>)(...args),
+          timeoutMs,
+        ),
+    ]),
+  ) as typeof operations;
+  return { ...bounded, close: () => pool.end() };
+}
+
+// Gives up waiting rather than cancelling: cutting a query off client-side would hand
+// its connection back to the pool mid-transaction.
+// ponytail: the abandoned query keeps its connection until PostgreSQL answers or the socket dies.
+async function withinTimeout<Result>(
+  operation: Promise<Result>,
+  timeoutMs: number,
+): Promise<Result> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(databaseTimeoutMessage)),
+      timeoutMs,
+    );
+  });
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

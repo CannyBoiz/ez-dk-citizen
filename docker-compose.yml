@@ -1,7 +1,9 @@
+x-database-url: &database-url postgresql://${POSTGRES_USER:-}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-}
+
 x-data-service: &data-service
   image: ez-dk-citizen-data:local
   environment:
-    DATABASE_URL: postgresql://${POSTGRES_USER:-}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-}
+    DATABASE_URL: *database-url
     DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:-}
     PORT: 3000
 
@@ -61,6 +63,8 @@ services:
       context: .
       dockerfile: apps/backend/Dockerfile
     environment:
+      DATABASE_URL: *database-url
+      DATABASE_TIMEOUT_MS: ${DATABASE_TIMEOUT_MS:-2000}
       DATA_SERVICE_URL: http://hono-data:3000
       DATA_SERVICE_TIMEOUT_MS: ${DATA_SERVICE_TIMEOUT_MS:-2000}
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}
@@ -69,6 +73,8 @@ services:
       S3_BUCKET: ${S3_BUCKET:-}
       PORT: 3000
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       hono-data:
         condition: service_healthy
     expose:
@@ -100,6 +106,23 @@ services:
     <<: *data-service
     profiles:
       - integration
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command:
+      - npm
+      - run
+      - test:compiled
+
+  backend-test:
+    image: ez-dk-citizen-backend:local
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    profiles:
+      - integration
+    environment:
+      DATABASE_URL: *database-url
     depends_on:
       migrate:
         condition: service_completed_successfully

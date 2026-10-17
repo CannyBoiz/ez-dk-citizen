@@ -12,13 +12,15 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "test": "pnpm --filter @ez-dk-citizen/api-contracts build && node --import tsx --test \"src/**/*.test.ts\""
+    "test": "pnpm --filter @ez-dk-citizen/api-contracts --filter @ez-dk-citizen/data build && node --import tsx --test \"src/**/!(*.integration).test.ts\"",
+    "test:compiled": "node --test --test-concurrency=1 \"dist/**/*.integration.test.js\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1132.0",
     "@aws-sdk/client-sts": "^3.1132.0",
     "@aws-sdk/s3-request-presigner": "^3.1132.0",
     "@ez-dk-citizen/api-contracts": "workspace:*",
+    "@ez-dk-citizen/data": "workspace:*",
     "@hono/node-server": "^2.1.1",
     "hono": "4.13.4"
   },

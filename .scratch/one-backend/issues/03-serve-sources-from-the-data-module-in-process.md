@@ -6,12 +6,12 @@ This ticket builds the integration tier of the Backend app seam (spec: Testing D
 
 **Blocked by:** 01 — Rename the BFF to the Backend; 02 — Give the data package a data module API
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Creating, listing, and editing Sources in the Admin behave as before, including `409 source_url_conflict` and `404 source_not_found`
-- [ ] With PostgreSQL unreachable, a Sources request answers `503 database_unavailable` within `DATABASE_TIMEOUT_MS`
-- [ ] Sources route tests in the default tier stub the data module and need no Docker
-- [ ] The `/internal/sources` HTTP tests run as Admin API tests against real PostgreSQL in `test:integration`
-- [ ] The Data Service client's Source methods and their stubs are deleted
-- [ ] In Compose, the Backend receives `DATABASE_URL` and starts only after `migrate` succeeds
-- [ ] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:dev`, `pnpm test:integration`, and `pnpm test:e2e` pass
+- [x] Creating, listing, and editing Sources in the Admin behave as before, including `409 source_url_conflict` and `404 source_not_found`
+- [x] With PostgreSQL unreachable, a Sources request answers `503 database_unavailable` within `DATABASE_TIMEOUT_MS`
+- [x] Sources route tests in the default tier stub the data module and need no Docker
+- [x] The `/internal/sources` HTTP tests run as Admin API tests against real PostgreSQL in `test:integration`
+- [x] The Data Service client's Source methods and their stubs are deleted
+- [x] In Compose, the Backend receives `DATABASE_URL` and starts only after `migrate` succeeds
+- [x] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:dev`, `pnpm test:integration`, and `pnpm test:e2e` pass

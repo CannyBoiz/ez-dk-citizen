@@ -2,6 +2,7 @@ import {
   problem,
   type RequestIdEnvironment,
 } from "@ez-dk-citizen/api-contracts";
+import { isDatabaseUnavailable } from "@ez-dk-citizen/data";
 import type { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 
@@ -15,6 +16,14 @@ export function installProblemDetails(app: Hono<RequestIdEnvironment>) {
         400,
         "malformed_json",
         "Request body is not valid JSON.",
+      );
+    }
+    if (isDatabaseUnavailable(error)) {
+      return problem(
+        c,
+        503,
+        "database_unavailable",
+        "The database is unavailable.",
       );
     }
     return problem(

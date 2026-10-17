@@ -6,12 +6,14 @@ const require = createRequire("/app/package.json");
 const { serve } = require("@hono/node-server");
 const [
   { readinessResponseSchema },
+  { createDataModule },
   { createBackendApp },
   { readBackendConfig },
   { createDataServiceClient },
   { createS3Storage },
 ] = await Promise.all([
   import(require.resolve("@ez-dk-citizen/api-contracts")),
+  import(require.resolve("@ez-dk-citizen/data")),
   import("/app/dist/app.js"),
   import("/app/dist/config.js"),
   import("/app/dist/data-service/client.js"),
@@ -32,6 +34,7 @@ const app = createBackendApp(
   {
     adminApiToken: config.adminApiToken,
     adminOrigins: config.adminOrigins,
+    data: createDataModule(config.databaseUrl, config.databaseTimeoutMs),
     dataServiceClient: createDataServiceClient(
       config.dataServiceUrl.toString(),
       config.dataServiceToken,

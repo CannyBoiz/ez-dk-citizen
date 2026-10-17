@@ -1,3 +1,5 @@
+x-database-url: &database-url postgresql://${POSTGRES_USER:-ez_dk_citizen_dev}:${POSTGRES_PASSWORD:-development-only-password}@postgres:5432/${POSTGRES_DB:-ez_dk_citizen_dev}
+
 services:
   postgres:
     environment:
@@ -11,7 +13,7 @@ services:
     build:
       target: development
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ez_dk_citizen_dev}:${POSTGRES_PASSWORD:-development-only-password}@postgres:5432/${POSTGRES_DB:-ez_dk_citizen_dev}
+      DATABASE_URL: *database-url
     command:
       - pnpm
       - --filter
@@ -26,7 +28,7 @@ services:
       dockerfile: apps/data/Dockerfile
       target: development
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ez_dk_citizen_dev}:${POSTGRES_PASSWORD:-development-only-password}@postgres:5432/${POSTGRES_DB:-ez_dk_citizen_dev}
+      DATABASE_URL: *database-url
       DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:-development-only-data-service-token}
       PORT: 3000
     command: pnpm --filter @ez-dk-citizen/data dev
@@ -57,6 +59,8 @@ services:
     environment:
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-development-only-admin-token}
       ADMIN_ORIGINS: ${ADMIN_ORIGINS:-http://127.0.0.1:${ADMIN_UI_PORT:-5173}}
+      DATABASE_URL: *database-url
+      DATABASE_TIMEOUT_MS: ${DATABASE_TIMEOUT_MS:-2000}
       DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:-development-only-data-service-token}
       DATA_SERVICE_URL: http://hono-data:3000
       DATA_SERVICE_TIMEOUT_MS: ${DATA_SERVICE_TIMEOUT_MS:-2000}
@@ -75,6 +79,8 @@ services:
           path: ./apps/backend/Dockerfile
         - action: rebuild
           path: ./apps/backend/package.json
+        - action: rebuild
+          path: ./apps/data
         - action: rebuild
           path: ./packages/api-contracts
         - action: rebuild

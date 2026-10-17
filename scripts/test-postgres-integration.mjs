@@ -96,6 +96,16 @@ await withTeardown(
       ]);
       await runDocker([
         ...composeArguments,
+        "--profile",
+        "integration",
+        "run",
+        "--build",
+        "--no-deps",
+        "--rm",
+        "backend-test",
+      ]);
+      await runDocker([
+        ...composeArguments,
         "run",
         "--no-deps",
         "--rm",
@@ -158,6 +168,7 @@ if (detail.content !== 'เนื้อหา' || !detail.availableLanguageCodes
 
 function completionTracer() {
   return String.raw`
+import { createDataModule } from '@ez-dk-citizen/data';
 import { createBackendApp } from './dist/app.js';
 import { createDataServiceClient } from './dist/data-service/client.js';
 import { FakeStorage } from './dist/storage.js';
@@ -166,10 +177,12 @@ const requestId = 'stage-3-completion-tracer';
 const headers = { Authorization: 'Bearer integration-only-admin-token', 'Content-Type': 'application/json', 'X-Request-ID': requestId };
 const storage = new FakeStorage();
 const dataServiceClient = createDataServiceClient('http://hono-data:3000', 'integration-only-data-service-token');
+const data = createDataModule(process.env.DATABASE_URL, 2000);
 const app = createBackendApp(async () => undefined, {
   adminApiToken: 'integration-only-admin-token',
   storage,
   storageBucket: 'integration-only-bucket',
+  data,
   dataServiceClient,
 });
 const call = async (path, method, body) => {
@@ -276,6 +289,7 @@ try { await storage.inspectObject(discardedKey); throw new Error('Deleted Draft 
 await storage.inspectObject(storage.uploads[1].key);
 const refusedDelete = await call('/api/admin/lessons/' + fix.body.id, 'DELETE');
 if (refusedDelete.response.status !== 409 || refusedDelete.body.code !== 'lesson_not_editable' || (await call('/api/admin/lessons/' + fix.body.id, 'GET')).body.status !== 'PUBLISHED') throw new Error('A Published Lesson was deleted.');
+await data.close();
 `;
 }
 
@@ -375,6 +389,10 @@ function assertPrivateCompiledTopology(config) {
   assert.equal(
     config.services.backend.depends_on["hono-data"].condition,
     "service_healthy",
+  );
+  assert.equal(
+    config.services.backend.depends_on.migrate.condition,
+    "service_completed_successfully",
   );
   assert.equal(
     config.services["hono-data"].depends_on.migrate.condition,

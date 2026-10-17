@@ -6,6 +6,10 @@
     ".": {
       "types": "./src/data-module.ts",
       "default": "./dist/src/data-module.js"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "default": "./dist/src/testing.js"
     }
   },
   "files": [

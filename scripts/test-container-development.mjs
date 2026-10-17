@@ -74,6 +74,7 @@ assertWatch(
   [
     "apps/backend/Dockerfile",
     "apps/backend/package.json",
+    "apps/data",
     "package.json",
     "packages/api-contracts",
     "pnpm-lock.yaml",
