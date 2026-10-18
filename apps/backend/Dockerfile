@@ -38,6 +38,9 @@ USER root
 RUN pnpm --filter @ez-dk-citizen/backend build
 RUN pnpm --filter @ez-dk-citizen/backend deploy --prod /backend
 
+# ponytail: one image runs the Backend and the integration tests, so it ships the compiled
+# tests and fixtures. Nothing serves them, but those tests empty whatever DATABASE_URL names;
+# give the tests their own stage before Stage 6 deploys this image.
 FROM node:26-bookworm-slim AS runtime
 
 ENV NODE_ENV=production

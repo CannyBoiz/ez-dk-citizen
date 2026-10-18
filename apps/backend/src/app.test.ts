@@ -73,6 +73,12 @@ test("Backend answers 503 database_unavailable within the timeout when PostgreSQ
   }
 });
 
+test("Backend reaches PostgreSQL only through the data module", async () => {
+  for (const name of ["drizzle-orm", "pg"]) {
+    await assert.rejects(import(name), { code: "ERR_MODULE_NOT_FOUND" }, name);
+  }
+});
+
 test("Backend answers 500 when the data module fails for any other reason", async () => {
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
