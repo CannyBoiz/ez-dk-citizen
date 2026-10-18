@@ -170,20 +170,17 @@ function completionTracer() {
   return String.raw`
 import { createDataModule } from '@ez-dk-citizen/data';
 import { createBackendApp } from './dist/app.js';
-import { createDataServiceClient } from './dist/data-service/client.js';
 import { FakeStorage } from './dist/storage.js';
 
 const requestId = 'stage-3-completion-tracer';
 const headers = { Authorization: 'Bearer integration-only-admin-token', 'Content-Type': 'application/json', 'X-Request-ID': requestId };
 const storage = new FakeStorage();
-const dataServiceClient = createDataServiceClient('http://hono-data:3000', 'integration-only-data-service-token');
 const data = createDataModule(process.env.DATABASE_URL, 2000);
 const app = createBackendApp(async () => undefined, {
   adminApiToken: 'integration-only-admin-token',
   storage,
   storageBucket: 'integration-only-bucket',
   data,
-  dataServiceClient,
 });
 const call = async (path, method, body) => {
   const response = await app.request(path, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -237,33 +234,33 @@ const concurrent = await Promise.all(concurrentIntents.map((intent) => call('/ap
 if (concurrent.some(({ response }) => response.status !== 200) || concurrent.map(({ body }) => body.lessonAudio.audioVersion).sort().join(',') !== '3,4' || !concurrent.some(({ body }) => body.lessonAudio.audioVersion === 4 && body.lessonAudio.isCurrent)) throw new Error('Concurrent corrections were not serialized.');
 const missingIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'missing.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
 const missing = await call('/api/admin/media/' + missingIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
-if (missing.response.status !== 409 || missing.body.code !== 'upload_incomplete' || (await dataServiceClient.getMediaAsset(missingIntent.body.mediaAssetId, requestId)).status !== 'PENDING') throw new Error('Missing upload was not left retryable.');
+if (missing.response.status !== 409 || missing.body.code !== 'upload_incomplete' || (await data.getMediaAsset(missingIntent.body.mediaAssetId)).status !== 'PENDING') throw new Error('Missing upload was not left retryable.');
 const inspectObject = storage.inspectObject.bind(storage);
 const transientIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'transient.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
 const transientKey = storage.uploads.at(-1).key;
 storage.inspectObject = async (key) => key === transientKey ? Promise.reject(Object.assign(new Error('temporary storage failure'), { name: 'SlowDown' })) : inspectObject(key);
 const transient = await call('/api/admin/media/' + transientIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
-if (transient.response.status !== 503 || transient.body.code !== 'storage_unavailable' || (await dataServiceClient.getMediaAsset(transientIntent.body.mediaAssetId, requestId)).status !== 'PENDING') throw new Error('Transient upload failure was not left retryable.');
+if (transient.response.status !== 503 || transient.body.code !== 'storage_unavailable' || (await data.getMediaAsset(transientIntent.body.mediaAssetId)).status !== 'PENDING') throw new Error('Transient upload failure was not left retryable.');
 storage.inspectObject = inspectObject;
 const invalidIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'invalid.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
 const invalidKey = storage.uploads.at(-1).key;
 storage.putObject(invalidKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
 const invalid = await call('/api/admin/media/' + invalidIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
-if (invalid.response.status !== 422 || invalid.body.code !== 'invalid_uploaded_media' || (await dataServiceClient.getMediaAsset(invalidIntent.body.mediaAssetId, requestId)).status !== 'FAILED') throw new Error('Invalid upload was not failed.');
+if (invalid.response.status !== 422 || invalid.body.code !== 'invalid_uploaded_media' || (await data.getMediaAsset(invalidIntent.body.mediaAssetId)).status !== 'FAILED') throw new Error('Invalid upload was not failed.');
 try { await storage.inspectObject(invalidKey); throw new Error('Invalid object was not deleted.'); } catch (error) { if (error.message !== 'S3 object was not found.') throw error; }
 const failedRetry = await call('/api/admin/media/' + invalidIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (failedRetry.response.status !== 409 || failedRetry.body.code !== 'media_asset_failed') throw new Error('Failed upload was not terminal.');
 const typeIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'wrong-type.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
 storage.putObject(storage.uploads.at(-1).key, { contentType: 'audio/ogg', sizeBytes: 1 });
 const wrongType = await call('/api/admin/media/' + typeIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
-if (wrongType.response.status !== 422 || (await dataServiceClient.getMediaAsset(typeIntent.body.mediaAssetId, requestId)).status !== 'FAILED') throw new Error('Wrong content type was not failed.');
+if (wrongType.response.status !== 422 || (await data.getMediaAsset(typeIntent.body.mediaAssetId)).status !== 'FAILED') throw new Error('Wrong content type was not failed.');
 const deleteObject = storage.deleteObject.bind(storage);
 const cleanupIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'cleanup.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
 const cleanupKey = storage.uploads.at(-1).key;
 storage.putObject(cleanupKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
 storage.deleteObject = async (key) => key === cleanupKey ? Promise.reject(Object.assign(new Error('cleanup failed'), { name: 'AccessDenied' })) : deleteObject(key);
 const cleanup = await call('/api/admin/media/' + cleanupIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
-if (cleanup.response.status !== 422 || (await dataServiceClient.getMediaAsset(cleanupIntent.body.mediaAssetId, requestId)).status !== 'FAILED') throw new Error('Cleanup failure restored invalid media.');
+if (cleanup.response.status !== 422 || (await data.getMediaAsset(cleanupIntent.body.mediaAssetId)).status !== 'FAILED') throw new Error('Cleanup failure restored invalid media.');
 const archived = await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'ARCHIVED' });
 if (archived.response.status !== 200 || archived.body.status !== 'ARCHIVED') throw new Error('Completion tracer archive failed.');
 const archivedAudio = await readAdminAudio();
@@ -284,7 +281,7 @@ const discardedKey = storage.uploads.at(-1).key;
 storage.putObject(discardedKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
 await call('/api/admin/media/' + discardedIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: discarded.body.id, languageCode: 'th' });
 const deletedDraft = await call('/api/admin/lessons/' + discarded.body.id, 'DELETE');
-if (deletedDraft.response.status !== 204 || deletedDraft.body !== undefined || (await call('/api/admin/lessons/' + discarded.body.id, 'GET')).response.status !== 404 || (await dataServiceClient.getMediaAsset(discardedIntent.body.mediaAssetId, requestId)).status !== 'DELETED') throw new Error('Draft deletion failed.');
+if (deletedDraft.response.status !== 204 || deletedDraft.body !== undefined || (await call('/api/admin/lessons/' + discarded.body.id, 'GET')).response.status !== 404 || (await data.getMediaAsset(discardedIntent.body.mediaAssetId)).status !== 'DELETED') throw new Error('Draft deletion failed.');
 try { await storage.inspectObject(discardedKey); throw new Error('Deleted Draft audio stayed in storage.'); } catch (error) { if (error.message !== 'S3 object was not found.') throw error; }
 await storage.inspectObject(storage.uploads[1].key);
 const refusedDelete = await call('/api/admin/lessons/' + fix.body.id, 'DELETE');
@@ -341,34 +338,37 @@ async function verifyDistinctCredentials() {
 }
 
 async function verifyTracerLogs() {
-  const logs = await Promise.all(
+  const [backendLogs, dataServiceLogs] = await Promise.all(
     ["backend", "hono-data"].map((service) =>
       captureDocker([...composeArguments, "logs", "--no-log-prefix", service]),
     ),
   );
-  for (const output of logs) {
-    const entries = output
-      .split("\n")
-      .flatMap((line) => {
-        try {
-          return [JSON.parse(line)];
-        } catch {
-          return [];
-        }
-      })
-      // Only the completion tracer's Media Asset calls still reach the Data Service.
-      .filter((entry) =>
-        ["stage-2-tracer", "stage-3-completion-tracer"].includes(
-          entry.requestId,
-        ),
-      );
-    assert.ok(entries.length > 0, "Expected completion logs for the tracer.");
-    for (const entry of entries) {
-      assert.equal(typeof entry.method, "string");
-      assert.equal(typeof entry.path, "string");
-      assert.equal(typeof entry.status, "number");
-      assert.equal(typeof entry.durationMs, "number");
-    }
+  const logEntries = (output) =>
+    output.split("\n").flatMap((line) => {
+      try {
+        return [JSON.parse(line)];
+      } catch {
+        return [];
+      }
+    });
+  const entries = logEntries(backendLogs).filter(
+    (entry) => entry.requestId === "stage-2-tracer",
+  );
+  assert.ok(entries.length > 0, "Expected completion logs for the tracer.");
+  for (const entry of entries) {
+    assert.equal(typeof entry.method, "string");
+    assert.equal(typeof entry.path, "string");
+    assert.equal(typeof entry.status, "number");
+    assert.equal(typeof entry.durationMs, "number");
+  }
+  // The Backend asks the Data Service only whether it is ready; the one other request is
+  // the admin credential that verifyDistinctCredentials expects it to refuse.
+  for (const entry of logEntries(dataServiceLogs).filter(
+    (entry) => entry.path !== "/ready",
+  )) {
+    assert.equal(entry.status, 401, `Data Service served ${entry.path}`);
+  }
+  for (const output of [backendLogs, dataServiceLogs]) {
     for (const secret of [
       "integration-only-admin-token",
       "integration-only-data-service-token",

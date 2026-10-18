@@ -7,9 +7,8 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 
 import { createBackendApp } from "../../app.js";
-import { DataServiceError } from "../../data-service/client.js";
 import { FakeStorage } from "../../storage.js";
-import { createTestDataServiceClient } from "../../testing/data-service-client.js";
+import { createTestDataModule } from "../../testing/data-module.js";
 
 test("Backend composes localized mobile responses from Lesson aggregates", async () => {
   const detail = lessonDetailSchema.parse({
@@ -50,40 +49,23 @@ test("Backend composes localized mobile responses from Lesson aggregates", async
       { languageCode: "da", title: "Kun dansk", content: "Indhold" },
     ],
   });
-  const unsupportedLanguage = new DataServiceError(
-    problemDetailsSchema.parse({
-      type: "https://ez-dk-citizen.invalid/problems/unsupported_language",
-      title: "Unprocessable Content",
-      status: 422,
-      detail: "Language is not supported.",
-      instance: "/internal/lessons",
-      code: "unsupported_language",
-      requestId: "downstream",
-    }),
-  );
   const publishedDetail = publishedLessonDetailSchema.parse({
     ...detail,
     currentAudio: null,
   });
   const calls: string[] = [];
-  const client = createTestDataServiceClient({
-    async listPublishedLessons(languageCode: string, requestId: string) {
-      calls.push(`list:${languageCode}:${requestId}`);
-      if (languageCode === "xx") throw unsupportedLanguage;
+  const data = createTestDataModule({
+    async listLessonsInLanguage(languageCode, status) {
+      calls.push(`list:${languageCode}:${status}`);
+      if (languageCode === "xx") return "unsupported_language";
       return { items: [detail, nextLesson, untranslatedLesson] };
     },
-    async getPublishedLesson(
-      id: number,
-      languageCode: string,
-      requestId: string,
-    ) {
-      calls.push(`detail:${id}:${languageCode}:${requestId}`);
+    async getPublishedLesson(id, languageCode) {
+      calls.push(`detail:${id}:${languageCode}`);
       return publishedDetail;
     },
   });
-  const app = createBackendApp(async () => undefined, {
-    dataServiceClient: client,
-  });
+  const app = createBackendApp(async () => undefined, { data });
 
   const list = await app.request("/api/mobile/lessons", {
     headers: { "X-Request-ID": "mobile-list" },
@@ -159,13 +141,38 @@ test("Backend composes localized mobile responses from Lesson aggregates", async
   );
   const unsupported = await app.request("/api/mobile/lessons?language=xx");
   assert.equal(unsupported.status, 422);
-  assert.equal((await unsupported.json()).code, "unsupported_language");
-  assert.deepEqual(calls.slice(0, 3), [
-    "list:th:mobile-list",
-    "list:da:mobile-da",
-    "detail:7:da:mobile-detail",
+  const refusal = await unsupported.json();
+  assert.equal(refusal.code, "unsupported_language");
+  assert.equal(refusal.detail, "Language is not supported.");
+  assert.deepEqual(calls, [
+    "list:th:PUBLISHED",
+    "list:da:PUBLISHED",
+    "detail:7:da",
+    "list:xx:PUBLISHED",
   ]);
-  assert.match(calls[3]!, /^list:xx:[\da-f-]{36}$/);
+});
+
+test("Backend maps Published Lesson refusals to Problem Details", async () => {
+  for (const [outcome, status, detail] of [
+    ["lesson_not_found", 404, "Lesson was not found."],
+    ["lesson_text_not_found", 404, "Lesson Text was not found."],
+    ["unsupported_language", 422, "Language is not supported."],
+  ] as const) {
+    const app = createBackendApp(async () => undefined, {
+      storage: new FakeStorage(),
+      data: createTestDataModule({
+        async getPublishedLesson() {
+          return outcome;
+        },
+      }),
+    });
+
+    const response = await app.request("/api/mobile/lessons/7?language=da");
+    assert.equal(response.status, status);
+    const body = await response.json();
+    assert.equal(body.code, outcome);
+    assert.equal(body.detail, detail);
+  }
 });
 
 test("Backend returns fresh, allow-listed playback authorization for current mobile audio", async () => {
@@ -203,7 +210,7 @@ test("Backend returns fresh, allow-listed playback authorization for current mob
   };
   const app = createBackendApp(async () => undefined, {
     storage,
-    dataServiceClient: createTestDataServiceClient({
+    data: createTestDataModule({
       async getPublishedLesson() {
         return lesson;
       },
@@ -266,7 +273,7 @@ test("Backend keeps playback-signing failures correlated and storage-safe", asyn
   };
   const app = createBackendApp(async () => undefined, {
     storage,
-    dataServiceClient: createTestDataServiceClient({
+    data: createTestDataModule({
       async getPublishedLesson() {
         return publishedLessonDetailSchema.parse({
           id: 7,

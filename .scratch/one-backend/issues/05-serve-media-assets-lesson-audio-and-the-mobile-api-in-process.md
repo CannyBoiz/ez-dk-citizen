@@ -6,12 +6,12 @@ Ticket 04 also edits the Data Service client and the integration tier, so run 04
 
 **Blocked by:** 03 — Serve Sources from the data module in-process
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Upload Intent, completion, and current Lesson Audio keep today's statuses and Problem Details codes, including `media_asset_not_pending`, `media_asset_failed`, `media_asset_rebind_conflict`, `lesson_archived`, and `storage_unavailable`
-- [ ] Mobile API responses are unchanged, and every Playback URL is freshly created for the current audio
-- [ ] Route tests in the default tier stub the data module and use `FakeStorage`, and need no Docker
-- [ ] The `/internal/media-assets` HTTP tests are replaced by Admin API tests that go through the real Upload Intent and completion flow with `FakeStorage` against real PostgreSQL
-- [ ] The remaining `/internal/lessons` HTTP tests (Published localized detail, localized reads by status, and current Lesson Audio) run as Mobile API and Admin Lesson Audio tests against real PostgreSQL; their cases with no public equivalent (`?status=` and `?language=` answering 422, a status-only list) are deleted
-- [ ] The Data Service client has no operations left except what readiness needs
-- [ ] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:integration`, and `pnpm test:e2e` pass
+- [x] Upload Intent, completion, and current Lesson Audio keep today's statuses and Problem Details codes, including `media_asset_not_pending`, `media_asset_failed`, `media_asset_rebind_conflict`, `lesson_archived`, and `storage_unavailable`
+- [x] Mobile API responses are unchanged, and every Playback URL is freshly created for the current audio
+- [x] Route tests in the default tier stub the data module and use `FakeStorage`, and need no Docker
+- [x] The `/internal/media-assets` HTTP tests are replaced by Admin API tests that go through the real Upload Intent and completion flow with `FakeStorage` against real PostgreSQL
+- [x] The remaining `/internal/lessons` HTTP tests (Published localized detail, localized reads by status, and current Lesson Audio) run as Mobile API and Admin Lesson Audio tests against real PostgreSQL; their cases with no public equivalent (`?status=` and `?language=` answering 422, a status-only list) are deleted
+- [x] The Data Service client has no operations left except what readiness needs
+- [x] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:integration`, and `pnpm test:e2e` pass

@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
+import {
+  readCurrentLessonAudio,
+  readPublishedLesson,
+} from "../features/lessons/queries.js";
+import { completeMediaAsset } from "../features/media-assets/mutations.js";
 import {
   expectPostgresError,
   mediaAssetFixture,
@@ -277,4 +282,114 @@ test("Lesson Audio relationships resolve every navigation path unambiguously", a
   assert.equal(audioResult?.language.code, "th");
   assert.equal(audioResult?.lessonText.title, "บทเรียน");
   assert.equal(audioResult?.mediaAsset.id, relatedAsset.id);
+});
+
+test("Media Asset completion rolls back every promotion write", async () => {
+  const [audioLesson] = await database
+    .insert(lesson)
+    .values({ chapter: 72, status: "DRAFT" })
+    .returning();
+  await database.insert(lessonText).values({
+    lessonId: audioLesson.id,
+    languageCode: "th",
+    title: "Title",
+    content: "Content",
+  });
+  const [currentAsset, pendingAsset] = await database
+    .insert(mediaAsset)
+    .values([
+      mediaAssetFixture("audio/current.mp3", "READY"),
+      mediaAssetFixture("audio/pending.mp3", "PENDING"),
+    ])
+    .returning();
+  await database.insert(lessonAudio).values({
+    lessonId: audioLesson.id,
+    languageCode: "th",
+    mediaAssetId: currentAsset.id,
+    audioVersion: 1,
+    isCurrent: true,
+  });
+  // Every write runs, then the transaction fails.
+  const failingDatabase = new Proxy(database, {
+    get(target, property, receiver) {
+      if (property !== "transaction") {
+        return Reflect.get(target, property, receiver);
+      }
+      return (callback: Parameters<typeof database.transaction>[0]) =>
+        target.transaction(async (transaction) => {
+          await callback(transaction);
+          throw new Error("forced rollback");
+        });
+    },
+  });
+
+  await assert.rejects(
+    completeMediaAsset(failingDatabase, pendingAsset.id, {
+      lessonId: audioLesson.id,
+      languageCode: "th",
+    }),
+    /forced rollback/,
+  );
+
+  const [stored] = await database
+    .select({ status: mediaAsset.status })
+    .from(mediaAsset)
+    .where(eq(mediaAsset.id, pendingAsset.id));
+  assert.equal(stored?.status, "PENDING");
+  assert.deepEqual(
+    await database
+      .select({
+        mediaAssetId: lessonAudio.mediaAssetId,
+        isCurrent: lessonAudio.isCurrent,
+      })
+      .from(lessonAudio)
+      .where(eq(lessonAudio.lessonId, audioLesson.id)),
+    [{ mediaAssetId: currentAsset.id, isCurrent: true }],
+  );
+  const [after] = await database
+    .select({ updatedAt: lesson.updatedAt })
+    .from(lesson)
+    .where(eq(lesson.id, audioLesson.id));
+  assert.deepEqual(after?.updatedAt, audioLesson.updatedAt);
+});
+
+test("current Lesson Audio is served only while its Media Asset is READY", async () => {
+  const [audioLesson] = await database
+    .insert(lesson)
+    .values({ chapter: 76, version: 1, versionPatch: 0, status: "PUBLISHED" })
+    .returning();
+  await database.insert(lessonText).values({
+    lessonId: audioLesson.id,
+    languageCode: "th",
+    title: "Title",
+    content: "Content",
+  });
+  const [asset] = await database
+    .insert(mediaAsset)
+    .values(mediaAssetFixture("audio/current.mp3", "READY"))
+    .returning();
+  await database.insert(lessonAudio).values({
+    lessonId: audioLesson.id,
+    languageCode: "th",
+    mediaAssetId: asset.id,
+    audioVersion: 1,
+    isCurrent: true,
+  });
+  const served = async () => {
+    const current = await readCurrentLessonAudio(
+      database,
+      audioLesson.id,
+      "th",
+    );
+    const published = await readPublishedLesson(database, audioLesson.id, "th");
+    assert.ok(typeof current !== "string" && typeof published !== "string");
+    return [current.audio?.mediaAssetId, published.currentAudio?.mediaAssetId];
+  };
+
+  assert.deepEqual(await served(), [asset.id, asset.id]);
+  await database
+    .update(mediaAsset)
+    .set({ status: "DELETED" })
+    .where(eq(mediaAsset.id, asset.id));
+  assert.deepEqual(await served(), [undefined, undefined]);
 });

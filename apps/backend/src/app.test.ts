@@ -8,9 +8,8 @@ import { createDataModule } from "@ez-dk-citizen/data";
 import { createApp, createBackendApp } from "./app.js";
 import { readBackendConfig } from "./config.js";
 import { createTestDataModule } from "./testing/data-module.js";
-import { createTestDataServiceClient } from "./testing/data-service-client.js";
 
-test("Backend composition root uses runtime configuration, the supplied client, and the configured database", async (context) => {
+test("Backend composition root uses runtime configuration and the configured database", async (context) => {
   const config = readBackendConfig({
     DATABASE_URL: await silentPostgres(context, false),
     DATABASE_TIMEOUT_MS: "100",
@@ -31,30 +30,20 @@ test("Backend composition root uses runtime configuration, the supplied client, 
     );
   };
   const readiness = context.mock.method(globalThis, "fetch", fetchReadiness);
-  const app = createApp({
-    config,
-    dataClient: createTestDataServiceClient({
-      async listPublishedLessons(languageCode, requestId) {
-        assert.equal(languageCode, "th");
-        assert.equal(requestId, "composition-request");
-        return { items: [] };
-      },
-    }),
-  });
+  const app = createApp({ config });
 
   assert.equal((await app.request("/health")).status, 200);
   assert.equal(readiness.mock.callCount(), 0);
-  const lessons = await app.request("/api/mobile/lessons", {
-    headers: { "X-Request-ID": "composition-request" },
-  });
-  assert.equal(lessons.status, 200);
-  assert.deepEqual(await lessons.json(), { items: [] });
   assert.equal((await app.request("/ready")).status, 200);
   ready = false;
   assert.equal((await app.request("/ready")).status, 503);
   assert.equal(readiness.mock.callCount(), 2);
 
-  for (const path of ["/api/admin/sources", "/api/admin/lessons"]) {
+  for (const path of [
+    "/api/admin/sources",
+    "/api/admin/lessons",
+    "/api/mobile/lessons",
+  ]) {
     const started = performance.now();
     const response = await app.request(path, {
       headers: {
@@ -66,7 +55,7 @@ test("Backend composition root uses runtime configuration, the supplied client, 
     assert.equal(response.status, 503, path);
     assert.equal(
       response.headers.get("access-control-allow-origin"),
-      "https://admin.example",
+      path.startsWith("/api/admin/") ? "https://admin.example" : null,
     );
   }
 });

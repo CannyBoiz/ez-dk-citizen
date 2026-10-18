@@ -1,46 +1,25 @@
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
+import { test } from "node:test";
 import {
-  completeMediaAssetResponseSchema,
-  currentLessonAudioResponseSchema,
   mediaAssetResponseSchema,
   type ProblemDetails,
 } from "@ez-dk-citizen/api-contracts";
-import { createDataModule } from "@ez-dk-citizen/data";
-import { resetDatabaseBetweenTests } from "@ez-dk-citizen/data/testing";
 
-import { createBackendApp } from "../../app.js";
-import { FakeStorage } from "../../storage.js";
+import { code, useBackend } from "../../testing/backend.js";
 
-resetDatabaseBetweenTests();
-const data = createDataModule(String(process.env.DATABASE_URL), 2_000);
-after(() => data.close());
-const storage = new FakeStorage();
-const app = createBackendApp(async () => undefined, {
-  adminApiToken: "admin-token",
+const {
+  app,
   data,
   storage,
-});
-const headers = {
-  Authorization: "Bearer admin-token",
-  "Content-Type": "application/json",
-};
-const request = (path: string, method = "GET", body?: unknown) =>
-  app.request(`/api/admin${path}`, {
-    method,
-    headers,
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-const read = async (id: number) => (await request(`/lessons/${id}`)).json();
-const createLesson = async (chapter: number) => {
-  const response = await request("/lessons", "POST", { chapter });
-  assert.equal(response.status, 201);
-  return response.json();
-};
+  request,
+  read,
+  inStorage,
+  createLesson,
+  requestUpload,
+  upload,
+} = useBackend();
 const createSource = async (url: string) =>
   (await request("/sources", "POST", { url, publishedAt: null })).json();
-const code = async (response: Response) =>
-  ((await response.json()) as ProblemDetails).code;
 
 test("Admin API Lesson operations persist and return aggregate transport shapes", async () => {
   const unauthorized = await app.request("/api/admin/lessons", {
@@ -402,11 +381,11 @@ test("Admin API Lesson publication requires a Thai Lesson Text and a Lesson Sour
       availableLanguageCodes: ["th"],
     },
   );
-  // Publication creates no Lesson Audio. Lesson Audio routes still call the Data
-  // Service, so the data module reads it.
-  assert.deepEqual(await data.getCurrentLessonAudio(lesson.id, "th"), {
-    audio: null,
-  });
+  // Publication creates no Lesson Audio.
+  assert.deepEqual(
+    await (await request(`/lessons/${lesson.id}/audio/th`)).json(),
+    { audio: null },
+  );
 });
 
 test("one Lesson command saves the chapter and a Lesson Text together, or neither", async () => {
@@ -580,11 +559,8 @@ test("publication gives the version: 1.0 first, then the chapter's highest versi
   assert.equal((await read(draft)).status, "DRAFT");
 });
 
-let uploadCount = 0;
-
 // Creates a Lesson with a Lesson Text per Language, and completes one upload per entry
-// in `uploads`, with its object in storage. Media Asset routes still call the Data
-// Service, so the uploads go through the data module.
+// in `uploads`.
 async function lessonWithAudio(chapter: number, uploads: string[]) {
   const lesson = await createLesson(chapter);
   for (const languageCode of new Set(["th", ...uploads])) {
@@ -595,45 +571,24 @@ async function lessonWithAudio(chapter: number, uploads: string[]) {
   }
   const assets: { id: number; objectKey: string }[] = [];
   for (const languageCode of uploads) {
-    const asset = await pendingUpload(languageCode);
-    completeMediaAssetResponseSchema.parse(
-      await data.completeMediaAsset(asset.id, {
-        lessonId: lesson.id,
-        languageCode,
-      }),
-    );
-    assets.push({ id: asset.id, objectKey: asset.objectKey });
+    const { id, objectKey } = await upload(lesson.id, languageCode);
+    assets.push({ id, objectKey });
   }
   return { lesson, assets };
 }
 
-async function pendingUpload(languageCode: string) {
-  uploadCount += 1;
-  const objectKey = `audio/00000000-0000-4000-8000-${String(uploadCount).padStart(12, "0")}.mp3`;
-  const asset = mediaAssetResponseSchema.parse(
-    await data.createPendingMediaAsset({
-      languageCode,
-      storageProvider: "s3",
-      storageContainer: "citizenship-audio",
-      objectKey,
-      originalFilename: "lesson.mp3",
-      contentType: "audio/mpeg",
-      sizeBytes: 1,
-    }),
-  );
-  storage.putObject(objectKey, { contentType: "audio/mpeg", sizeBytes: 1 });
+// A pending upload whose object is stored but never completed.
+async function pendingUpload(lessonId: number) {
+  const asset = await requestUpload(lessonId, "th");
+  storage.putObject(asset.objectKey, {
+    contentType: "audio/mpeg",
+    sizeBytes: 1,
+  });
   return asset;
 }
 
 async function mediaAssetStatus(id: number) {
   return mediaAssetResponseSchema.parse(await data.getMediaAsset(id)).status;
-}
-
-async function inStorage(objectKey: string) {
-  return storage.inspectObject(objectKey).then(
-    () => true,
-    () => false,
-  );
 }
 
 test("deleting a Draft removes its texts, citations, and audio, and deletes the objects of the Media Assets it used", async () => {
@@ -650,7 +605,7 @@ test("deleting a Draft removes its texts, citations, and audio, and deletes the 
   await request(`/lessons/${draft.id}/sources/${source.id}`, "PUT", {
     pageFrom: 2,
   });
-  const pending = await pendingUpload("th");
+  const pending = await pendingUpload(draft.id);
 
   const deleted = await request(`/lessons/${draft.id}`, "DELETE");
 
@@ -669,12 +624,10 @@ test("deleting a Draft removes its texts, citations, and audio, and deletes the 
   for (const asset of otherAssets) {
     assert.equal(await mediaAssetStatus(asset.id), "READY");
     assert.equal(await inStorage(asset.objectKey), true);
-    assert.equal(
-      currentLessonAudioResponseSchema.parse(
-        await data.getCurrentLessonAudio(other.id, "th"),
-      ).audio?.mediaAssetId,
-      asset.id,
-    );
+    const current = await (
+      await request(`/lessons/${other.id}/audio/th`)
+    ).json();
+    assert.equal(current.audio.mediaAssetId, asset.id);
   }
   const { items } = await (await request("/sources")).json();
   assert.deepEqual(

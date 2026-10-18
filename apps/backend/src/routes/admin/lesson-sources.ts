@@ -9,22 +9,14 @@ import {
 import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
-import { problem } from "../../errors/problem-details.js";
+import { refuseWith } from "../../errors/problem-details.js";
 
 // The refusals both Lesson Source routes answer.
-const refusals = {
+const refuse = refuseWith({
   lesson_not_found: [404, "Lesson was not found."],
   source_not_found: [404, "Source was not found."],
   lesson_not_editable: [409, "Only Draft Lessons can be edited."],
-} as const;
-
-function refuse(
-  c: Parameters<typeof problem>[0],
-  outcome: keyof typeof refusals,
-) {
-  const [status, detail] = refusals[outcome];
-  return problem(c, status, outcome, detail);
-}
+});
 
 export function createAdminLessonSourceRoutes(data: DataModule) {
   return new Hono<RequestIdEnvironment>()

@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import {
-  lessonDetailSchema,
-  publishedLessonDetailSchema,
-} from "@ez-dk-citizen/api-contracts";
+import { lessonDetailSchema } from "@ez-dk-citizen/api-contracts";
 import { createDataModule } from "@ez-dk-citizen/data";
 import { resetDatabaseBetweenTests } from "@ez-dk-citizen/data/testing";
 
@@ -193,14 +190,11 @@ test("Admin API Source updates correct a Source cited by a Published Lesson with
       sectionReference: null,
     },
   ]);
-  // Mobile routes still call the Data Service, so the data module reads the Published
-  // Lesson.
-  const thai = publishedLessonDetailSchema.parse(
-    await data.getPublishedLesson(lesson.id, "th"),
-  );
-  assert.equal(thai.updatedAt, published.updatedAt);
+  const thai = await (
+    await app.request(`/api/mobile/lessons/${lesson.id}`)
+  ).json();
   assert.deepEqual(
-    thai.lessonSources.map(({ url }) => url),
+    thai.lessonSources.map(({ url }: { url: string }) => url),
     ["https://example.com/fixed"],
   );
   assert.deepEqual(

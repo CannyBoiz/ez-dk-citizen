@@ -1,21 +1,21 @@
 import {
   adminLessonAudioResponseSchema,
-  type CurrentLessonAudioResponse,
   lessonLanguageParamsSchema,
   type RequestIdEnvironment,
   validateRequest,
 } from "@ez-dk-citizen/api-contracts";
+import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
 import type { BackendAppOptions } from "../../app.js";
-import { mapDataServiceError } from "../../errors/downstream.js";
 import { problem } from "../../errors/problem-details.js";
 import { authorizePlayback } from "../../playback.js";
 
 // The current Lesson Audio for any Lesson status, with a fresh Playback URL. Unlike the
 // mobile route, it serves Draft and Archived Lessons too.
 export function createAdminLessonAudioRoutes(
-  options: Pick<BackendAppOptions, "dataServiceClient" | "storage">,
+  data: DataModule,
+  options: Pick<BackendAppOptions, "storage">,
 ) {
   return new Hono<RequestIdEnvironment>().get(
     "/:lessonId/audio/:languageCode",
@@ -25,23 +25,12 @@ export function createAdminLessonAudioRoutes(
         lessonId: number;
         languageCode: string;
       };
-      if (!options.dataServiceClient) {
-        return problem(
-          c,
-          502,
-          "data_service_unavailable",
-          "The Data Service is unavailable.",
-        );
+      const current = await data.getCurrentLessonAudio(lessonId, languageCode);
+      if (current === "lesson_not_found") {
+        return problem(c, 404, current, "Lesson was not found.");
       }
-      let current: CurrentLessonAudioResponse;
-      try {
-        current = await options.dataServiceClient.getCurrentLessonAudio(
-          lessonId,
-          languageCode,
-          c.get("requestId"),
-        );
-      } catch (error) {
-        return mapDataServiceError(c, error);
+      if (current === "unsupported_language") {
+        return problem(c, 422, current, "Language is not supported.");
       }
 
       c.header("Cache-Control", "no-store");

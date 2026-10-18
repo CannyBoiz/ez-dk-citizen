@@ -8,6 +8,22 @@ import { HTTPException } from "hono/http-exception";
 
 export { problem };
 
+// Answers each outcome code in `refusals` with its status and detail.
+export function refuseWith<
+  const Refusals extends Record<
+    string,
+    readonly [Parameters<typeof problem>[1], string]
+  >,
+>(refusals: Refusals) {
+  return (
+    c: Parameters<typeof problem>[0],
+    outcome: keyof Refusals & string,
+  ) => {
+    const [status, detail] = refusals[outcome];
+    return problem(c, status, outcome, detail);
+  };
+}
+
 export function installProblemDetails(app: Hono<RequestIdEnvironment>) {
   app.onError((error, c) => {
     if (error instanceof HTTPException && error.status === 400) {

@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  mediaAssetResponseSchema,
-  problemDetailsSchema,
-} from "@ez-dk-citizen/api-contracts";
+import { mediaAssetResponseSchema } from "@ez-dk-citizen/api-contracts";
 
 import { createBackendApp } from "../../app.js";
-import { DataServiceError } from "../../data-service/client.js";
 import { FakeStorage } from "../../storage.js";
-import { createTestDataServiceClient } from "../../testing/data-service-client.js";
+import { createTestDataModule } from "../../testing/data-module.js";
 
 test("Backend completes matching stored media through the admin route", async () => {
   const storage = new FakeStorage();
@@ -32,16 +28,14 @@ test("Backend completes matching stored media through the admin route", async ()
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
-    dataServiceClient: createTestDataServiceClient({
-      async getMediaAsset(id, requestId) {
+    data: createTestDataModule({
+      async getMediaAsset(id) {
         assert.equal(id, asset.id);
-        assert.equal(requestId, "complete-request");
         return asset;
       },
-      async completeMediaAsset(id, input, requestId) {
+      async completeMediaAsset(id, input) {
         assert.equal(id, asset.id);
         assert.deepEqual(input, { lessonId: 7, languageCode: "th" });
-        assert.equal(requestId, "complete-request");
         return {
           mediaAsset: {
             id,
@@ -119,7 +113,7 @@ test("Backend returns a completion retry for superseded audio as not current", a
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
-    dataServiceClient: createTestDataServiceClient({
+    data: createTestDataModule({
       async getMediaAsset() {
         return mediaAssetResponseSchema.parse({
           id: 9,
@@ -184,7 +178,7 @@ test("Backend keeps incomplete uploads pending and fails invalid uploads before 
     const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
-      dataServiceClient: createTestDataServiceClient({
+      data: createTestDataModule({
         async getMediaAsset() {
           return asset;
         },
@@ -210,7 +204,7 @@ test("Backend keeps incomplete uploads pending and fails invalid uploads before 
         const app = createBackendApp(async () => undefined, {
           adminApiToken: "admin-token",
           storage,
-          dataServiceClient: createTestDataServiceClient({
+          data: createTestDataModule({
             async getMediaAsset() {
               return asset;
             },
@@ -238,7 +232,7 @@ test("Backend keeps incomplete uploads pending and fails invalid uploads before 
     const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
-      dataServiceClient: createTestDataServiceClient({
+      data: createTestDataModule({
         async getMediaAsset() {
           return asset;
         },
@@ -279,12 +273,13 @@ test("Backend keeps incomplete uploads pending and fails invalid uploads before 
     const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
-      dataServiceClient: createTestDataServiceClient({
+      data: createTestDataModule({
         async getMediaAsset() {
           return asset;
         },
         async failMediaAsset() {
           calls.push("fail");
+          return undefined;
         },
       }),
     });
@@ -310,14 +305,14 @@ test("Backend keeps incomplete uploads pending and fails invalid uploads before 
         const app = createBackendApp(async () => undefined, {
           adminApiToken: "admin-token",
           storage,
-          dataServiceClient: createTestDataServiceClient({
+          data: createTestDataModule({
             async getMediaAsset() {
               return asset;
             },
-            async failMediaAsset(id, requestId) {
+            async failMediaAsset(id) {
               assert.equal(id, asset.id);
-              assert.equal(requestId, "failure-request");
               calls.push("fail");
+              return undefined;
             },
             async completeMediaAsset() {
               throw new Error("invalid media must not complete");
@@ -356,12 +351,13 @@ test("Backend keeps incomplete uploads pending and fails invalid uploads before 
       const app = createBackendApp(async () => undefined, {
         adminApiToken: "admin-token",
         storage,
-        dataServiceClient: createTestDataServiceClient({
+        data: createTestDataModule({
           async getMediaAsset() {
             return asset;
           },
           async failMediaAsset() {
             calls.push("fail");
+            return undefined;
           },
         }),
       });
@@ -394,7 +390,7 @@ test("Backend keeps incomplete uploads pending and fails invalid uploads before 
   );
 });
 
-test("Backend preserves completion conflicts from the Data Service", async () => {
+test("Backend maps completion refusals to Problem Details", async () => {
   const asset = mediaAssetResponseSchema.parse({
     id: 9,
     storageProvider: "s3",
@@ -408,40 +404,89 @@ test("Backend preserves completion conflicts from the Data Service", async () =>
     createdAt: "2026-01-01T00:00:00.000Z",
     uploadedAt: "2026-01-01T00:01:00.000Z",
   });
-  const app = createBackendApp(async () => undefined, {
-    adminApiToken: "admin-token",
-    storage: new FakeStorage(),
-    dataServiceClient: createTestDataServiceClient({
-      async getMediaAsset() {
-        return asset;
+  const complete = (app: ReturnType<typeof createBackendApp>) =>
+    app.request("/api/admin/media/9/complete", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer admin-token",
+        "Content-Type": "application/json",
       },
-      async completeMediaAsset() {
-        throw new DataServiceError(
-          problemDetailsSchema.parse({
-            type: "https://ez-dk-citizen.invalid/problems/lesson_text_not_found",
-            title: "Conflict",
-            status: 409,
-            detail: "Lesson Text was not found.",
-            instance: "/internal/media-assets/9/complete",
-            code: "lesson_text_not_found",
-            requestId: "downstream",
-          }),
-        );
-      },
+      body: JSON.stringify({ lessonId: 7, languageCode: "th" }),
+    });
+
+  for (const [outcome, status, detail] of [
+    ["media_asset_not_found", 404, "Media Asset was not found."],
+    ["lesson_not_found", 404, "Lesson was not found."],
+    ["unsupported_language", 422, "Language is not supported."],
+    ["lesson_text_not_found", 409, "Lesson Text was not found."],
+    ["lesson_archived", 409, "Archived Lessons cannot receive audio."],
+    ["media_asset_not_pending", 409, "Media Asset is not pending."],
+    [
+      "media_asset_failed",
+      409,
+      "Media Asset failed validation; create a new Upload Intent.",
+    ],
+    [
+      "media_asset_rebind_conflict",
+      409,
+      "Media Asset is already bound to a different Lesson or Language.",
+    ],
+  ] as const) {
+    const response = await complete(
+      createBackendApp(async () => undefined, {
+        adminApiToken: "admin-token",
+        storage: new FakeStorage(),
+        data: createTestDataModule({
+          async getMediaAsset() {
+            return asset;
+          },
+          async completeMediaAsset() {
+            return outcome;
+          },
+        }),
+      }),
+    );
+    assert.equal(response.status, status, outcome);
+    const body = await response.json();
+    assert.equal(body.code, outcome);
+    assert.equal(body.detail, detail);
+  }
+
+  const missing = await complete(
+    createBackendApp(async () => undefined, {
+      adminApiToken: "admin-token",
+      storage: new FakeStorage(),
+      data: createTestDataModule({
+        async getMediaAsset() {
+          return "media_asset_not_found";
+        },
+      }),
     }),
-  });
+  );
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).code, "media_asset_not_found");
 
-  const response = await app.request("/api/admin/media/9/complete", {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer admin-token",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ lessonId: 7, languageCode: "th" }),
-  });
-
-  assert.equal(response.status, 409);
-  assert.equal((await response.json()).code, "lesson_text_not_found");
+  // A mismatched upload that another request settles first keeps its object.
+  const storage = new FakeStorage();
+  const mismatched = { contentType: "audio/mpeg", sizeBytes: 2 };
+  storage.putObject(asset.objectKey, mismatched);
+  const settled = await complete(
+    createBackendApp(async () => undefined, {
+      adminApiToken: "admin-token",
+      storage,
+      data: createTestDataModule({
+        async getMediaAsset() {
+          return { ...asset, status: "PENDING" };
+        },
+        async failMediaAsset() {
+          return "media_asset_not_pending";
+        },
+      }),
+    }),
+  );
+  assert.equal(settled.status, 409);
+  assert.equal((await settled.json()).code, "media_asset_not_pending");
+  assert.deepEqual(await storage.inspectObject(asset.objectKey), mismatched);
 });
 
 test("Backend retries ready media without inspecting storage", async () => {
@@ -465,7 +510,7 @@ test("Backend retries ready media without inspecting storage", async () => {
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
-    dataServiceClient: createTestDataServiceClient({
+    data: createTestDataModule({
       async getMediaAsset() {
         return asset;
       },

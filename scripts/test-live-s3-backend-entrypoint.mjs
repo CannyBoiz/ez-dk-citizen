@@ -9,14 +9,12 @@ const [
   { createDataModule },
   { createBackendApp },
   { readBackendConfig },
-  { createDataServiceClient },
   { createS3Storage },
 ] = await Promise.all([
   import(require.resolve("@ez-dk-citizen/api-contracts")),
   import(require.resolve("@ez-dk-citizen/data")),
   import("/app/dist/app.js"),
   import("/app/dist/config.js"),
-  import("/app/dist/data-service/client.js"),
   import("/app/dist/storage.js"),
 ]);
 
@@ -35,11 +33,6 @@ const app = createBackendApp(
     adminApiToken: config.adminApiToken,
     adminOrigins: config.adminOrigins,
     data: createDataModule(config.databaseUrl, config.databaseTimeoutMs),
-    dataServiceClient: createDataServiceClient(
-      config.dataServiceUrl.toString(),
-      config.dataServiceToken,
-      config.dataServiceTimeoutMs,
-    ),
     objectKeyGenerator() {
       const key = `smoke/${randomUUID()}.mp3`;
       appendFileSync("/tmp/ez-dk-citizen-live-s3-smoke-keys", `${key}\n`);

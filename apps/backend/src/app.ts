@@ -4,10 +4,6 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 
 import type { BackendConfig } from "./config.js";
-import {
-  createDataServiceClient,
-  type DataServiceClient,
-} from "./data-service/client.js";
 import { installProblemDetails, problem } from "./errors/problem-details.js";
 import { adminAuth } from "./middleware/admin-auth.js";
 import { adminCors } from "./middleware/cors.js";
@@ -29,23 +25,12 @@ export interface BackendAppOptions {
   adminApiToken?: string;
   adminOrigins?: string[];
   data?: DataModule;
-  dataServiceClient?: DataServiceClient;
   objectKeyGenerator?: () => string;
   storage?: Storage;
   storageBucket?: string;
 }
 
-export function createApp({
-  config,
-  dataClient = createDataServiceClient(
-    config.dataServiceUrl.toString(),
-    config.dataServiceToken,
-    config.dataServiceTimeoutMs,
-  ),
-}: {
-  config: BackendConfig;
-  dataClient?: DataServiceClient;
-}) {
+export function createApp({ config }: { config: BackendConfig }) {
   return createBackendApp(
     async () => {
       const response = await fetch(new URL("/ready", config.dataServiceUrl), {
@@ -61,7 +46,6 @@ export function createApp({
       adminApiToken: config.adminApiToken,
       adminOrigins: config.adminOrigins,
       data: createDataModule(config.databaseUrl, config.databaseTimeoutMs),
-      dataServiceClient: dataClient,
       storageBucket: config.s3Bucket,
       storage: createS3Storage({
         region: config.awsRegion,
@@ -95,12 +79,12 @@ export function createBackendApp(
   const data = options.data ?? withoutDataModule;
   return app
     .route("/", createHealthRoutes(checkDataServiceReadiness))
-    .route("/api/admin/media", createAdminMediaRoutes(options))
+    .route("/api/admin/media", createAdminMediaRoutes(data, options))
     .route("/api/admin/lessons", createAdminLessonRoutes(data, options))
     .route("/api/admin/sources", createAdminSourceRoutes(data))
     .route("/api/admin/lessons", createAdminLessonSourceRoutes(data))
-    .route("/api/admin/lessons", createAdminLessonAudioRoutes(options))
-    .route("/api/mobile/lessons", createMobileLessonRoutes(options));
+    .route("/api/admin/lessons", createAdminLessonAudioRoutes(data, options))
+    .route("/api/mobile/lessons", createMobileLessonRoutes(data, options));
 }
 
 // Without a data module every operation throws, so its routes answer 500 internal_error.

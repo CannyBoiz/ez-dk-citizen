@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  currentLessonAudioResponseSchema,
-  problemDetailsSchema,
-} from "@ez-dk-citizen/api-contracts";
+import { currentLessonAudioResponseSchema } from "@ez-dk-citizen/api-contracts";
 
 import { createBackendApp } from "../../app.js";
-import { DataServiceError } from "../../data-service/client.js";
 import { FakeStorage } from "../../storage.js";
-import { createTestDataServiceClient } from "../../testing/data-service-client.js";
+import { createTestDataModule } from "../../testing/data-module.js";
 
 const key = "audio/123e4567-e89b-12d3-a456-426614174000.mp3";
 const current = currentLessonAudioResponseSchema.parse({
@@ -27,29 +23,13 @@ const headers = {
   "X-Request-ID": "admin-audio",
 };
 
-function downstreamProblem(status: number, code: string, detail: string) {
-  return new DataServiceError(
-    problemDetailsSchema.parse({
-      type: `https://ez-dk-citizen.invalid/problems/${code}`,
-      title: "Problem",
-      status,
-      detail,
-      instance: "/internal/lessons/7/audio/th",
-      code,
-      requestId: "downstream",
-    }),
-  );
-}
-
 test("admin current audio requires the admin token", async () => {
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage: new FakeStorage(),
-    dataServiceClient: createTestDataServiceClient({
+    data: createTestDataModule({
       async getCurrentLessonAudio() {
-        throw new Error(
-          "Unauthenticated requests must not reach the Data Service",
-        );
+        throw new Error("Unauthenticated requests must not read Lesson Audio");
       },
     }),
   });
@@ -76,9 +56,9 @@ test("admin current audio signs one fresh Playback URL and hides storage identit
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
-    dataServiceClient: createTestDataServiceClient({
-      async getCurrentLessonAudio(lessonId, languageCode, requestId) {
-        reads.push(`${lessonId}:${languageCode}:${requestId}`);
+    data: createTestDataModule({
+      async getCurrentLessonAudio(lessonId, languageCode) {
+        reads.push(`${lessonId}:${languageCode}`);
         return languageCode === "da" ? { audio: null } : current;
       },
     }),
@@ -118,46 +98,20 @@ test("admin current audio signs one fresh Playback URL and hides storage identit
   assert.equal(none.headers.get("cache-control"), "no-store");
   assert.deepEqual(await none.json(), { audio: null });
   assert.equal(keys.length, 2);
-  assert.deepEqual(reads, [
-    "7:th:admin-audio",
-    "7:th:admin-audio",
-    "7:da:admin-audio",
-  ]);
+  assert.deepEqual(reads, ["7:th", "7:th", "7:da"]);
 });
 
-test("admin current audio passes Data Service problems through safely", async () => {
-  for (const [error, status, code] of [
-    [
-      downstreamProblem(404, "lesson_not_found", "Lesson was not found."),
-      404,
-      "lesson_not_found",
-    ],
-    [
-      downstreamProblem(
-        422,
-        "unsupported_language",
-        "Language is not supported.",
-      ),
-      422,
-      "unsupported_language",
-    ],
-    [
-      downstreamProblem(
-        504,
-        "data_service_timeout",
-        "The Data Service timed out.",
-      ),
-      504,
-      "data_service_timeout",
-    ],
-    [new Error("socket hang up"), 502, "data_service_unavailable"],
+test("admin current audio maps data module refusals to Problem Details", async () => {
+  for (const [outcome, status, detail] of [
+    ["lesson_not_found", 404, "Lesson was not found."],
+    ["unsupported_language", 422, "Language is not supported."],
   ] as const) {
     const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage: new FakeStorage(),
-      dataServiceClient: createTestDataServiceClient({
+      data: createTestDataModule({
         async getCurrentLessonAudio() {
-          throw error;
+          return outcome;
         },
       }),
     });
@@ -166,7 +120,9 @@ test("admin current audio passes Data Service problems through safely", async ()
       headers,
     });
     assert.equal(response.status, status);
-    assert.equal((await response.json()).code, code);
+    const body = await response.json();
+    assert.equal(body.code, outcome);
+    assert.equal(body.detail, detail);
   }
 });
 
@@ -188,7 +144,7 @@ test("admin current audio maps signing failures to storage problems and logs the
     const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
-      dataServiceClient: createTestDataServiceClient({
+      data: createTestDataModule({
         async getCurrentLessonAudio() {
           return current;
         },

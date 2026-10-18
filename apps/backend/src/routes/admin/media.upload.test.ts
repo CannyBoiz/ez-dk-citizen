@@ -6,9 +6,8 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 
 import { createBackendApp } from "../../app.js";
-import { DataServiceError } from "../../data-service/client.js";
 import { FakeStorage } from "../../storage.js";
-import { createTestDataServiceClient } from "../../testing/data-service-client.js";
+import { createTestDataModule } from "../../testing/data-module.js";
 
 test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", async () => {
   const storage = new FakeStorage();
@@ -23,9 +22,9 @@ test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", 
     adminApiToken: "admin-token",
     storage,
     storageBucket: "citizenship-audio",
-    dataServiceClient: createTestDataServiceClient({
-      async createPendingMediaAsset(input, requestId) {
-        calls.push(`persist:${requestId}`);
+    data: createTestDataModule({
+      async createPendingMediaAsset(input) {
+        calls.push("persist");
         assert.equal(input.languageCode, "th");
         assert.equal(input.storageContainer, "citizenship-audio");
         assert.match(input.objectKey, /^audio\/[0-9a-f-]{36}\.mp3$/);
@@ -76,7 +75,7 @@ test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", 
   assert.match(intent.uploadUrl, /^https:\/\/storage\.invalid\/audio\//);
   assert.ok(Date.parse(intent.expiresAt) > Date.now() + 14 * 60 * 1_000);
   assert.ok(Date.parse(intent.expiresAt) <= Date.now() + 15 * 60 * 1_000);
-  assert.deepEqual(calls, ["persist:upload-request", "sign"]);
+  assert.deepEqual(calls, ["persist", "sign"]);
   assert.equal(storage.uploads.length, 1);
 
   const unauthorized = await app.request("/api/admin/media/upload-intents", {
@@ -115,7 +114,7 @@ test("Backend accepts a test-only Upload Intent object-key generator", async () 
     storage,
     storageBucket: "citizenship-audio",
     objectKeyGenerator: () => "smoke/123e4567-e89b-12d3-a456-426614174000.mp3",
-    dataServiceClient: createTestDataServiceClient({
+    data: createTestDataModule({
       async createPendingMediaAsset(input) {
         assert.equal(
           input.objectKey,
@@ -165,19 +164,9 @@ test("Backend does not sign when pending Media Asset persistence fails", async (
     adminApiToken: "admin-token",
     storage,
     storageBucket: "citizenship-audio",
-    dataServiceClient: createTestDataServiceClient({
+    data: createTestDataModule({
       async createPendingMediaAsset() {
-        throw new DataServiceError(
-          problemDetailsSchema.parse({
-            type: "https://ez-dk-citizen.invalid/problems/unsupported_language",
-            title: "Unprocessable Content",
-            status: 422,
-            detail: "Language is not supported.",
-            instance: "/internal/media-assets",
-            code: "unsupported_language",
-            requestId: "downstream",
-          }),
-        );
+        return "unsupported_language";
       },
     }),
   });
@@ -197,7 +186,9 @@ test("Backend does not sign when pending Media Asset persistence fails", async (
   });
 
   assert.equal(response.status, 422);
-  assert.equal((await response.json()).code, "unsupported_language");
+  const refusal = await response.json();
+  assert.equal(refusal.code, "unsupported_language");
+  assert.equal(refusal.detail, "Language is not supported.");
   assert.equal(storage.uploads.length, 0);
 });
 
@@ -217,7 +208,7 @@ test("Backend leaves a pending Media Asset and logs safely when storage signing 
     adminApiToken: "admin-token",
     storage,
     storageBucket: "citizenship-audio",
-    dataServiceClient: createTestDataServiceClient({
+    data: createTestDataModule({
       async createPendingMediaAsset() {
         return mediaAssetResponseSchema.parse({
           id: 10,
