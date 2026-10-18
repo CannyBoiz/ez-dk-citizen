@@ -69,7 +69,7 @@ importers:
         version: link:../../packages/api-contracts
       '@ez-dk-citizen/data':
         specifier: workspace:*
-        version: link:../data
+        version: link:../../packages/data
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.4)
@@ -80,43 +80,6 @@ importers:
       '@types/node':
         specifier: ^26.3.0
         version: 26.3.0
-      tsx:
-        specifier: ^4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-
-  apps/data:
-    dependencies:
-      '@ez-dk-citizen/api-contracts':
-        specifier: workspace:*
-        version: link:../../packages/api-contracts
-      '@hono/node-server':
-        specifier: ^2.1.1
-        version: 2.1.1(hono@4.13.4)
-      dotenv:
-        specifier: ^17.4.2
-        version: 17.4.2
-      drizzle-orm:
-        specifier: ^1.0.0-rc.4
-        version: 1.0.0-rc.4(@types/pg@8.23.1)(pg@8.23.0)(zod@4.5.4)
-      hono:
-        specifier: 4.13.4
-        version: 4.13.4
-      pg:
-        specifier: ^8.23.0
-        version: 8.23.0
-    devDependencies:
-      '@types/node':
-        specifier: ^26.3.0
-        version: 26.3.0
-      '@types/pg':
-        specifier: ^8.23.1
-        version: 8.23.1
-      drizzle-kit:
-        specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4
       tsx:
         specifier: ^4.23.12
         version: 4.23.12
@@ -139,6 +102,37 @@ importers:
       '@types/node':
         specifier: ^26.3.0
         version: 26.3.0
+      tsx:
+        specifier: ^4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
+  packages/data:
+    dependencies:
+      '@ez-dk-citizen/api-contracts':
+        specifier: workspace:*
+        version: link:../api-contracts
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+      drizzle-orm:
+        specifier: ^1.0.0-rc.4
+        version: 1.0.0-rc.4(@types/pg@8.23.1)(pg@8.23.0)(zod@4.5.4)
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
+    devDependencies:
+      '@types/node':
+        specifier: ^26.3.0
+        version: 26.3.0
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      drizzle-kit:
+        specifier: 1.0.0-rc.4
+        version: 1.0.0-rc.4
       tsx:
         specifier: ^4.23.12
         version: 4.23.12

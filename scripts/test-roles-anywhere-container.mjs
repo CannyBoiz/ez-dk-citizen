@@ -42,8 +42,6 @@ const composeEnvironment = {
   ...process.env,
   ADMIN_API_TOKEN:
     process.env.ADMIN_API_TOKEN ?? "roles-anywhere-smoke-admin-token",
-  DATA_SERVICE_TOKEN:
-    process.env.DATA_SERVICE_TOKEN ?? "roles-anywhere-smoke-data-service-token",
   POSTGRES_DB: "roles_anywhere_smoke",
   POSTGRES_USER: "roles_anywhere_smoke",
   POSTGRES_PASSWORD: "roles-anywhere-smoke-password",
@@ -69,11 +67,13 @@ const composeArguments = [
 ];
 
 await runDocker([...composeArguments, "config", "--quiet"]);
+// Every profile, so the one-shot and test containers are checked too.
 const config = JSON.parse(
   (
-    await runDocker([...composeArguments, "config", "--format", "json"], {
-      captureOutput: true,
-    })
+    await runDocker(
+      [...composeArguments, "--profile", "*", "config", "--format", "json"],
+      { captureOutput: true },
+    )
   ).output,
 );
 assertTopology(config);
@@ -153,10 +153,26 @@ function assertTopology(composeConfig) {
     assert.ok(composeConfig.services.postgres.environment[name]);
   }
 
-  for (const name of ["postgres", "migrate", "hono-data"]) {
-    const service = composeConfig.services[name];
-    assert.equal(service.environment.AWS_PROFILE, undefined);
-    assert.equal(service.volumes?.length ?? 0, name === "postgres" ? 1 : 0);
+  // Only the running Backend holds the AWS identity.
+  assert.deepEqual(Object.keys(composeConfig.services).sort(), [
+    "backend",
+    "backend-after-failed-migration",
+    "backend-test",
+    "migrate",
+    "migration-failure",
+    "postgres",
+    "postgres-check",
+    "postgres-test",
+  ]);
+  for (const [name, service] of Object.entries(composeConfig.services)) {
+    if (name === "backend") continue;
+    assert.equal(service.environment.AWS_PROFILE, undefined, name);
+    assert.equal(service.environment.AWS_CONFIG_FILE, undefined, name);
+    assert.equal(
+      service.volumes?.length ?? 0,
+      name === "postgres" ? 1 : 0,
+      name,
+    );
   }
 }
 

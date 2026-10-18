@@ -12,6 +12,7 @@ services:
   migrate:
     build:
       target: development
+    working_dir: /workspace
     environment:
       DATABASE_URL: *database-url
     command:
@@ -22,37 +23,6 @@ services:
       - tsx
       - src/db/migrate.ts
 
-  hono-data:
-    build:
-      context: .
-      dockerfile: apps/data/Dockerfile
-      target: development
-    environment:
-      DATABASE_URL: *database-url
-      DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:-development-only-data-service-token}
-      PORT: 3000
-    command: pnpm --filter @ez-dk-citizen/data dev
-    develop:
-      watch:
-        - action: sync
-          path: ./apps/data/src
-          target: /workspace/apps/data/src
-        - action: sync
-          path: ./apps/data/drizzle
-          target: /workspace/apps/data/drizzle
-        - action: rebuild
-          path: ./apps/data/Dockerfile
-        - action: rebuild
-          path: ./apps/data/package.json
-        - action: rebuild
-          path: ./packages/api-contracts
-        - action: rebuild
-          path: ./package.json
-        - action: rebuild
-          path: ./pnpm-lock.yaml
-        - action: rebuild
-          path: ./pnpm-workspace.yaml
-
   backend:
     build:
       target: development
@@ -61,9 +31,6 @@ services:
       ADMIN_ORIGINS: ${ADMIN_ORIGINS:-http://127.0.0.1:${ADMIN_UI_PORT:-5173}}
       DATABASE_URL: *database-url
       DATABASE_TIMEOUT_MS: ${DATABASE_TIMEOUT_MS:-2000}
-      DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:-development-only-data-service-token}
-      DATA_SERVICE_URL: http://hono-data:3000
-      DATA_SERVICE_TIMEOUT_MS: ${DATA_SERVICE_TIMEOUT_MS:-2000}
       AWS_REGION: ${AWS_REGION:-eu-north-1}
       S3_BUCKET: ${S3_BUCKET:-development-only-bucket}
       PORT: 3000
@@ -80,7 +47,7 @@ services:
         - action: rebuild
           path: ./apps/backend/package.json
         - action: rebuild
-          path: ./apps/data
+          path: ./packages/data
         - action: rebuild
           path: ./packages/api-contracts
         - action: rebuild

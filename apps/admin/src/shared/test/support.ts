@@ -259,7 +259,7 @@ export function fakeBackend(
     ).values(),
   ];
   // Every accepted transition succeeds; tests inject the backend's refusals through `override`.
-  // Publication gives the version as the Data Service does: 1.0 for the chapter's first, and
+  // Publication gives the version as the data module does: 1.0 for the chapter's first, and
   // otherwise the highest Published or Archived version raised by the change kind.
   function transition(
     lesson: LessonDetail,
@@ -529,7 +529,7 @@ export function fakeBackend(
   return { ...network, currentAudio };
 }
 
-// Like the Data Service, every change moves a Lesson's updatedAt strictly forward.
+// Like the data module, every change moves a Lesson's updatedAt strictly forward.
 function touch(lesson: LessonDetail) {
   lesson.updatedAt = new Date(
     Math.max(Date.now(), Date.parse(lesson.updatedAt) + 1),

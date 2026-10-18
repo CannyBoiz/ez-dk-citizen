@@ -56,8 +56,8 @@ test("Backend errors show their message and request ID", async () => {
         fakeNetwork(() =>
           problem(
             503,
-            "data_service_unavailable",
-            "The Data Service is unavailable.",
+            "database_unavailable",
+            "The database is unavailable.",
             "req-503",
           ),
         ).network
@@ -68,7 +68,7 @@ test("Backend errors show their message and request ID", async () => {
   await connect(validToken);
 
   const alert = await screen.findByRole("alert");
-  expect(alert.textContent).toContain("The Data Service is unavailable.");
+  expect(alert.textContent).toContain("The database is unavailable.");
   expect(alert.textContent).toContain("req-503");
 });
 

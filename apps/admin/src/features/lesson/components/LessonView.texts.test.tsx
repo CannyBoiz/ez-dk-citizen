@@ -241,10 +241,10 @@ test("a failed Save keeps the chapter and the pasted text, saves neither, and ca
     override: (request) =>
       request.method === "PATCH" && outage
         ? problem(
-            504,
-            "data_service_timeout",
-            "The Data Service timed out.",
-            "req-504",
+            503,
+            "database_unavailable",
+            "The database is unavailable.",
+            "req-503",
           )
         : undefined,
   });
@@ -258,8 +258,8 @@ test("a failed Save keeps the chapter and the pasted text, saves neither, and ca
   fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
 
   const alert = await within(textForm()).findByRole("alert");
-  expect(alert.textContent).toContain("The Data Service timed out.");
-  expect(alert.textContent).toContain("req-504");
+  expect(alert.textContent).toContain("The database is unavailable.");
+  expect(alert.textContent).toContain("req-503");
   expect(within(chapterForm()).getByLabelText("Chapter")).toHaveProperty(
     "value",
     "6",
@@ -276,7 +276,7 @@ test("a failed Save keeps the chapter and the pasted text, saves neither, and ca
   fireEvent.click(tab("en"));
   fireEvent.click(tab("th"));
   expect(within(textForm()).getByRole("alert").textContent).toContain(
-    "req-504",
+    "req-503",
   );
 
   outage = false;

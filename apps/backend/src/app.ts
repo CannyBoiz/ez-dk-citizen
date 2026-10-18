@@ -1,4 +1,3 @@
-import { readinessResponseSchema } from "@ez-dk-citizen/api-contracts";
 import { createDataModule, type DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -30,33 +29,24 @@ export interface BackendAppOptions {
   storageBucket?: string;
 }
 
+// Returns the data module too, so the caller can close its pool on shutdown.
 export function createApp({ config }: { config: BackendConfig }) {
-  return createBackendApp(
-    async () => {
-      const response = await fetch(new URL("/ready", config.dataServiceUrl), {
-        signal: AbortSignal.timeout(config.dataServiceTimeoutMs),
-      });
-      const readiness = readinessResponseSchema.parse(await response.json());
-
-      if (!response.ok || readiness.status !== "ok") {
-        throw new Error("Data Service is unavailable.");
-      }
-    },
-    {
-      adminApiToken: config.adminApiToken,
-      adminOrigins: config.adminOrigins,
-      data: createDataModule(config.databaseUrl, config.databaseTimeoutMs),
-      storageBucket: config.s3Bucket,
-      storage: createS3Storage({
-        region: config.awsRegion,
-        bucket: config.s3Bucket,
-      }),
-    },
-  );
+  const data = createDataModule(config.databaseUrl, config.databaseTimeoutMs);
+  const app = createBackendApp(() => data.checkReadiness(), {
+    adminApiToken: config.adminApiToken,
+    adminOrigins: config.adminOrigins,
+    data,
+    storageBucket: config.s3Bucket,
+    storage: createS3Storage({
+      region: config.awsRegion,
+      bucket: config.s3Bucket,
+    }),
+  });
+  return { app, data };
 }
 
 export function createBackendApp(
-  checkDataServiceReadiness: () => Promise<void>,
+  checkReadiness: () => Promise<void>,
   options: BackendAppOptions = {},
 ) {
   const app = new Hono<RequestIdEnvironment>();
@@ -78,7 +68,7 @@ export function createBackendApp(
 
   const data = options.data ?? withoutDataModule;
   return app
-    .route("/", createHealthRoutes(checkDataServiceReadiness))
+    .route("/", createHealthRoutes(checkReadiness))
     .route("/api/admin/media", createAdminMediaRoutes(data, options))
     .route("/api/admin/lessons", createAdminLessonRoutes(data, options))
     .route("/api/admin/sources", createAdminSourceRoutes(data))

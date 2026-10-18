@@ -97,12 +97,12 @@ const terminal = "A new upload is required.";
 
 test.each([
   [
-    "the Data Service is unavailable",
+    "the database is unavailable",
     problem(
-      502,
-      "data_service_unavailable",
-      "The Data Service is unavailable.",
-      "req-502",
+      503,
+      "database_unavailable",
+      "The database is unavailable.",
+      "req-503",
     ),
   ],
   ["storage is unavailable", storageOutage()],

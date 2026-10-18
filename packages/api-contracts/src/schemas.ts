@@ -52,9 +52,6 @@ export const lessonTextParamsSchema = lessonLanguageParamsSchema;
 export const languageQuerySchema = z.strictObject({
   language: z.string().min(1).optional(),
 });
-export const lessonReadQuerySchema = languageQuerySchema.extend({
-  status: lessonStatusSchema.optional(),
-});
 
 export const createLessonRequestSchema = z.strictObject({
   chapter: positiveInteger,
@@ -234,16 +231,6 @@ export const createUploadIntentRequestSchema = z.strictObject({
   sizeBytes: uploadSizeBytes,
 });
 
-export const createPendingMediaAssetRequestSchema = z.strictObject({
-  languageCode,
-  storageProvider: z.literal("s3"),
-  storageContainer: nonBlankText,
-  objectKey: audioObjectKey,
-  originalFilename: mp3Filename,
-  contentType: z.literal("audio/mpeg"),
-  sizeBytes: uploadSizeBytes,
-});
-
 export const completeMediaAssetRequestSchema = z.strictObject({
   lessonId: safePositiveInteger,
   languageCode,
@@ -269,7 +256,6 @@ export const mediaAssetResponseSchema = z.strictObject({
   createdAt: timestamp,
   uploadedAt: timestamp.nullable(),
 });
-export const mediaAssetLookupResponseSchema = mediaAssetResponseSchema;
 
 export const uploadIntentResponseSchema = z.strictObject({
   mediaAssetId: safePositiveInteger,
@@ -309,7 +295,7 @@ export const publishedLessonAudioSchema = z.strictObject({
   durationMs: safePositiveInteger.nullable(),
 });
 
-// The Data Service's current READY rendition for one Lesson and Language, in any Lesson status.
+// The data module's current READY rendition for one Lesson and Language, in any Lesson status.
 export const currentLessonAudioSchema = publishedLessonAudioSchema.extend({
   originalFilename: mp3Filename,
 });
@@ -339,7 +325,7 @@ export const completeMediaAssetResponseSchema = z.strictObject({
   lessonAudio: lessonAudioResponseSchema,
 });
 
-// The Data Service's answer to deleting a Draft: the Media Assets it marked DELETED, whose
+// The data module's answer to deleting a Draft: the Media Assets it marked DELETED, whose
 // objects the Backend deletes. The Backend answers its own client with no body.
 export const deleteLessonResponseSchema = z.strictObject({
   deletedMediaAssets: z.array(
@@ -403,9 +389,6 @@ export type MobileLessonListResponse = z.infer<
 export type ProblemDetails = z.infer<typeof problemDetailsSchema>;
 export type CreateUploadIntentRequest = z.infer<
   typeof createUploadIntentRequestSchema
->;
-export type CreatePendingMediaAssetRequest = z.infer<
-  typeof createPendingMediaAssetRequestSchema
 >;
 export type CompleteMediaAssetRequest = z.infer<
   typeof completeMediaAssetRequestSchema

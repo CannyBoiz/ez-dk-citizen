@@ -9,37 +9,21 @@ import { createApp, createBackendApp } from "./app.js";
 import { readBackendConfig } from "./config.js";
 import { createTestDataModule } from "./testing/data-module.js";
 
-test("Backend composition root uses runtime configuration and the configured database", async (context) => {
+test("Backend composition root uses runtime configuration and checks readiness against the configured database", async (context) => {
   const config = readBackendConfig({
     DATABASE_URL: await silentPostgres(context, false),
     DATABASE_TIMEOUT_MS: "100",
-    DATA_SERVICE_URL: "http://data.example",
     ADMIN_API_TOKEN: "configured-admin-token",
-    DATA_SERVICE_TOKEN: "configured-data-token",
     AWS_REGION: "eu-north-1",
     S3_BUCKET: "test-bucket",
     ADMIN_ORIGINS: "https://admin.example",
   });
-  let ready = true;
-  const fetchReadiness: typeof fetch = async (input, init) => {
-    assert.equal(input.toString(), "http://data.example/ready");
-    assert.ok(init?.signal instanceof AbortSignal);
-    return Response.json(
-      { status: ready ? "ok" : "unavailable" },
-      { status: ready ? 200 : 503 },
-    );
-  };
-  const readiness = context.mock.method(globalThis, "fetch", fetchReadiness);
-  const app = createApp({ config });
+  const { app, data } = createApp({ config });
+  context.after(() => data.close());
 
   assert.equal((await app.request("/health")).status, 200);
-  assert.equal(readiness.mock.callCount(), 0);
-  assert.equal((await app.request("/ready")).status, 200);
-  ready = false;
-  assert.equal((await app.request("/ready")).status, 503);
-  assert.equal(readiness.mock.callCount(), 2);
-
   for (const path of [
+    "/ready",
     "/api/admin/sources",
     "/api/admin/lessons",
     "/api/mobile/lessons",

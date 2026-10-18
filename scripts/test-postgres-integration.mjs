@@ -20,10 +20,9 @@ const composeEnvironment = {
   POSTGRES_DB: databaseName,
   POSTGRES_USER: databaseUser,
   POSTGRES_PASSWORD: databasePassword,
-  DATA_SERVICE_TOKEN: "integration-only-data-service-token",
+  ADMIN_API_TOKEN: "integration-only-admin-token",
   AWS_REGION: "eu-north-1",
   S3_BUCKET: "integration-only-bucket",
-  ...(endToEnd ? { ADMIN_API_TOKEN: "integration-only-admin-token" } : {}),
 };
 const composeArguments = [
   "compose",
@@ -50,11 +49,10 @@ await withTeardown(
       "--wait",
       "--wait-timeout",
       "120",
-      endToEnd ? "backend" : "hono-data",
+      "backend",
     ]);
     if (endToEnd) {
       await verifyBackendReadiness();
-      await verifyDistinctCredentials();
       await runDocker([
         ...composeArguments,
         "exec",
@@ -120,7 +118,7 @@ await withTeardown(
         "--rm",
         "postgres-check",
       ]);
-      await verifyFailedMigrationBlocksDataService();
+      await verifyFailedMigrationBlocksBackend();
     }
   },
   // A plain `down` skips containers from inactive profiles, such as
@@ -300,7 +298,7 @@ async function verifyBackendReadiness() {
     "-e",
     "Promise.all(['/health', '/ready'].map(async (path) => { const response = await fetch('http://127.0.0.1:3000' + path); if (!response.ok) throw new Error(path + ' is unavailable'); }))",
   ]);
-  await runDocker([...composeArguments, "pause", "hono-data"]);
+  await runDocker([...composeArguments, "pause", "postgres"]);
   try {
     await runDocker([
       ...composeArguments,
@@ -312,7 +310,7 @@ async function verifyBackendReadiness() {
       "Promise.all([fetch('http://127.0.0.1:3000/health'), fetch('http://127.0.0.1:3000/ready')]).then(async ([health, ready]) => { if (!health.ok || ready.status !== 503) throw new Error('Backend liveness and readiness are not independent'); })",
     ]);
   } finally {
-    await runDocker([...composeArguments, "unpause", "hono-data"]);
+    await runDocker([...composeArguments, "unpause", "postgres"]);
   }
   await runDocker([
     ...composeArguments,
@@ -325,35 +323,23 @@ async function verifyBackendReadiness() {
   ]);
 }
 
-async function verifyDistinctCredentials() {
-  await runDocker([
-    ...composeArguments,
-    "exec",
-    "-T",
-    "backend",
-    "node",
-    "-e",
-    "fetch('http://hono-data:3000/internal/lessons', { headers: { Authorization: 'Bearer integration-only-admin-token' } }).then((response) => { if (response.status !== 401) throw new Error('Admin credential reached the Data Service'); })",
-  ]);
-}
-
 async function verifyTracerLogs() {
-  const [backendLogs, dataServiceLogs] = await Promise.all(
-    ["backend", "hono-data"].map((service) =>
-      captureDocker([...composeArguments, "logs", "--no-log-prefix", service]),
-    ),
-  );
-  const logEntries = (output) =>
-    output.split("\n").flatMap((line) => {
+  const backendLogs = await captureDocker([
+    ...composeArguments,
+    "logs",
+    "--no-log-prefix",
+    "backend",
+  ]);
+  const entries = backendLogs
+    .split("\n")
+    .flatMap((line) => {
       try {
         return [JSON.parse(line)];
       } catch {
         return [];
       }
-    });
-  const entries = logEntries(backendLogs).filter(
-    (entry) => entry.requestId === "stage-2-tracer",
-  );
+    })
+    .filter((entry) => entry.requestId === "stage-2-tracer");
   assert.ok(entries.length > 0, "Expected completion logs for the tracer.");
   for (const entry of entries) {
     assert.equal(typeof entry.method, "string");
@@ -361,27 +347,18 @@ async function verifyTracerLogs() {
     assert.equal(typeof entry.status, "number");
     assert.equal(typeof entry.durationMs, "number");
   }
-  // The Backend asks the Data Service only whether it is ready; the one other request is
-  // the admin credential that verifyDistinctCredentials expects it to refuse.
-  for (const entry of logEntries(dataServiceLogs).filter(
-    (entry) => entry.path !== "/ready",
-  )) {
-    assert.equal(entry.status, 401, `Data Service served ${entry.path}`);
-  }
-  for (const output of [backendLogs, dataServiceLogs]) {
-    for (const secret of [
-      "integration-only-admin-token",
-      "integration-only-data-service-token",
-      "เนื้อหา",
-    ]) {
-      assert.doesNotMatch(output, new RegExp(secret));
-    }
+  for (const secret of ["integration-only-admin-token", "เนื้อหา"]) {
+    assert.doesNotMatch(backendLogs, new RegExp(secret));
   }
 }
 
 function assertPrivateCompiledTopology(config) {
+  assert.deepEqual(Object.keys(config.services).sort(), [
+    "backend",
+    "migrate",
+    "postgres",
+  ]);
   assert.equal(config.services.postgres.ports, undefined);
-  assert.equal(config.services["hono-data"].ports, undefined);
   assert.equal(config.services.backend.ports, undefined);
   assert.equal(
     config.services.backend.environment.AWS_ACCESS_KEY_ID,
@@ -391,16 +368,11 @@ function assertPrivateCompiledTopology(config) {
     config.services.backend.environment.AWS_SECRET_ACCESS_KEY,
     undefined,
   );
-  assert.equal(
-    config.services.backend.depends_on["hono-data"].condition,
-    "service_healthy",
-  );
+  assert.deepEqual(Object.keys(config.services.backend.depends_on), [
+    "migrate",
+  ]);
   assert.equal(
     config.services.backend.depends_on.migrate.condition,
-    "service_completed_successfully",
-  );
-  assert.equal(
-    config.services["hono-data"].depends_on.migrate.condition,
     "service_completed_successfully",
   );
   assert.equal(
@@ -409,7 +381,7 @@ function assertPrivateCompiledTopology(config) {
   );
 }
 
-async function verifyFailedMigrationBlocksDataService() {
+async function verifyFailedMigrationBlocksBackend() {
   const exitCode = await runDockerForExitCode([
     ...composeArguments,
     "--profile",
@@ -419,7 +391,7 @@ async function verifyFailedMigrationBlocksDataService() {
     "--wait",
     "--wait-timeout",
     "30",
-    "data-after-failed-migration",
+    "backend-after-failed-migration",
   ]);
   assert.notEqual(exitCode, 0, "The intentionally broken migration must fail.");
 
@@ -439,12 +411,12 @@ async function verifyFailedMigrationBlocksDataService() {
     "--status",
     "running",
     "--services",
-    "data-after-failed-migration",
+    "backend-after-failed-migration",
   ]);
   assert.equal(
     runningBlockedService.trim(),
     "",
-    "The Data Service must remain stopped after migration failure.",
+    "The Backend must remain stopped after migration failure.",
   );
 }
 

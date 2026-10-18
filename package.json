@@ -9,7 +9,7 @@
     "typecheck": "pnpm --recursive --if-present typecheck",
     "build": "pnpm --recursive --if-present build",
     "db:generate": "pnpm --filter @ez-dk-citizen/data db:generate",
-    "db:migrate": "docker compose exec hono-data pnpm --filter @ez-dk-citizen/data db:migrate",
+    "db:migrate": "docker compose run --rm --build migrate",
     "db:up": "docker compose up --detach --wait postgres",
     "db:down": "docker compose down",
     "test": "pnpm --recursive --if-present test && bash scripts/test-setup-aws-s3-certificate.sh && node --test scripts/lib/docker-test-stack.test.mjs",

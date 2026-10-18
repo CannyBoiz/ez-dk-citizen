@@ -361,10 +361,10 @@ test("a failed read of the Lesson list is shown inside the confirmation and can 
       request.method === "GET" &&
       request.path === "/api/admin/lessons"
         ? problem(
-            502,
-            "data_service_unavailable",
-            "The Data Service is unavailable.",
-            "req-502-list",
+            503,
+            "database_unavailable",
+            "The database is unavailable.",
+            "req-503-list",
           )
         : undefined,
   });
@@ -373,7 +373,7 @@ test("a failed read of the Lesson list is shown inside the confirmation and can 
 
   fireEvent.click(publishButton());
   const alert = await within(confirmation(publication())).findByRole("alert");
-  expect(alert.textContent).toContain("req-502-list");
+  expect(alert.textContent).toContain("req-503-list");
   expect(confirmButton()).toHaveProperty("disabled", true);
 
   outage = false;

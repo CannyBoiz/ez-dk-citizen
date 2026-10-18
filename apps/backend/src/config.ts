@@ -1,10 +1,7 @@
 export type BackendConfig = {
   databaseUrl: string;
   databaseTimeoutMs: number;
-  dataServiceUrl: URL;
-  dataServiceTimeoutMs: number;
   adminApiToken: string;
-  dataServiceToken: string;
   awsRegion: string;
   s3Bucket: string;
   adminOrigins: string[];
@@ -21,13 +18,6 @@ export function readBackendConfig(
     }
   }
 
-  const dataServiceUrl = required(env, "DATA_SERVICE_URL");
-  const adminApiToken = required(env, "ADMIN_API_TOKEN");
-  const dataServiceToken = required(env, "DATA_SERVICE_TOKEN");
-  if (adminApiToken === dataServiceToken) {
-    throw new Error("ADMIN_API_TOKEN and DATA_SERVICE_TOKEN must differ.");
-  }
-
   const databaseTimeoutMs = Number(env.DATABASE_TIMEOUT_MS ?? 2000);
   if (!Number.isInteger(databaseTimeoutMs) || databaseTimeoutMs <= 0) {
     throw new Error("DATABASE_TIMEOUT_MS must be a positive whole number.");
@@ -36,10 +26,7 @@ export function readBackendConfig(
   return {
     databaseUrl: required(env, "DATABASE_URL"),
     databaseTimeoutMs,
-    dataServiceUrl: new URL(dataServiceUrl),
-    dataServiceTimeoutMs: Number(env.DATA_SERVICE_TIMEOUT_MS ?? 2000),
-    adminApiToken,
-    dataServiceToken,
+    adminApiToken: required(env, "ADMIN_API_TOKEN"),
     awsRegion: required(env, "AWS_REGION"),
     s3Bucket: required(env, "S3_BUCKET"),
     adminOrigins: (env.ADMIN_ORIGINS ?? "")

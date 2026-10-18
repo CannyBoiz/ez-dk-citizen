@@ -1,6 +1,6 @@
 import type {
   CompleteMediaAssetRequest,
-  CreatePendingMediaAssetRequest,
+  CreateUploadIntentRequest,
 } from "@ez-dk-citizen/api-contracts";
 import { and, desc, eq } from "drizzle-orm";
 
@@ -14,9 +14,15 @@ import {
 } from "../../db/schema.js";
 import { touchLesson } from "../lessons/lifecycle.js";
 
+// What the Backend records for an Upload Intent before the object is uploaded.
+export type PendingMediaAsset = Pick<
+  CreateUploadIntentRequest,
+  "languageCode" | "originalFilename" | "contentType" | "sizeBytes"
+> & { storageProvider: "s3"; storageContainer: string; objectKey: string };
+
 export async function createPendingMediaAsset(
   database: DataDatabase,
-  input: CreatePendingMediaAssetRequest,
+  input: PendingMediaAsset,
 ) {
   const [supported] = await database
     .select({ code: language.code })

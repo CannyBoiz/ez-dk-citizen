@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!apps/data/drizzle"]
+    "includes": ["**", "!packages/data/drizzle"]
   },
   "formatter": {
     "enabled": true,

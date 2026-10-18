@@ -18,12 +18,12 @@ RUN curl --fail --location --silent --show-error \
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/backend/package.json apps/backend/package.json
-COPY apps/data/package.json apps/data/package.json
+COPY packages/data/package.json packages/data/package.json
 COPY packages/api-contracts/package.json packages/api-contracts/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY --chown=node:node apps/backend apps/backend
-COPY --chown=node:node apps/data apps/data
+COPY --chown=node:node packages/data packages/data
 COPY --chown=node:node packages/api-contracts packages/api-contracts
 RUN pnpm --filter @ez-dk-citizen/api-contracts --filter @ez-dk-citizen/data build
 

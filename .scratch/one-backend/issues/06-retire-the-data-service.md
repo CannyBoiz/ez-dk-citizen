@@ -4,12 +4,12 @@
 
 **Blocked by:** 04 — Serve Lessons, Lesson Texts, and Lesson Sources in-process; 05 — Serve Media Assets, Lesson Audio, and the Mobile API in-process
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] No source, script, Compose file, or example environment refers to the Data Service, `hono-data`, or `DATA_SERVICE_*`; ADRs and `.scratch` history keep their wording
-- [ ] Only the data package depends on `drizzle-orm` and `pg`; the Backend cannot import Drizzle
-- [ ] `pnpm dev` starts PostgreSQL, runs migrations, and starts the Backend with Compose Watch on the Backend and data package sources
-- [ ] `pnpm db:generate` and `pnpm db:migrate` work through the data package
-- [ ] The end-to-end tracer pauses `postgres` and sees `/health` OK and `/ready` `503`, then recovers
-- [ ] The container checks prove that `postgres`, `migrate`, and the test containers receive no AWS profile or identity mounts, and that `backend` still rejects static AWS access-key variables
-- [ ] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:dev`, `pnpm test:integration`, and `pnpm test:e2e` pass
+- [x] No source, script, Compose file, or example environment refers to the Data Service, `hono-data`, or `DATA_SERVICE_*`; ADRs and `.scratch` history keep their wording
+- [x] Only the data package depends on `drizzle-orm` and `pg`; the Backend cannot import Drizzle
+- [x] `pnpm dev` starts PostgreSQL, runs migrations, and starts the Backend with Compose Watch on the Backend and data package sources
+- [x] `pnpm db:generate` and `pnpm db:migrate` work through the data package
+- [x] The end-to-end tracer pauses `postgres` and sees `/health` OK and `/ready` `503`, then recovers
+- [x] The container checks prove that `postgres`, `migrate`, and the test containers receive no AWS profile or identity mounts, and that `backend` still rejects static AWS access-key variables
+- [x] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:dev`, `pnpm test:integration`, and `pnpm test:e2e` pass

@@ -20,18 +20,10 @@ const repositoryRoot = path.resolve(
 const origin = "http://127.0.0.1:5173";
 const rejectedOrigin = "http://127.0.0.1:5174";
 const image = "ez-dk-citizen-backend:local";
-const requiredEnvironment = [
-  "ADMIN_API_TOKEN",
-  "AWS_REGION",
-  "DATA_SERVICE_TOKEN",
-  "S3_BUCKET",
-];
+const requiredEnvironment = ["ADMIN_API_TOKEN", "AWS_REGION", "S3_BUCKET"];
 const missing = requiredEnvironment.filter((name) => !process.env[name]);
 if (missing.length) {
   throw new Error(`Live S3 tracer requires ${missing.join(", ")}.`);
-}
-if (process.env.ADMIN_API_TOKEN === process.env.DATA_SERVICE_TOKEN) {
-  throw new Error("ADMIN_API_TOKEN and DATA_SERVICE_TOKEN must differ.");
 }
 
 const logFiles = (process.env.LIVE_S3_TRACER_LOG_FILES ?? "")
@@ -51,8 +43,6 @@ for (const name of [
 const browserEnvironment = { ...environment };
 for (const name of [
   "ADMIN_API_TOKEN",
-  "DATA_SERVICE_TOKEN",
-  "DATA_SERVICE_URL",
   "S3_BUCKET",
   ...Object.keys(browserEnvironment).filter((name) => name.startsWith("AWS_")),
 ]) {
@@ -92,7 +82,6 @@ const composeEnvironment = {
   ADMIN_API_TOKEN: process.env.ADMIN_API_TOKEN,
   ADMIN_ORIGINS: origin,
   AWS_REGION: process.env.AWS_REGION,
-  DATA_SERVICE_TOKEN: process.env.DATA_SERVICE_TOKEN,
   POSTGRES_DB: `live_s3_${process.pid}`,
   POSTGRES_USER: `live_s3_${process.pid}`,
   POSTGRES_PASSWORD: `live-s3-${randomSuffix()}`,
@@ -142,7 +131,6 @@ const bytes = new Uint8Array([73, 68, 51, 4, 0, 0, 0, 0]);
 const languageCode = process.env.LIVE_S3_TRACER_LANGUAGE_CODE ?? "th";
 const sensitiveValues = [
   { name: "admin bearer token", value: process.env.ADMIN_API_TOKEN },
-  { name: "Data Service bearer token", value: process.env.DATA_SERVICE_TOKEN },
 ];
 let currentUploadUrl;
 let backendContainerStarted = false;
@@ -164,17 +152,8 @@ await withTeardown(
       await runDocker([...composeArguments, "build", "backend"]);
       tracerPhase = "inspecting the Backend image";
       await assertImageContents();
-      tracerPhase = "starting the isolated Data Service";
-      await runDocker([
-        ...composeArguments,
-        "up",
-        "--detach",
-        "--build",
-        "--wait",
-        "--wait-timeout",
-        "120",
-        "hono-data",
-      ]);
+      tracerPhase = "migrating the isolated database";
+      await runDocker([...composeArguments, "run", "--rm", "migrate"]);
       backendContainerStarted = true;
       tracerPhase = "starting the test Backend container";
       await runDocker([
@@ -807,16 +786,11 @@ async function requestBackend(baseUrl, endpoint, method, body) {
 
 function assertPublicResponse(response, name) {
   const serialized = JSON.stringify(response);
-  for (const [label, value] of [
-    ["admin token", process.env.ADMIN_API_TOKEN],
-    ["Data Service token", process.env.DATA_SERVICE_TOKEN],
-  ]) {
-    assert.equal(
-      serialized.includes(value),
-      false,
-      `${name} exposed its ${label}.`,
-    );
-  }
+  assert.equal(
+    serialized.includes(process.env.ADMIN_API_TOKEN),
+    false,
+    `${name} exposed its admin token.`,
+  );
   for (const field of [
     "accessKeyId",
     "secretAccessKey",
@@ -874,22 +848,8 @@ async function smokeObjectStatus(key) {
 }
 
 async function assertSafeLogs(extraValues) {
-  const dataServiceContainer = (
-    await runDocker([...composeArguments, "ps", "--quiet", "hono-data"], {
-      captureOutput: true,
-    })
-  ).output.trim();
   const logs = [
     (await runDocker(["logs", containerName], { captureOutput: true })).output,
-    ...(dataServiceContainer
-      ? [
-          (
-            await runDocker(["logs", dataServiceContainer], {
-              captureOutput: true,
-            })
-          ).output,
-        ]
-      : []),
     ...(await Promise.all(logFiles.map((file) => readFile(file, "utf8")))),
   ].join("\n");
   const source = `import { readFileSync } from "node:fs"; import { S3Client } from "@aws-sdk/client-s3"; const input = JSON.parse(readFileSync(0, "utf8")); const credentials = await new S3Client({}).config.credentials(); const privateKey = readFileSync("/run/ez-dk-citizen/identity/workload.key", "utf8"); const values = [...input.values, { name: "session access key", value: credentials.accessKeyId }, { name: "session secret key", value: credentials.secretAccessKey }, { name: "session token", value: credentials.sessionToken }, { name: "workload private key", value: privateKey }]; const leaked = values.filter(({ value, pattern }) => pattern ? new RegExp(pattern).test(input.logs) : value && input.logs.includes(value)).map(({ name }) => name); const patterns = [["AWS access key pattern", /\\b(?:AKIA|ASIA)[A-Z0-9]{16}\\b/], ["private key PEM", /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/], ["presigned URL signature", /X-Amz-Signature=/i], ["bearer authorization", /authorization:\\s*bearer\\s+\\S+/i]]; const matched = patterns.filter(([, pattern]) => pattern.test(input.logs)).map(([name]) => name); const safe = leaked.length === 0 && matched.length === 0; console.log(JSON.stringify({ safe, leaked, matched }));`;

@@ -7,7 +7,7 @@ import {
 
 import { createBackendApp } from "../app.js";
 
-test("Backend health is independent of the Data Service", async () => {
+test("Backend health is independent of PostgreSQL", async () => {
   let checks = 0;
   const app = createBackendApp(async () => {
     checks += 1;
@@ -20,7 +20,7 @@ test("Backend health is independent of the Data Service", async () => {
   assert.equal(checks, 0);
 });
 
-test("Backend readiness reflects the Data Service", async (context) => {
+test("Backend readiness reflects PostgreSQL", async (context) => {
   await context.test("ready", async () => {
     const app = createBackendApp(async () => undefined);
     const response = await app.request("/ready");
@@ -33,7 +33,7 @@ test("Backend readiness reflects the Data Service", async (context) => {
 
   await context.test("unavailable", async () => {
     const app = createBackendApp(async () => {
-      throw new Error("Data Service is unavailable");
+      throw new Error("PostgreSQL is unavailable");
     });
     const response = await app.request("/ready");
 

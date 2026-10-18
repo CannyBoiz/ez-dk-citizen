@@ -2,7 +2,6 @@ import type {
   CompleteMediaAssetRequest,
   CompleteMediaAssetResponse,
   CreateLessonRequest,
-  CreatePendingMediaAssetRequest,
   CreateSourceRequest,
   CurrentLessonAudioResponse,
   DeleteLessonResponse,
@@ -26,6 +25,7 @@ import { createDataOperations } from "./data-operations.js";
 import { createDataDatabase } from "./db/database.js";
 import { databaseTimeoutMessage } from "./db/errors.js";
 import type { LessonReadFilters } from "./features/lessons/queries.js";
+import type { PendingMediaAsset } from "./features/media-assets/mutations.js";
 
 export { isDatabaseUnavailable } from "./db/errors.js";
 
@@ -33,7 +33,7 @@ export { isDatabaseUnavailable } from "./db/errors.js";
 // mapping those to HTTP is the caller's job.
 export interface DataModule {
   createPendingMediaAsset(
-    input: CreatePendingMediaAssetRequest,
+    input: PendingMediaAsset,
   ): Promise<MediaAssetResponse | "unsupported_language">;
   getMediaAsset(
     id: number,

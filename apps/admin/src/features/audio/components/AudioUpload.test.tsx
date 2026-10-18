@@ -260,7 +260,7 @@ test.each([
   [
     "the Upload Intent is refused",
     { intent: true },
-    "Upload of chapter-1.mp3 for th failed: The Data Service is unavailable.",
+    "Upload of chapter-1.mp3 for th failed: The database is unavailable.",
   ],
   [
     "the storage PUT errors",
@@ -286,10 +286,10 @@ test.each([
         override: (request) =>
           "intent" in failure && request.path === intentPath
             ? problem(
-                502,
-                "data_service_unavailable",
-                "The Data Service is unavailable.",
-                "req-502",
+                503,
+                "database_unavailable",
+                "The database is unavailable.",
+                "req-503",
               )
             : "complete" in failure && request.path.endsWith("/complete")
               ? storageOutage()

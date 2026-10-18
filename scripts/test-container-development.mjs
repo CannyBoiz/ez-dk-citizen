@@ -36,7 +36,6 @@ for (const name of [
   "S3_BUCKET",
   "DATABASE_URL",
   "VITE_BACKEND_BASE_URL",
-  "DATA_SERVICE_TOKEN",
   "POSTGRES_DB",
   "POSTGRES_PASSWORD",
   "POSTGRES_USER",
@@ -67,36 +66,26 @@ assertPublishedPort(config.services.admin, adminPort, 5173);
 assert.deepEqual(config.services.admin.environment, {
   VITE_BACKEND_BASE_URL: `http://127.0.0.1:${backendPort}`,
 });
-assert.equal(config.services["hono-data"].ports, undefined);
+assert.deepEqual(Object.keys(config.services).sort(), [
+  "admin",
+  "backend",
+  "migrate",
+  "postgres",
+]);
+assert.equal(config.services.migrate.ports, undefined);
 assertWatch(
   config.services.backend,
   [["apps/backend/src", "/workspace/apps/backend/src"]],
   [
     "apps/backend/Dockerfile",
     "apps/backend/package.json",
-    "apps/data",
     "package.json",
     "packages/api-contracts",
+    "packages/data",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
   ],
 );
-assertWatch(
-  config.services["hono-data"],
-  [
-    ["apps/data/drizzle", "/workspace/apps/data/drizzle"],
-    ["apps/data/src", "/workspace/apps/data/src"],
-  ],
-  [
-    "apps/data/Dockerfile",
-    "apps/data/package.json",
-    "package.json",
-    "packages/api-contracts",
-    "pnpm-lock.yaml",
-    "pnpm-workspace.yaml",
-  ],
-);
-
 assertWatch(
   config.services.admin,
   [["apps/admin/src", "/workspace/apps/admin/src"]],
