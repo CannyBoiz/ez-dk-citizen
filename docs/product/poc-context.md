@@ -223,6 +223,13 @@ with direct PostgreSQL access (ADR-0009).
 _Avoid_: BFF, Data Service. These were the names before ADR-0009; ADRs and
 historical stage records keep them.
 
+## Data module
+
+The Backend's in-process API to PostgreSQL, exported by the data package
+(`packages/data`). It is the only code that uses Drizzle or connects to
+PostgreSQL. Its operations return results or named outcome codes, never HTTP
+responses; the Backend's routes map those to Problem Details.
+
 ## Admin API
 
 The Backend's `/api/admin/*` routes. From Stage 6 they are served only on its
@@ -1572,6 +1579,8 @@ Prefer vertical slices and fast feedback loops.
 4. Add validation and error handling.
 5. Keep DB access out of BFF.
 
+ADR-0009 later merged the BFF and Data Service into the Backend.
+
 ## Stage 3 — Object storage
 
 1. Configure AWS S3.
@@ -1618,7 +1627,7 @@ plain-text textareas; the admin prepares text externally and pastes it into
 the editor. Rich-text, Markdown, and WYSIWYG editing are out of scope.
 
 Local browser acceptance against the containerized backend and real AWS S3 is
-sufficient. The BFF listener split, the private admin site (ADR-0007), and
+sufficient. The Backend listener split, the private admin site (ADR-0007), and
 other production deployment work remain in Stage 6.
 
 ### Authentication and editing
@@ -1644,7 +1653,7 @@ stale-audio tracking, or automatic invalidation/detachment/replacement.
 
 ### Publication and replacement
 
-Stage 4 adds publication prerequisites to the Data Service: `DRAFT -> PUBLISHED`
+Stage 4 adds publication prerequisites: `DRAFT -> PUBLISHED`
 requires a Thai (`th`) Lesson Text and at least one Lesson Source. Missing either
 must produce a domain-level conflict; the Admin publication checklist reflects
 the same requirements. Thai audio and Danish/English Lesson Text remain
