@@ -1,6 +1,6 @@
 # 09: Manual acceptance on real S3
 
-**What to build:** Sign off Stage 4b on the real path. Run the containerized backend with `pnpm dev:live-s3`, so the BFF uses its Roles Anywhere identity against the real private S3 bucket. The admin then walks the revised authoring workflow in a real desktop browser at `http://127.0.0.1:5173`, with no curl for authoring and no direct database access. Record the results, including request IDs for any failures, in the comment log for this ticket.
+**What to build:** Sign off Stage 4b on the real path. Run the containerized Backend with `pnpm dev:live-s3`, so the Backend uses its Roles Anywhere identity against the real private S3 bucket. The admin then walks the revised authoring workflow in a real desktop browser at `http://127.0.0.1:5173`, with no curl for authoring and no direct database access. Record the results, including request IDs for any failures, in the comment log for this ticket.
 
 Run the opt-in live S3 tracer first (`pnpm test:live-s3`) to rule out infrastructure problems. It now also proves object deletion.
 

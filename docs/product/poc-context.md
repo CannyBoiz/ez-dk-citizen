@@ -3,7 +3,7 @@
 > Canonical domain and architecture context for Codex.
 >
 > **Phase:** Proof of Concept
-> **Backend:** Hono + TypeScript for BFF and Data Service
+> **Backend:** one Hono + TypeScript application (ADR-0009)
 > **ORM:** Drizzle ORM + Drizzle Kit
 > **Database:** PostgreSQL
 > **Deployment:** Docker Compose on Hetzner CX23
@@ -44,19 +44,19 @@ Generate Thai MP3 manually in ElevenLabs web app
     ↓
 Select MP3 in admin web
     ↓
-Request temporary upload authorization from Hono BFF
+Request temporary upload authorization from the Backend
     ↓
 Browser uploads MP3 directly to object storage
     ↓
-BFF validates the stored object
+Backend validates the stored object
     ↓
-Hono Data Service persists Media Asset metadata with Drizzle
+Backend persists Media Asset metadata through its data module (Drizzle)
     ↓
 Lesson Audio associates Lesson + Language + Media Asset
     ↓
 React Native requests Lesson
     ↓
-BFF returns Lesson data + temporary playback URL
+Backend returns Lesson data + temporary playback URL
     ↓
 React Native streams/downloads directly from object storage
 ```
@@ -78,7 +78,7 @@ Do not add these unless they become necessary for the PoC vertical slice:
 - recommendation systems,
 - RabbitMQ or another broker,
 - Kubernetes,
-- separate deployed Web BFF and Mobile BFF services,
+- separate deployed web and mobile backend services,
 - video transcoding,
 - active multi-cloud storage replication.
 
@@ -220,13 +220,13 @@ The one Hono application that serves the Admin API and the Mobile API, owns
 relational persistence, and holds the AWS identity. It is the only application
 with direct PostgreSQL access (ADR-0009).
 
-_Avoid_: BFF, Data Service. These were the names before ADR-0009; the Data Service
-and older sections keep them until the merge lands.
+_Avoid_: BFF, Data Service. These were the names before ADR-0009; ADRs and
+historical stage records keep them.
 
 ## Admin API
 
-The Backend's `/api/admin/*` routes, served only on its unpublished admin
-listener (ADR-0007).
+The Backend's `/api/admin/*` routes. From Stage 6 they are served only on its
+unpublished admin listener (ADR-0007).
 
 ## Mobile API
 
@@ -354,11 +354,11 @@ versioned: a `PUBLISHED` Lesson may receive or replace its current audio, but an
 
 Both `created_at` and `updated_at` default to the database clock on insertion.
 `updated_at` represents the last change to the complete Lesson aggregate. The
-Data Service explicitly advances it when Lesson structure or status, a Lesson
+data module explicitly advances it when Lesson structure or status, a Lesson
 Text, a Lesson Source association, or the current Lesson Audio changes; no
 database trigger maintains it. Creating a `PENDING` Media Asset alone does not
 advance the Lesson timestamp. Final draft edits and the transition to
-`PUBLISHED` may be submitted as one command, and the Data Service applies them
+`PUBLISHED` may be submitted as one command, and the data module applies them
 atomically.
 
 ## `language`
@@ -437,7 +437,7 @@ Constraints:
 UNIQUE(url)
 ```
 
-The Data Service validates that `url` is an absolute HTTP(S) URL after trimming
+The Backend validates that `url` is an absolute HTTP(S) URL after trimming
 surrounding whitespace.
 
 Possible future fields, only when required:
@@ -521,7 +521,7 @@ media_asset
 `created_at`, `content_type`, and `size_bytes` are required when the Media Asset
 is created. `uploaded_at` remains `NULL` while it is `PENDING` and is set only
 after successful object validation. `duration_ms` is optional and remains
-`NULL` in Stage 3 because the BFF does not inspect MP3 bytes or trust a
+`NULL` in Stage 3 because the Backend does not inspect MP3 bytes or trust a
 client-supplied duration.
 
 Constraints require `size_bytes > 0`, `duration_ms > 0` when present, and a
@@ -700,13 +700,13 @@ the Lesson's `updated_at`; creating a `PENDING` Media Asset does not. An
 Mobile Lesson detail includes current Lesson Audio metadata and a freshly
 generated Playback URL. Playback does not require a separate API request, and
 the response uses `Cache-Control: no-store`. When no current `READY` rendition
-exists, `audio` is `null`. The BFF generates playback authorization without an
+exists, `audio` is `null`. The Backend generates playback authorization without an
 additional S3 metadata request and returns its expiry with the URL.
 
 ## 8.7 Upload acceptance and validation
 
 The PoC accepts filenames ending in `.mp3`, declared as `audio/mpeg`, with a
-size from 1 byte through 50 MiB. After upload, the BFF checks S3 object metadata
+size from 1 byte through 50 MiB. After upload, the Backend checks S3 object metadata
 for the expected content type and exact declared size. It does not download or
 inspect MP3 bytes. The signed upload requires `If-None-Match: *`, and the bucket
 policy enforces conditional writes so a generated object key can be written
@@ -726,7 +726,7 @@ the same Lesson and Language first complete, each receives the next audio
 version atomically and the last successful first completion becomes current.
 
 For the PoC, the authenticated admin resubmits `lessonId` and `languageCode` at
-completion. The BFF revalidates them, and the first successful completion binds
+completion. The Backend revalidates them, and the first successful completion binds
 the Media Asset. The Upload Intent target is not persisted separately; add
 durable intent binding if multiple or untrusted admins make resubmission unsafe.
 
@@ -737,7 +737,7 @@ First completion requires a matching Lesson Text and a Lesson in `DRAFT` or
 An idempotent retry for an already-`READY` Media Asset and its original target
 returns the existing Lesson Audio even after archival, without mutating it.
 
-After the BFF validates S3 metadata, one internal Data Service command uses one
+After the Backend validates S3 metadata, one data module operation uses one
 PostgreSQL transaction to mark the Media Asset `READY`, allocate the next audio
 version, demote the previous current version, create the new current Lesson
 Audio, and advance the Lesson's `updated_at`. A transaction failure leaves the
@@ -753,7 +753,7 @@ Automated tests use an injected fake storage implementation. One opt-in tracer
 uses isolated `smoke/` objects in the existing S3 bucket and deletes the exact
 objects it creates. The PoC does not add MinIO or a second bucket.
 
-Required S3 configuration is validated at BFF startup, but readiness does not
+Required S3 configuration is validated at Backend startup, but readiness does not
 make a network request to S3. Per-request storage failures and the live tracer
 provide the operational signal.
 
@@ -777,13 +777,13 @@ The S3 bucket is private with public access blocked. Its CORS policy allows
 it uses no wildcard origins or unnecessary methods and headers. Its bucket
 policy requires `If-None-Match` for object writes.
 
-The BFF obtains temporary STS credentials through AWS IAM Roles Anywhere. A
+The Backend obtains temporary STS credentials through AWS IAM Roles Anywhere. A
 private CA dedicated to this workload issues the application certificate,
 whose subject CN remains `aws-iam-app` for the PoC cutover. The role trust
 policy is restricted by both the exact Trust Anchor ARN and that certificate
 CN.
 
-The official `aws_signing_helper` runs inside the BFF container through
+The official `aws_signing_helper` runs inside the Backend container through
 `credential_process` in a shared AWS profile. The AWS SDK uses its normal
 credential provider chain and refresh behavior; the application contains no
 custom credential-refresh logic and receives no permanent IAM access key. The
@@ -791,25 +791,26 @@ role maximum, profile duration, and helper request use two-hour sessions.
 Each presigned URL uses a fresh SDK signing client and verifies that credential
 expiration covers its full 15-minute upload or one-hour playback lifetime.
 Metadata and deletion operations retain the shared client's normal SDK refresh.
-The BFF uses a glibc-compatible Node base image for the helper, while the Data
-Service remains Alpine and receives no AWS identity material. The BFF image
+The Backend uses a glibc-compatible Node base image for the helper. The one-shot
+`migrate` and integration-test containers run from the same image but receive
+no AWS profile or identity mounts. The Backend image
 pins an official helper release and verifies its published checksum during the
-build. BFF startup rejects legacy `AWS_ACCESS_KEY_ID` or
+build. Backend startup rejects legacy `AWS_ACCESS_KEY_ID` or
 `AWS_SECRET_ACCESS_KEY` configuration so it cannot silently bypass the shared
 Roles Anywhere profile.
 
 The infrastructure repository commits only the public CA certificate at
 `terraform/ez-dk-citizen/certs/ca.crt`. The workload certificate and private
 key and shared AWS profile are provisioned on the host and bind-mounted
-read-only at stable paths only into the BFF. The workload private key has mode
-`0600` and is readable by the non-root BFF process. No CA private key, workload
+read-only at stable paths only into the Backend. The workload private key has mode
+`0600` and is readable by the non-root Backend process. No CA private key, workload
 private key, or private-key-bearing P12/PFX bundle is committed, baked into an
 image, or managed by Terraform.
 
 The current operator workflow is `scripts/setup-aws-s3.sh`. It checks the
 host-provisioned certificate subject and chain against the public CA
 certificate, verifies private-key mode, prepares or validates the shared
-`roles-anywhere` profile, then builds and inspects the production-like BFF
+`roles-anywhere` profile, then builds and inspects the production-like Backend
 image before checking the read-only mounts and non-root key access. Its final
 STS proof reports only the account and assumed-role ARN. `--preflight` runs the
 same image and mount checks without exchanging identity, for validating a
@@ -817,16 +818,17 @@ replacement while the Roles Anywhere profile is disabled. Neither mode creates
 or persists AWS credentials.
 
 Because no repository-driven production deployment exists yet, the Roles
-Anywhere cutover is verified with the production-like BFF container running
-locally against the live S3 bucket. Verification requires the real signing
+Anywhere cutover was verified with the production-like application container
+running locally against the live S3 bucket. Verification requires the real signing
 helper and mounted workload identity, rejection of static AWS access-key
 variables, the opt-in live tracer, and identity evidence for the Roles Anywhere
 role. Live IAM inspection found zero access keys on the legacy workload user.
 After fresh keyless identity and live S3 proof, an explicitly approved Terraform
 plan retired the user and its policy attachment. Live IAM inspection confirmed
 their absence, and the same identity and S3 proof passed after retirement.
-Terraform converged with no changes. The local acceptance BFF is stopped after
-testing; VPS deployment remains a separate Stage 6 concern.
+Terraform converged with no changes. Stage 4b ticket 09 repeats the identity
+and live S3 proof on the merged Backend. The local acceptance container is
+stopped after testing; VPS deployment remains a separate Stage 6 concern.
 If Roles Anywhere fails, S3-dependent requests fail until the operator repairs
 the certificate, helper, profile, or trust configuration and repeats the
 identity and live S3 proof. Creating a legacy IAM-user key is not a planned
@@ -840,86 +842,94 @@ custom metrics or dashboards.
 
 # 9. Architecture
 
-> ADR-0009 merges the BFF and Data Service into one Backend. Sections 9 to 18
-> describe the split until that merge lands.
+The deployed shape. The Caddy sites and the listener split arrive in Stage 6;
+locally, the Admin calls the Backend directly.
 
 ```mermaid
 flowchart LR
     Admin[Admin / Developer] --> Web[React + Vite Admin]
     Learner[Mobile Learner] --> Mobile[React Native + Expo]
 
-    Web -->|HTTPS / REST| BFF[Hono BFF]
-    Mobile -->|HTTPS / REST| BFF
+    subgraph Backend[Hono Backend]
+        Routes[Admin API + Mobile API routes] -->|in-process| DataModule[data module]
+    end
+    DataModule -->|Drizzle ORM| DB[(PostgreSQL)]
 
-    BFF -->|Internal REST| Data[Hono Data Service]
-    Data -->|Drizzle ORM| DB[(PostgreSQL)]
+    Web -->|HTTPS / REST| AdminSite[Caddy admin site on private network]
+    Mobile -->|HTTPS / REST| Caddy[Caddy public site]
+    Caddy -->|/api/mobile/*| Backend
+    AdminSite -->|Admin UI + /api/admin/*| Backend
 
-    BFF -->|Presign / HEAD| Storage[(Object Storage)]
+    Routes -->|Presign / HEAD / DELETE| Storage[(AWS S3)]
     Web -->|Direct MP3 PUT| Storage
     Mobile -->|Direct stream / download| Storage
 
     Eleven[ElevenLabs Web App] -. manual MP3 generation .-> Admin
-
-    Caddy[Caddy public site] -->|/api/mobile/*| BFF
-    AdminSite[Caddy admin site on private network] -->|Admin UI + /api/admin/*| BFF
 ```
 
 ---
 
 # 10. Service boundaries
 
-## Hono BFF
+## Backend
 
-Client-facing backend. One service with two listeners (ADR-0007): a public
-listener serving `/api/mobile/*` through the public Caddy site, and an admin
-listener serving `/api/admin/*`, never published to the host and reached only
-through the private admin site. The public listener does not register admin
-routes. `ADMIN_API_TOKEN` bearer auth remains the admin authorization; network
-location is never an auth input.
+The one client-facing application (ADR-0009): one Hono app, one image, one
+process, one container. Today it has one listener. Stage 6 step 0 splits it
+into a public listener serving `/api/mobile/*` through the public Caddy site
+and an admin listener serving `/api/admin/*`, never published to the host and
+reached only through the private admin site (ADR-0007). The public listener
+will not register admin routes. `ADMIN_API_TOKEN` bearer auth remains the admin
+authorization; network location is never an auth input.
 
 Responsibilities:
 
-- `/api/admin/*`,
-- `/api/mobile/*`,
+- `/api/admin/*` (Admin API),
+- `/api/mobile/*` (Mobile API),
 - auth boundary,
 - request validation,
 - response composition,
+- mapping data module outcomes to Problem Details,
 - object-storage SDK integration,
 - upload-intent creation,
 - temporary upload URL generation,
 - temporary playback URL generation,
-- object metadata validation,
-- internal Data Service calls.
+- object metadata validation.
 
-The BFF must not:
+The Backend's routes must not:
 
-- import/use the Data Service database client,
-- mutate PostgreSQL directly,
+- import Drizzle or `pg`, or query PostgreSQL other than through the data module,
 - proxy normal MP3 bytes through the VPS,
 - expose cloud credentials.
 
-## Hono Data Service
+## Data module
 
-Internal-only persistence API.
+The API of the data package (`packages/data`), which the Backend calls
+in-process. The data package is the only package that depends on `drizzle-orm`
+and `pg`. Its package `exports` expose only the data module API and a test-only
+`./testing` entry, neither of which hands out Drizzle, so pnpm's strict
+`node_modules` keeps the Backend's routes from importing it.
 
 Responsibilities:
 
-- Drizzle schema,
-- Drizzle relations,
-- database queries,
+- Drizzle schema and relations,
+- database queries and transactions,
 - relational CRUD,
 - constraints,
-- migrations,
-- internal validation.
+- committed migrations and the `migrate` command,
+- domain outcomes such as `lesson_not_found` or `source_url_conflict`.
 
-Only this service connects directly to PostgreSQL.
+Its operations return results or named outcome codes, never HTTP responses.
+The Backend's routes map each outcome to a status and Problem Details code in
+one place. The connection pool has a bounded connection timeout
+(`DATABASE_TIMEOUT_MS`, default 2000); a connection failure or timeout answers
+`503 database_unavailable`.
 
 ```text
 Client
   ↓
-Hono BFF
-  ↓ internal REST
-Hono Data Service
+Backend routes
+  ↓ in-process call
+Data module
   ↓ Drizzle
 PostgreSQL
 ```
@@ -942,24 +952,24 @@ PoC provider:
 AWS S3 (`eu-north-1`)
 ```
 
-MP3 bytes should bypass the backend.
+MP3 bytes should bypass the Backend.
 
 ## Upload flow
 
 ```text
 1. Admin chooses MP3.
-2. Admin web sends metadata to BFF.
-3. BFF validates the admin request.
-4. BFF generates an opaque `audio/{random UUID}.mp3` object key.
-5. BFF creates PENDING Media Asset via Data Service.
-6. BFF generates short-lived upload authorization binding the declared exact
+2. Admin web sends metadata to the Backend.
+3. Backend validates the admin request.
+4. Backend generates an opaque `audio/{random UUID}.mp3` object key.
+5. Backend creates a PENDING Media Asset through the data module.
+6. Backend generates short-lived upload authorization binding the declared exact
    `Content-Length`, `Content-Type: audio/mpeg`, and `If-None-Match: *`.
 7. Browser PUTs directly to object storage.
-8. Browser notifies BFF of completion.
-9. BFF validates the object's exact content length and `audio/mpeg` content
+8. Browser notifies the Backend of completion.
+9. Backend validates the object's exact content length and `audio/mpeg` content
    type through S3 object metadata.
-10. BFF marks Media Asset READY via Data Service.
-11. Lesson Audio association/version is created or updated.
+10. Backend marks the Media Asset READY through the data module.
+11. In the same transaction, Lesson Audio association/version is created or updated.
 ```
 
 Suggested route:
@@ -987,19 +997,19 @@ The object key must be server-generated.
 ```mermaid
 sequenceDiagram
     participant Mobile as React Native
-    participant BFF as Hono BFF
-    participant Data as Hono Data Service
+    participant Backend as Backend routes
+    participant Data as Data module (in-process)
     participant DB as PostgreSQL
     participant Storage as Object Storage
 
-    Mobile->>BFF: GET /api/mobile/lessons/:id
-    BFF->>Data: get lesson + text + current audio metadata
+    Mobile->>Backend: GET /api/mobile/lessons/:id
+    Backend->>Data: get lesson + text + current audio metadata
     Data->>DB: Drizzle query
     DB-->>Data: relational data
-    Data-->>BFF: object key + metadata
-    BFF->>Storage: create temporary read authorization
-    Storage-->>BFF: playback URL
-    BFF-->>Mobile: lesson DTO + playback URL
+    Data-->>Backend: object key + metadata
+    Backend->>Storage: create temporary read authorization
+    Storage-->>Backend: playback URL
+    Backend-->>Mobile: lesson DTO + playback URL
     Mobile->>Storage: stream/download directly
 ```
 
@@ -1013,9 +1023,8 @@ Never persist the temporary playback URL.
 | ----------------- | -------------------------------- |
 | Admin frontend    | React + Vite                     |
 | Mobile            | React Native + Expo              |
-| Public backend    | Hono + TypeScript                |
-| Data service      | Hono + TypeScript                |
-| ORM               | Drizzle ORM                      |
+| Backend           | Hono + TypeScript                |
+| ORM               | Drizzle ORM (data module only)   |
 | Migration tooling | Drizzle Kit                      |
 | Database          | PostgreSQL                       |
 | Object storage    | AWS S3                            |
@@ -1034,32 +1043,30 @@ Never persist the temporary playback URL.
 
 ---
 
-# 13. Suggested repository shape
+# 13. Repository shape
 
-Do not reorganize an existing repository merely to match this example.
+Infrastructure (Terraform, Caddy) lives in the sibling `cannyboiz-devops-hub`
+repository. Do not reorganize the repository merely to match this outline.
 
 ```text
 ez-dk-citizen/
 ├── apps/
 │   ├── admin/          # React + Vite
-│   ├── mobile/         # React Native + Expo
-│   ├── bff/            # Hono + TypeScript
-│   └── data/           # Hono + Drizzle
+│   ├── backend/        # Hono + TypeScript: Admin API, Mobile API, storage
+│   └── mobile/         # React Native + Expo (Stage 5)
 │
 ├── packages/
-│   ├── api-contracts/
-│   ├── shared-types/
-│   └── tsconfig/
+│   ├── api-contracts/  # shared request/response schemas
+│   └── data/           # data module: Drizzle schema, migrations, operations
 │
 ├── docs/
 │   ├── adr/
-│   └── architecture/
+│   ├── agents/
+│   └── product/        # this document
 │
-├── infrastructure/
-│   ├── docker/
-│   └── caddy/
-│
-├── .github/workflows/
+├── scripts/            # container test workflows and operator setup
+├── docker-compose*.yml
+├── .github/workflows/  # Stage 6
 ├── GLOSSARY.md
 └── AGENTS.md
 ```
@@ -1068,29 +1075,28 @@ ez-dk-citizen/
 
 # 14. Drizzle ownership and migrations
 
-The Hono Data Service owns the Drizzle schema.
+The data package (`packages/data`) owns the Drizzle schema. The Backend reaches
+it only through the data module API.
 
-The repository uses one root pnpm workspace declaring `apps/*`, one root
-lockfile, and root scripts for Data Service development, build, schema
-generation, migration, and tests.
+The repository uses one root pnpm workspace declaring `apps/*` and
+`packages/*`, one root lockfile, and root scripts for development, build,
+schema generation, migration, and tests.
 
-Suggested layout:
+Layout:
 
 ```text
-apps/data/
+packages/data/
+├── drizzle/                # committed migrations
 ├── src/
+│   ├── data-module.ts      # the data module API (main export)
 │   ├── db/
-│   │   ├── schema/
-│   │   │   ├── lesson.ts
-│   │   │   ├── lesson-text.ts
-│   │   │   ├── language.ts
-│   │   │   ├── source.ts
-│   │   │   ├── lesson-source.ts
-│   │   │   ├── media-asset.ts
-│   │   │   └── lesson-audio.ts
-│   │   ├── relations.ts
-│   │   └── client.ts
-│   └── routes/
+│   │   ├── schema.ts       # tables, constraints, relations
+│   │   ├── database.ts     # connection pool
+│   │   └── migrate.ts      # the `migrate` command
+│   └── features/
+│       ├── lessons/
+│       ├── media-assets/
+│       └── sources/
 └── drizzle.config.ts
 ```
 
@@ -1106,28 +1112,29 @@ Rules:
 - insert the required `da`, `en`, and `th` Language rows in the committed initial migration.
 
 Local Compose includes `postgres`, a one-shot `migrate` service, and
-`hono-data`. PostgreSQL must be healthy before migration starts, and the Data
-Service starts only after migration completes successfully.
+`backend`. PostgreSQL must be healthy before migration starts, and the Backend
+starts only after migration completes successfully. `migrate` runs the data
+package's `migrate` command from the Backend image with only `DATABASE_URL`.
 
 Local application runtime is container-first, as recorded in
 [`ADR-0003`](../adr/0003-container-first-local-application-runtime.md).
 `pnpm dev` runs Docker Compose Watch in the foreground. Compose starts
-PostgreSQL, applies committed migrations, starts the Data Service, and starts
-the BFF only after the Data Service is ready.
+PostgreSQL, applies committed migrations, and then starts the Backend, which
+becomes healthy on `/ready`. It also starts the Admin development server.
 
 The base Compose file retains compiled services for reproducible integration
 workflows. Its automatic local override selects development targets that run
-`tsx watch`. Compose Watch synchronizes only application source and migration
-files; dependency manifests, shared contracts, lockfiles, and Dockerfiles
+`tsx watch`. Compose Watch synchronizes only Backend and Admin source; the data
+package, shared contracts, dependency manifests, lockfiles, and Dockerfiles
 trigger image rebuilds. Host `node_modules` and `dist` directories are never
 synchronized into containers.
 
 Tests, typechecking, workspace builds, and Drizzle migration generation remain
 host-run. Initial startup applies committed migrations through the one-shot
-migration service; after generating a migration, `pnpm db:migrate` applies it
-inside the running development Data Service container. Integration tests use
-the base Compose file with an isolated project, database, and deterministic
-cleanup rather than reusing development state.
+`migrate` service; after generating a migration, `pnpm db:migrate` rebuilds the
+image and reruns that service. Integration tests use the base Compose file with
+an isolated project, database, and deterministic cleanup rather than reusing
+development state.
 
 Compose receives `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`, then
 constructs the internal `DATABASE_URL`. Drizzle consumes only `DATABASE_URL`.
@@ -1149,11 +1156,12 @@ Development flow:
 ```text
 pnpm dev
     ↓
-Compose Watch starts PostgreSQL → migrations → Data Service → BFF
+Compose Watch starts PostgreSQL → migrations → Backend
     ↓
-Edit application source
+Edit Backend source
     ↓
-Compose syncs source; tsx reloads the affected service
+Compose syncs source; tsx reloads the Backend
+(data package edits rebuild the image)
 ```
 
 Schema change flow:
@@ -1165,7 +1173,7 @@ Generate migration
     ↓
 Review SQL
     ↓
-Apply migration inside the running Data Service container
+Apply migration with `pnpm db:migrate` (one-shot `migrate` container)
     ↓
 Run tests
     ↓
@@ -1177,13 +1185,25 @@ Commit schema + migration
 # 15. API boundaries
 
 The Stage 3 media route names below are fixed by the Object Storage design.
+Both APIs are served by the Backend; `packages/api-contracts` holds their
+request and response schemas.
 
-## BFF admin routes
+## Admin API
 
 ```text
+GET    /api/admin/lessons
 POST   /api/admin/lessons
 GET    /api/admin/lessons/:id
 PATCH  /api/admin/lessons/:id
+DELETE /api/admin/lessons/:id
+PUT    /api/admin/lessons/:id/texts/:languageCode
+PUT    /api/admin/lessons/:id/sources/:sourceId
+DELETE /api/admin/lessons/:id/sources/:sourceId
+GET    /api/admin/lessons/:id/audio/:languageCode
+
+GET    /api/admin/sources
+POST   /api/admin/sources
+PATCH  /api/admin/sources/:id
 
 POST   /api/admin/media/upload-intents
 POST   /api/admin/media/:mediaAssetId/complete
@@ -1198,7 +1218,7 @@ completion and idempotent retries return `200` with the `READY` Media Asset and
 the Lesson Audio originally created for it, including its actual `isCurrent`
 value. An idempotent response need not describe the currently active rendition.
 
-## BFF mobile routes
+## Mobile API
 
 ```text
 GET /api/mobile/lessons
@@ -1215,39 +1235,28 @@ The non-null `audio` object contains only `mediaAssetId`, `audioVersion`,
 `playbackExpiresAt`. It does not expose the provider, bucket, object key, or
 original filename.
 
-## Data Service internal routes
+## Data module
 
-Illustrative only:
+There are no internal HTTP routes; the Backend's routes call the data module
+in-process and map its outcomes to Problem Details (§10).
 
-```text
-GET    /internal/lessons
-POST   /internal/lessons
-GET    /internal/lessons/:id
-PATCH  /internal/lessons/:id
-
-GET    /internal/sources
-POST   /internal/sources
-POST   /internal/lesson-sources
-DELETE /internal/lesson-sources/:lessonId/:sourceId
-
-POST   /internal/media-assets
-POST   /internal/media-assets/:mediaAssetId/complete
-```
-
-The internal completion command owns the atomic Media Asset and Lesson Audio
-transaction. Generic independent write routes for those records are not part
-of Stage 3.
+The completion operation owns the atomic Media Asset and Lesson Audio
+transaction. Generic independent write operations for those records are not
+part of Stage 3.
 
 ---
 
 # 16. Deployment
 
 The root `docker-compose.yml` is the compiled base used by integration
-workflows. The automatic local override adds Compose Watch development
-behavior, publishes the BFF on `127.0.0.1:3001` and PostgreSQL on
-`127.0.0.1:5432`, and keeps the Data Service private. The deployment phase will
-add a `docker-compose.prod.yml` override that keeps PostgreSQL and the Data
-Service private.
+workflows: `postgres`, the one-shot `migrate`, and `backend`. The automatic
+local override adds Compose Watch development behavior and the Admin
+development server, and publishes the Backend on
+`127.0.0.1:${BACKEND_PORT:-3001}` and PostgreSQL on
+`127.0.0.1:${POSTGRES_PORT:-5432}`.
+`docker-compose.roles-anywhere.yml` mounts the AWS identity into `backend` only.
+The deployment phase will add a production Compose file that keeps PostgreSQL
+private (see Stage 6 item 2).
 
 A Hetzner VPS already exists but is manually managed and does not yet run a
 repository-driven `ez-dk-citizen` deployment. Terraform for that VPS exists in
@@ -1259,12 +1268,12 @@ not be run blindly against it.
 ```text
 Hetzner CX23
 ├── Caddy
-│   ├── public site  → hono-bff public listener (/api/mobile/*)
+│   ├── public site  → backend public listener (/api/mobile/*)
 │   └── admin site   → React + Vite admin static build
-│                      + hono-bff admin listener (/api/admin/*), same origin,
+│                      + backend admin listener (/api/admin/*), same origin,
 │                      reachable only over Tailscale
-├── hono-bff
-├── hono-data
+├── backend          (holds the Roles Anywhere identity)
+├── migrate          (one-shot, no AWS identity)
 └── postgres
 
 External
@@ -1278,23 +1287,22 @@ Internet
    ↓
 Caddy :443
    ↓
-Hono BFF
-   ↓ private Docker network
-Hono Data Service
-   ↓
-PostgreSQL
+Backend ──── presign / HEAD / DELETE ──→ AWS S3
+   ↓ private Docker network               ↑
+PostgreSQL                                │ direct MP3 PUT / GET
+                                          │
+                           Admin browser / mobile app
 ```
 
 Rules:
 
 - only Caddy needs public HTTP/HTTPS, and only for the mobile API,
 - the Admin UI and `/api/admin/*` are same-origin on one private admin site
-  (ADR-0007); the BFF admin listener is never published to the host,
+  (ADR-0007); the Backend admin listener is never published to the host,
 - no tailnet hostname or address appears in code, tests, or tracers; origins
   and URLs come only from configuration,
 - the Admin build receives no secrets; `ADMIN_API_TOKEN` is entered at runtime,
-- PostgreSQL is private,
-- Data Service is private,
+- PostgreSQL is private and reached only by the Backend and `migrate`,
 - object storage is external,
 - ordinary MP3 traffic bypasses the VPS.
 
@@ -1353,12 +1361,17 @@ one object.
 Frontend clients never receive cloud credentials.
 
 The S3 bucket blocks public access. Browser upload CORS uses an explicit origin
-allow-list and permits only the required method and headers. The BFF exchanges
+allow-list and permits only the required method and headers. The Backend exchanges
 its runtime-provisioned X.509 workload identity for temporary STS credentials
 through IAM Roles Anywhere; no permanent IAM-user access key is deployed.
 
-Only the BFF receives the workload certificate, workload private key, and
-Roles Anywhere profile. The private key is mounted at runtime with restrictive
+Only the running Backend receives the workload certificate, workload private
+key, and Roles Anywhere profile; `postgres`, `migrate`, and the integration-test
+containers receive none. Code execution in the Backend could copy the workload
+key. ADR-0009 accepts that risk and bounds it: the role reaches only `audio/*`
+and `smoke/*`, writes are conditional, deletes stay recoverable for 30 days once
+bucket versioning is applied (ADR-0010), and Stage 6 adds an alert for identity
+use from anywhere but the VPS. The private key is mounted at runtime with restrictive
 filesystem permissions and never enters the image, Terraform state, or source
 control. The dedicated CA private key remains external and is never deployed.
 
@@ -1509,9 +1522,9 @@ For the PoC, playback position may remain local on the device.
 
 - [ ] MP3 can be generated manually in ElevenLabs.
 - [ ] admin can request upload intent.
-- [ ] BFF returns temporary upload authorization.
+- [ ] Backend returns temporary upload authorization.
 - [ ] browser uploads directly to object storage.
-- [ ] BFF validates the uploaded object.
+- [ ] Backend validates the uploaded object.
 - [ ] `media_asset` metadata is persisted.
 - [ ] `lesson_audio` associates Lesson + Language + Media Asset.
 - [ ] audio versioning works.
@@ -1526,12 +1539,10 @@ For the PoC, playback position may remain local on the device.
 
 ## Deployment
 
-- [ ] BFF runs in Docker on Hetzner.
-- [ ] Data Service runs in Docker on Hetzner.
+- [ ] Backend runs in Docker on Hetzner.
 - [ ] PostgreSQL persists data.
 - [ ] Caddy terminates HTTPS.
 - [ ] PostgreSQL is private.
-- [ ] Data Service is private.
 - [ ] GitHub Actions deploys over SSH.
 - [ ] Drizzle migrations run during controlled deployment.
 - [ ] production secrets are not committed.
@@ -1761,8 +1772,8 @@ identity together on real S3. Stage 6 then deploys the final shape once.
 
 ## Stage 6 — Deployment
 
-0. Split the BFF into a public listener (`/api/mobile/*`) and an unpublished
-   admin listener (`/api/admin/*`, port from `BFF_ADMIN_PORT`); the public
+0. Split the Backend into a public listener (`/api/mobile/*`) and an unpublished
+   admin listener (`/api/admin/*`, port from `BACKEND_ADMIN_PORT`); the public
    listener registers no admin routes (ADR-0007).
 1. Dockerfiles.
 2. Compose. Open question: does production deploy this repo's
@@ -1776,12 +1787,12 @@ identity together on real S3. Stage 6 then deploys the final shape once.
    `admin_production_origin` to the admin site origin.
 4. GHCR.
 5. GitHub Actions. The Admin build job receives no secrets and leaves
-   `VITE_BFF_BASE_URL` unset so the Admin calls its page origin.
+   `VITE_BACKEND_BASE_URL` unset so the Admin calls its page origin.
 6. SSH deployment.
 7. Drizzle migrations.
 8. health checks.
-9. Alert the developer by email when the deployed BFF's storage-credential path
-   fails. Use a failure signal and notification path independent of the BFF's
+9. Alert the developer by email when the deployed Backend's storage-credential path
+   fails. Use a failure signal and notification path independent of the Backend's
    AWS credentials; evaluate Amazon SNS email delivery during Stage 6. This
    alert does not gate the earlier local IAM-user retirement. The same email
    also fires when CloudTrail logs a Roles Anywhere `CreateSession` whose
@@ -1793,15 +1804,13 @@ identity together on real S3. Stage 6 then deploys the final shape once.
 
 # 24. Architecture principles
 
-Preserve these unless a deliberate decision changes them. ADR-0009 changes 3
-and 5: the Backend's data module is the only code with direct PostgreSQL access,
-and the Backend is the orchestration boundary.
+Preserve these unless a deliberate decision changes them.
 
 1. **Object storage owns binary media.**
 2. **PostgreSQL owns structured relational data and media metadata.**
-3. **Hono Data Service is the only application service with direct PostgreSQL access.**
+3. **The Backend's data module is the only code with direct PostgreSQL access (ADR-0009).**
 4. **Drizzle is the schema/query layer.**
-5. **Hono BFF is the orchestration boundary: public for mobile, private for admin (ADR-0007).**
+5. **The Backend is the orchestration boundary: public for mobile, private for admin (ADR-0007).**
 6. **Clients transfer MP3 bytes directly to/from object storage.**
 7. **Permanent cloud credentials never reach frontend clients.**
 8. **Temporary presigned URLs are not persisted.**
@@ -1887,7 +1896,7 @@ Use to execute an agreed spec/ticket set while preserving this document's archit
 
 Use at meaningful seams:
 
-- Data Service behavior,
+- Admin API and Mobile API behavior,
 - relational constraints,
 - API validation,
 - storage adapter behavior,
@@ -1964,7 +1973,10 @@ When working in this repository:
 - Preserve the domain language above.
 - Do not silently resolve **Flagged ambiguities**.
 - Do not add a new service, queue, database, or cloud provider without a concrete requirement.
-- Do not let the BFF import the Data Service DB client as a shortcut.
+- Do not import Drizzle or `pg` outside the data package; the Backend reaches
+  PostgreSQL only through the data module.
+- Keep data module operations free of HTTP; map outcomes to Problem Details in
+  the Backend's routes.
 - Do not store audio bytes in PostgreSQL.
 - Do not proxy ordinary MP3 transfer through the VPS.
 - Do not store presigned URLs.

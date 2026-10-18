@@ -2,6 +2,10 @@
 
 Status: ready-for-agent
 
+> ADR-0009 merged the BFF and Data Service into one Backend (`.scratch/one-backend/`).
+> Read "BFF" as the Backend and "Data Service" as its data module; tickets 06 to 08
+> build on the Backend.
+
 ## Problem Statement
 
 Stage 4's manual acceptance on real S3 ran the whole authoring workflow in the
@@ -42,7 +46,7 @@ chooses whether the change is a **content change** (2.1 → 3.0) or a **fix**
 The learner never sees the version; Stage 5 shows when a Lesson was last
 updated instead. When the chapter
 already has a Published version, Publish becomes **Replace**: one confirmation
-and one Data Service transaction archive the old version and publish the new
+and one data module transaction archive the old version and publish the new
 one. A replacement that changes no Lesson Text or citation is refused. There is
 no undo. Rolling back means creating a new version from the Archived Lesson and
 replacing again.
@@ -152,12 +156,12 @@ Publication rules, all checked in the transaction that applies the change and ev
 - With a matching `replacesLessonId`, the command is a **replacement**. It is refused with a new `409 lesson_unchanged` when the Draft's Lesson Texts (Language, title, content) and Lesson Sources (Source, page from, page to, section reference) are identical to the Published Lesson's. Audio is not compared. Otherwise the Published Lesson becomes `ARCHIVED` and the Draft becomes `PUBLISHED` with its computed version, both in this transaction.
 - `replacesLessonId` when the chapter has no Published Lesson is also `409 published_lesson_conflict`.
 
-The BFF adds `lesson_unchanged` to its known-conflict translations.
+The Backend maps `lesson_unchanged` to `409`.
 
 ### Creating Lessons and new versions
 
 - `POST /api/admin/lessons` accepts either `{ chapter }`, which creates a Draft with no version, or `{ copyFromLessonId }`, which creates a **new version**.
-- A new version copies, in one Data Service transaction, the source Lesson's chapter, every Lesson Text, and every Lesson Source with its references. For each Language with a current `READY` Lesson Audio, it creates a current Lesson Audio at audio version 1 backed by the **same** Media Asset. Audio history is not copied. The source must be `PUBLISHED` or `ARCHIVED`; a Draft is a new `409 lesson_not_copyable`, and a missing Lesson is `404 lesson_not_found`.
+- A new version copies, in one data module transaction, the source Lesson's chapter, every Lesson Text, and every Lesson Source with its references. For each Language with a current `READY` Lesson Audio, it creates a current Lesson Audio at audio version 1 backed by the **same** Media Asset. Audio history is not copied. The source must be `PUBLISHED` or `ARCHIVED`; a Draft is a new `409 lesson_not_copyable`, and a missing Lesson is `404 lesson_not_found`.
 - Both forms return `201` with the Lesson detail.
 
 ### Shared Media Assets (ADR-0008)
@@ -195,7 +199,7 @@ The BFF adds `lesson_unchanged` to its known-conflict translations.
 
 - Good tests assert externally observable behavior, as in Stage 4: status codes, response bodies, and persisted state for the backend, and what the admin can see and do in the rendered Admin. Prior art for each seam is the corresponding Stage 4 suite.
 - **Shared contracts**: `version` is a positive integer and `versionPatch` a non-negative one. The admin summary accepts both `null` or both present, and the mobile summary requires both. The Lesson command accepts `text`, `changeKind`, and `replacesLessonId` only in their valid combinations, and rejects a kind other than `content` or `fix`. Both create forms and the Source update request are covered.
-- **Data Service HTTP against real PostgreSQL**:
+- **Admin API integration against real PostgreSQL**:
   - Combined save: a blank text leaves the chapter unchanged.
   - Publication: a chapter's first publication becomes 1.0 whatever kind is sent. Later publications require a kind, and `content` and `fix` produce the next major or patch from the highest Published or Archived version, including Lessons archived as Drafts before this stage.
   - Replacement: archives and publishes together. It is refused as `lesson_unchanged` when nothing differs, and as `published_lesson_conflict` when `replacesLessonId` is missing or stale. Audio differences alone do not count as changes.
@@ -205,8 +209,8 @@ The BFF adds `lesson_unchanged` to its known-conflict translations.
   - Completion: still idempotent with shared Media Assets.
   - Source update: covers the URL conflict and works on Sources cited by Published Lessons without advancing their timestamps.
   - Migration: keeps N as N.0 and clears Draft versions.
-- **BFF route tests with fake Data Service and fake storage**: Delete deletes exactly the returned keys, still returns `204` when storage fails, logs the failure safely, and never exposes keys. Source update passes through its outcomes. `lesson_unchanged` and `lesson_not_copyable` pass through as `409`.
-- **Fake-storage end-to-end tracer at the BFF boundary**: extend the Stage 4 tracer so a Published Lesson with audio is copied, and the copy's audio plays without an upload. The copy is published as a replacement, so the old version becomes Archived. Then a Draft with its own uploaded audio is deleted: its object leaves fake storage, while an object it shared stays.
+- **Backend route tests with a stubbed data module and fake storage**: Delete deletes exactly the returned keys, still returns `204` when storage fails, logs the failure safely, and never exposes keys. Source update passes through its outcomes. `lesson_unchanged` and `lesson_not_copyable` map to `409`.
+- **Fake-storage end-to-end tracer at the Backend boundary**: extend the Stage 4 tracer so a Published Lesson with audio is copied, and the copy's audio plays without an upload. The copy is published as a replacement, so the old version becomes Archived. Then a Draft with its own uploaded audio is deleted: its object leaves fake storage, while an object it shared stays.
 - **Admin whole-app tests** cover:
   - the per-tab Save, including the chapter riding along from another tab and all-or-nothing failure;
   - the Create form, latest-version display, in-page create confirmation, and cancel with and without content;

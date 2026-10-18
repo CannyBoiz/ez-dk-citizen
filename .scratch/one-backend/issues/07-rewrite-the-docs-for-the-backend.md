@@ -4,10 +4,10 @@
 
 **Blocked by:** 06 — Retire the Data Service
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] poc-context names no BFF or Data Service outside §4's _Avoid_ note and historical stage records
-- [ ] The architecture diagram, deployment layout, and network path show Caddy, the Backend, PostgreSQL, and S3
-- [ ] The ADR-0009 banners in §9 and §24 are gone
-- [ ] Stage 4b tickets 06 and 08 describe the data module and the Backend
-- [ ] Both READMEs describe the current commands and services
+- [x] poc-context names no BFF or Data Service outside §4's _Avoid_ note and historical stage records
+- [x] The architecture diagram, deployment layout, and network path show Caddy, the Backend, PostgreSQL, and S3
+- [x] The ADR-0009 banners in §9 and §24 are gone
+- [x] Stage 4b tickets 06 and 08 describe the data module and the Backend
+- [x] Both READMEs describe the current commands and services

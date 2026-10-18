@@ -12,12 +12,14 @@ host dependency installation is required:
 pnpm dev
 ```
 
-Docker Compose Watch builds the shared contracts, applies migrations, starts
-PostgreSQL, the private Data Service, and then the BFF, and synchronizes source
-updates into the writable application containers. The BFF is available at
-`http://127.0.0.1:3001` and PostgreSQL at `127.0.0.1:5432`; the Data Service is
-not published to the host. The Admin runs at `http://127.0.0.1:5173`; enter
-`ADMIN_API_TOKEN` there to connect. The token is held only in memory.
+Docker Compose Watch starts PostgreSQL, applies migrations with the one-shot
+`migrate` service, then starts the Backend. It also starts the Admin, and
+synchronizes source updates into the writable application containers. The
+Backend serves the Admin API and Mobile API at `http://127.0.0.1:3001` and
+reaches PostgreSQL in-process through the data package; PostgreSQL is published
+to the host at `127.0.0.1:5432`. The Admin runs at
+`http://127.0.0.1:5173`; enter `ADMIN_API_TOKEN` there to connect. The token is
+held only in memory.
 
 The defaults are development-only. Copy `.env.example` to `.env` to override
 credentials, origins, or ports locally. Real `.env` files are ignored by Git.
@@ -42,7 +44,7 @@ On first run, it asks for the Trust Anchor, Roles Anywhere profile, and role
 ARNs, then prepares the shared profile at `runtime/aws/config`. It stores only
 the non-secret `AWS_REGION` and `S3_BUCKET` settings in ignored `.env`. It
 validates the certificate subject and chain, checks key mode, builds and
-inspects the production-like BFF image, validates the read-only mounts and
+inspects the production-like Backend image, validates the read-only mounts and
 non-root key access, and proves the assumed-role identity through STS in that
 container. It never asks for or stores IAM access keys or temporary credentials.
 
@@ -51,7 +53,7 @@ Roles Anywhere role maximum and profile session duration must both be `7200`
 seconds, and the helper command requests `--session-duration 7200`. Apply the
 reviewed Terraform duration change before rolling out this signing change.
 For an existing `runtime/aws/config`, append that flag to its `credential_process`
-command and rerun setup after the apply. The BFF uses a fresh SDK signing client
+command and rerun setup after the apply. The Backend uses a fresh SDK signing client
 for each URL and refuses to issue one if the credentials expire too soon;
 upload and playback URLs retain their 15-minute and one-hour lifetimes.
 
@@ -95,23 +97,22 @@ while retaining the trusted identity does not revoke the compromised certificate
 Hetzner VPS reconciliation remains deferred to Stage 6.
 
 `pnpm dev:live-s3` adds `docker-compose.roles-anywhere.yml` to the development
-stack. It needs `S3_BUCKET`, `AWS_REGION`, `ADMIN_API_TOKEN`, and
-`DATA_SERVICE_TOKEN` from `.env` or the shell, and it blanks the default
-`ADMIN_ORIGINS`, so set that too (normally `http://127.0.0.1:5173`).
+stack. It needs `S3_BUCKET`, `AWS_REGION`, and `ADMIN_API_TOKEN` from `.env` or
+the shell, and it blanks the default `ADMIN_ORIGINS`, so set that too (normally
+`http://127.0.0.1:5173`).
 
 `pnpm test:roles-anywhere` and `pnpm test:live-s3` load the optional root `.env`;
 exported shell variables take precedence. The identity smoke test requires
-`AWS_REGION` and `S3_BUCKET`. The live S3 tracer additionally requires distinct
-`ADMIN_API_TOKEN` and `DATA_SERVICE_TOKEN` values, plus the configured Roles
-Anywhere profile and a Chromium-family browser. The tracer scans both containers'
-logs. If additional
+`AWS_REGION` and `S3_BUCKET`. The live S3 tracer additionally requires
+`ADMIN_API_TOKEN`, the configured Roles Anywhere profile, and a Chromium-family
+browser. The tracer scans the Backend container's logs. If additional
 file-based audit logs are configured, set `LIVE_S3_TRACER_LOG_FILES` to their
 comma-separated absolute paths; keep those files outside the repo or Git-ignored.
 It runs typecheck, unit, container-development, integration, end-to-end, and
 build checks before starting the live portion. That portion uses the
-production BFF image and its read-only workload-identity mounts, creates a
-temporary Lesson in an isolated Data Service, and drives the BFF over its
-published HTTP port. It uploads one unique `smoke/` object to the configured
+production Backend image and its read-only workload-identity mounts, migrates
+an isolated PostgreSQL database, creates a temporary Lesson there, and drives
+the Backend over its published HTTP port. It uploads one unique `smoke/` object to the configured
 bucket and deletes only recorded exact keys through the same container's Roles
 Anywhere credentials. Run it only when live S3 writes and deletes are intended.
 It does not use the host development database or pass static AWS keys to the
@@ -123,8 +124,8 @@ Stop the stack without deleting its named PostgreSQL volume:
 pnpm db:down
 ```
 
-Generate migrations on the host, then apply them through the running Data
-Service development container:
+Generate migrations on the host, then apply them by rebuilding the image and
+rerunning the one-shot `migrate` service against the development database:
 
 ```sh
 pnpm db:generate
@@ -136,26 +137,27 @@ migration execution, and verification consume container-injected configuration.
 
 ## Workspace scripts
 
-The root package coordinates the Data Service, BFF, and shared contracts
-workspaces. Both application containers listen on configurable `PORT=3000`.
+The root package coordinates the Backend (`apps/backend`), Admin (`apps/admin`),
+data (`packages/data`), and shared contracts (`packages/api-contracts`)
+workspaces. The Backend container listens on configurable `PORT=3000`.
 
-| Command                    | Purpose                                                                      |
-| -------------------------- | ---------------------------------------------------------------------------- |
-| `pnpm dev`                 | Run the complete local stack through Docker Compose Watch.                   |
-| `pnpm dev:live-s3`         | Run `pnpm dev` with the BFF's mounted Roles Anywhere identity and real S3.   |
-| `pnpm typecheck`           | Type-check every workspace without emitting files.                           |
-| `pnpm build`               | Compile every workspace to JavaScript.                                       |
-| `pnpm db:generate`         | Generate a Drizzle migration from the schema.                                |
-| `pnpm db:migrate`          | Apply committed migrations inside the running development Data container.    |
-| `pnpm db:up`               | Start local PostgreSQL and wait until it is healthy.                         |
-| `pnpm db:down`             | Stop local Compose containers without deleting development data.             |
-| `pnpm test`                | Run Docker-free contract and service-boundary tests.                         |
-| `pnpm test:dev`            | Smoke-test the isolated merged development Compose topology.                 |
-| `pnpm test:integration`    | Build, migrate, and fully test an isolated PostgreSQL/Data Service stack.    |
-| `pnpm test:e2e`            | Run the isolated BFF-to-PostgreSQL Stage 2 tracer.                           |
-| `pnpm test:roles-anywhere` | Build the production-like BFF and prove its mounted Roles Anywhere identity. |
-| `pnpm test:live-s3`        | Run credential-free regressions, then the opt-in browser-to-S3 tracer.       |
-| `pnpm test:clean`          | Remove Docker resources that interrupted test runs left behind.              |
+| Command                    | Purpose                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| `pnpm dev`                 | Run the complete local stack through Docker Compose Watch.                       |
+| `pnpm dev:live-s3`         | Run `pnpm dev` with the Backend's mounted Roles Anywhere identity and real S3.   |
+| `pnpm typecheck`           | Type-check every workspace without emitting files.                               |
+| `pnpm build`               | Compile every workspace to JavaScript.                                           |
+| `pnpm db:generate`         | Generate a Drizzle migration from the data package's schema.                     |
+| `pnpm db:migrate`          | Rebuild the image and apply committed migrations with the one-shot `migrate`.    |
+| `pnpm db:up`               | Start local PostgreSQL and wait until it is healthy.                             |
+| `pnpm db:down`             | Stop local Compose containers without deleting development data.                 |
+| `pnpm test`                | Run Docker-free contract, data, Admin, Backend route, and script tests.          |
+| `pnpm test:dev`            | Smoke-test the isolated merged development Compose topology.                     |
+| `pnpm test:integration`    | Build, migrate, and fully test an isolated PostgreSQL and Backend stack.         |
+| `pnpm test:e2e`            | Run the isolated Backend-to-PostgreSQL tracers with fake storage.                |
+| `pnpm test:roles-anywhere` | Build the production-like Backend and prove its mounted Roles Anywhere identity. |
+| `pnpm test:live-s3`        | Run credential-free regressions, then the opt-in browser-to-S3 tracer.           |
+| `pnpm test:clean`          | Remove Docker resources that interrupted test runs left behind.                  |
 
 Both container workflows create a temporary Compose project and volume, then
 remove both, also when you stop the run with Ctrl+C. A second Ctrl+C aborts that
@@ -165,22 +167,25 @@ uses the persistent development database. Use `pnpm db:down` to stop development
 services; add `--volumes` manually only when intentionally discarding local
 development data.
 
-Both services expose unauthenticated `GET /health` liveness and `GET /ready`
-dependency-readiness endpoints. The Data Service readiness check reaches
-PostgreSQL; the BFF readiness check reaches the Data Service.
+The Backend exposes unauthenticated `GET /health` liveness and `GET /ready`
+readiness endpoints. `/health` never touches PostgreSQL; `/ready` checks it
+within `DATABASE_TIMEOUT_MS` (default 2000) and answers `503` when it is
+unreachable. Admin API and Mobile API requests then answer
+`503 database_unavailable`.
 
 The integration command creates a unique Compose project, waits for PostgreSQL
-health, applies the committed migration, and waits for the compiled Data
-Service. It verifies the canonical
-Language seed, runs the complete constraint and relational-query suite through
-the exported Drizzle layer, reapplies migration to prove idempotency, and proves
-that a failed migration prevents its dependent Data Service from starting. Its
-containers, network, and project-scoped volume are removed afterward, including
-after test failure. The normal development volume belongs to a different
-Compose project and is not removed.
+health, applies the committed migration, and waits for the compiled Backend. It
+verifies the canonical Language seed, runs the data package's constraint and
+relational-query suite, runs the Backend's Admin API and Mobile API tests
+against real PostgreSQL, reapplies migration to prove idempotency, and proves
+that a failed migration prevents the Backend from starting. Its containers,
+network, and project-scoped volume are removed afterward, including after test
+failure. The normal development volume belongs to a different Compose project
+and is not removed. The end-to-end command also pauses `postgres` to prove that
+`/health` stays OK while `/ready` reports `503`, then recovers.
 
-If a migration fails, Compose leaves the Data Service stopped. Fix or replace
-the committed migration, rebuild with `pnpm dev`, and verify with
+If a migration fails, Compose leaves the Backend stopped. Fix or replace the
+committed migration, rebuild with `pnpm dev`, and verify with
 `pnpm test:integration`; do not delete the development volume as recovery.
 
 ## License
