@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mediaAssetResponseSchema } from "@ez-dk-citizen/api-contracts";
+import { mediaAssetSchema } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
 import { FakeStorage } from "../../storage.js";
@@ -8,7 +8,7 @@ import { createTestDataModule } from "../../testing/data-module.js";
 
 test("Backend completes matching stored media through the admin route", async () => {
   const storage = new FakeStorage();
-  const asset = mediaAssetResponseSchema.parse({
+  const asset = mediaAssetSchema.parse({
     id: 9,
     storageProvider: "s3",
     storageContainer: "citizenship-audio",
@@ -115,7 +115,7 @@ test("Backend returns a completion retry for superseded audio as not current", a
     storage,
     data: createTestDataModule({
       async getMediaAsset() {
-        return mediaAssetResponseSchema.parse({
+        return mediaAssetSchema.parse({
           id: 9,
           storageProvider: "s3",
           storageContainer: "citizenship-audio",
@@ -149,7 +149,7 @@ test("Backend returns a completion retry for superseded audio as not current", a
 });
 
 test("Backend keeps incomplete uploads pending and fails invalid uploads before exact cleanup", async (context) => {
-  const asset = mediaAssetResponseSchema.parse({
+  const asset = mediaAssetSchema.parse({
     id: 9,
     storageProvider: "s3",
     storageContainer: "citizenship-audio",
@@ -391,7 +391,7 @@ test("Backend keeps incomplete uploads pending and fails invalid uploads before 
 });
 
 test("Backend maps completion refusals to Problem Details", async () => {
-  const asset = mediaAssetResponseSchema.parse({
+  const asset = mediaAssetSchema.parse({
     id: 9,
     storageProvider: "s3",
     storageContainer: "citizenship-audio",
@@ -490,7 +490,7 @@ test("Backend maps completion refusals to Problem Details", async () => {
 });
 
 test("Backend retries ready media without inspecting storage", async () => {
-  const asset = mediaAssetResponseSchema.parse({
+  const asset = mediaAssetSchema.parse({
     id: 9,
     storageProvider: "s3",
     storageContainer: "citizenship-audio",

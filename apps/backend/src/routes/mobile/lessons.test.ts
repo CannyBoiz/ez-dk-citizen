@@ -3,8 +3,8 @@ import { test } from "node:test";
 import {
   lessonDetailSchema,
   problemDetailsSchema,
-  publishedLessonDetailSchema,
 } from "@ez-dk-citizen/api-contracts";
+import { publishedLessonDetailSchema } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
 import { FakeStorage } from "../../storage.js";

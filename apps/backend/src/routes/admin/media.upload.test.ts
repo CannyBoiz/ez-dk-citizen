@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  mediaAssetResponseSchema,
-  problemDetailsSchema,
-} from "@ez-dk-citizen/api-contracts";
+import { problemDetailsSchema } from "@ez-dk-citizen/api-contracts";
+import { mediaAssetSchema } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
 import { FakeStorage } from "../../storage.js";
@@ -29,7 +27,7 @@ test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", 
         assert.equal(input.storageContainer, "citizenship-audio");
         assert.match(input.objectKey, /^audio\/[0-9a-f-]{36}\.mp3$/);
         const { languageCode: _languageCode, ...mediaAsset } = input;
-        return mediaAssetResponseSchema.parse({
+        return mediaAssetSchema.parse({
           id: 9,
           ...mediaAsset,
           status: "PENDING",
@@ -121,7 +119,7 @@ test("Backend accepts a test-only Upload Intent object-key generator", async () 
           "smoke/123e4567-e89b-12d3-a456-426614174000.mp3",
         );
         const { languageCode: _languageCode, ...mediaAsset } = input;
-        return mediaAssetResponseSchema.parse({
+        return mediaAssetSchema.parse({
           id: 10,
           ...mediaAsset,
           status: "PENDING",
@@ -210,7 +208,7 @@ test("Backend leaves a pending Media Asset and logs safely when storage signing 
     storageBucket: "citizenship-audio",
     data: createTestDataModule({
       async createPendingMediaAsset() {
-        return mediaAssetResponseSchema.parse({
+        return mediaAssetSchema.parse({
           id: 10,
           storageProvider: "s3",
           storageContainer: "citizenship-audio",

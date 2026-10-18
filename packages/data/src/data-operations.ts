@@ -1,12 +1,7 @@
 import {
   completeMediaAssetResponseSchema,
-  currentLessonAudioResponseSchema,
-  deleteLessonResponseSchema,
-  lessonDetailListResponseSchema,
   lessonDetailSchema,
   lessonListResponseSchema,
-  mediaAssetResponseSchema,
-  publishedLessonDetailSchema,
   sourceListResponseSchema,
   sourceResponseSchema,
 } from "@ez-dk-citizen/api-contracts";
@@ -45,6 +40,13 @@ import {
   listSources,
   updateSource,
 } from "./features/sources/operations.js";
+import {
+  currentLessonAudioResultSchema,
+  deleteLessonResultSchema,
+  lessonDetailListSchema,
+  mediaAssetSchema,
+  publishedLessonDetailSchema,
+} from "./results.js";
 
 export type DataOperations = Omit<DataModule, "checkReadiness" | "close">;
 
@@ -63,12 +65,12 @@ export function createDataOperations(database: DataDatabase): DataOperations {
       const created = await createPendingMediaAsset(database, input);
       return typeof created === "string"
         ? created
-        : mediaAssetResponseSchema.parse(toMediaAsset(created));
+        : mediaAssetSchema.parse(toMediaAsset(created));
     },
     getMediaAsset: async (id) => {
       const asset = await findMediaAsset(database, id);
       return asset
-        ? mediaAssetResponseSchema.parse(toMediaAsset(asset))
+        ? mediaAssetSchema.parse(toMediaAsset(asset))
         : "media_asset_not_found";
     },
     failMediaAsset: (id) => failMediaAsset(database, id),
@@ -92,7 +94,7 @@ export function createDataOperations(database: DataDatabase): DataOperations {
       });
       return result === "unsupported_language"
         ? result
-        : lessonDetailListResponseSchema.parse(result);
+        : lessonDetailListSchema.parse(result);
     },
     getLesson: async (id, filters = {}) => {
       const detail = await readLesson(database, id, filters);
@@ -117,7 +119,7 @@ export function createDataOperations(database: DataDatabase): DataOperations {
       const outcome = await deleteLesson(database, id);
       return typeof outcome === "string"
         ? outcome
-        : deleteLessonResponseSchema.parse({ deletedMediaAssets: outcome });
+        : deleteLessonResultSchema.parse({ deletedMediaAssets: outcome });
     },
     upsertLessonText: async (lessonId, languageCode, input) =>
       detailOrOutcome(
@@ -143,7 +145,7 @@ export function createDataOperations(database: DataDatabase): DataOperations {
       );
       return typeof outcome === "string"
         ? outcome
-        : currentLessonAudioResponseSchema.parse(outcome);
+        : currentLessonAudioResultSchema.parse(outcome);
     },
     createSource: (input) =>
       orSourceUrlConflict(async () =>

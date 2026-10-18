@@ -3,16 +3,11 @@ import type {
   CompleteMediaAssetResponse,
   CreateLessonRequest,
   CreateSourceRequest,
-  CurrentLessonAudioResponse,
-  DeleteLessonResponse,
   LessonDetail,
-  LessonDetailListResponse,
   LessonListResponse,
   LessonStatus,
-  MediaAssetResponse,
   PatchLessonRequest,
   ProblemDetails,
-  PublishedLessonDetail,
   SourceListResponse,
   SourceResponse,
   UpdateSourceRequest,
@@ -26,18 +21,24 @@ import { createDataDatabase } from "./db/database.js";
 import { databaseTimeoutMessage } from "./db/errors.js";
 import type { LessonReadFilters } from "./features/lessons/queries.js";
 import type { PendingMediaAsset } from "./features/media-assets/mutations.js";
+import type {
+  CurrentLessonAudioResult,
+  DeleteLessonResult,
+  LessonDetailList,
+  MediaAsset,
+  PublishedLessonDetail,
+} from "./results.js";
 
 export { isDatabaseUnavailable } from "./db/errors.js";
+export * from "./results.js";
 
 // The package's only public API. Operations return contract-shaped results or outcome codes;
 // mapping those to HTTP is the caller's job.
 export interface DataModule {
   createPendingMediaAsset(
     input: PendingMediaAsset,
-  ): Promise<MediaAssetResponse | "unsupported_language">;
-  getMediaAsset(
-    id: number,
-  ): Promise<MediaAssetResponse | "media_asset_not_found">;
+  ): Promise<MediaAsset | "unsupported_language">;
+  getMediaAsset(id: number): Promise<MediaAsset | "media_asset_not_found">;
   failMediaAsset(
     id: number,
   ): Promise<"media_asset_not_found" | "media_asset_not_pending" | undefined>;
@@ -61,7 +62,7 @@ export interface DataModule {
   listLessonsInLanguage(
     languageCode: string,
     status?: LessonStatus,
-  ): Promise<LessonDetailListResponse | "unsupported_language">;
+  ): Promise<LessonDetailList | "unsupported_language">;
   getLesson(
     id: number,
     filters?: LessonReadFilters,
@@ -88,7 +89,7 @@ export interface DataModule {
   >;
   deleteLesson(
     id: number,
-  ): Promise<DeleteLessonResponse | "lesson_not_found" | "lesson_not_editable">;
+  ): Promise<DeleteLessonResult | "lesson_not_found" | "lesson_not_editable">;
   upsertLessonText(
     lessonId: number,
     languageCode: string,
@@ -128,7 +129,7 @@ export interface DataModule {
     lessonId: number,
     languageCode: string,
   ): Promise<
-    CurrentLessonAudioResponse | "unsupported_language" | "lesson_not_found"
+    CurrentLessonAudioResult | "unsupported_language" | "lesson_not_found"
   >;
   createSource(
     input: CreateSourceRequest,

@@ -22,13 +22,15 @@
     "build": "tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "tsx src/db/migrate.ts",
+    "test": "pnpm --filter @ez-dk-citizen/api-contracts build && node --import tsx --test src/*.test.ts",
     "test:compiled": "node --test --test-concurrency=1 dist/src/db/lesson.integration.test.js dist/src/db/source.integration.test.js dist/src/db/media-asset.integration.test.js dist/src/db/lesson-audio.integration.test.js dist/src/db/deletion.integration.test.js"
   },
   "dependencies": {
     "@ez-dk-citizen/api-contracts": "workspace:*",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^1.0.0-rc.4",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "zod": "4.1.12"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",

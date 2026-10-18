@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { currentLessonAudioResponseSchema } from "@ez-dk-citizen/api-contracts";
+import { currentLessonAudioResultSchema } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
 import { FakeStorage } from "../../storage.js";
 import { createTestDataModule } from "../../testing/data-module.js";
 
 const key = "audio/123e4567-e89b-12d3-a456-426614174000.mp3";
-const current = currentLessonAudioResponseSchema.parse({
+const current = currentLessonAudioResultSchema.parse({
   audio: {
     mediaAssetId: 9,
     audioVersion: 2,

@@ -3,8 +3,8 @@ import {
   type MobileLessonDetail,
   type MobileLessonListResponse,
   mobileLessonListResponseSchema,
-  type PublishedLessonDetail,
 } from "@ez-dk-citizen/api-contracts";
+import type { PublishedLessonDetail } from "@ez-dk-citizen/data";
 
 export function composeMobileLessonList(
   lessons: LessonDetail[],
