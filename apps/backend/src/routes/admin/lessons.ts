@@ -88,7 +88,15 @@ export function createAdminLessonRoutes(
             c,
             409,
             outcome,
-            "This chapter already has a Published Lesson.",
+            "This publication does not replace the chapter's current Published Lesson.",
+          );
+        }
+        if (outcome === "lesson_unchanged") {
+          return problem(
+            c,
+            409,
+            outcome,
+            "The Draft's Lesson Texts and Lesson Sources are identical to the Published Lesson's.",
           );
         }
         if (outcome === "lesson_version_conflict") {

@@ -299,6 +299,14 @@ const deletedCopy = await call('/api/admin/lessons/' + newVersion.body.id, 'DELE
 if (deletedCopy.response.status !== 204 || (await data.getMediaAsset(sharedIntent.body.mediaAssetId)).status !== 'READY') throw new Error('Deleting the new version did not keep the shared Media Asset.');
 await storage.inspectObject(sharedKey);
 if ((await call('/api/mobile/lessons/' + fix.body.id, 'GET')).body.audio?.mediaAssetId !== sharedIntent.body.mediaAssetId) throw new Error('Deleting the new version took the shared audio from the Published Lesson.');
+const successor = await call('/api/admin/lessons', 'POST', { chapter: 2 });
+await call('/api/admin/lessons/' + successor.body.id + '/sources/' + source.body.id, 'PUT', {});
+const unnamed = await call('/api/admin/lessons/' + successor.body.id, 'PATCH', { status: 'PUBLISHED', changeKind: 'content', text: { languageCode: 'th', title: 'ไทย', content: 'ฉบับใหม่' } });
+if (unnamed.response.status !== 409 || unnamed.body.code !== 'published_lesson_conflict' || (await call('/api/admin/lessons/' + fix.body.id, 'GET')).body.status !== 'PUBLISHED') throw new Error('A publication replaced a Published Lesson it did not name.');
+const replacement = await call('/api/admin/lessons/' + successor.body.id, 'PATCH', { status: 'PUBLISHED', changeKind: 'content', replacesLessonId: fix.body.id, text: { languageCode: 'th', title: 'ไทย', content: 'ฉบับใหม่' } });
+if (replacement.response.status !== 200 || replacement.body.status !== 'PUBLISHED' || replacement.body.version !== 2 || replacement.body.versionPatch !== 0 || (await call('/api/admin/lessons/' + fix.body.id, 'GET')).body.status !== 'ARCHIVED') throw new Error('The replacement did not archive the Published Lesson and publish the Draft.');
+const replacedList = (await call('/api/mobile/lessons', 'GET')).body.items.filter((item) => item.chapter === 2);
+if (replacedList.length !== 1 || replacedList[0].id !== successor.body.id || replacedList[0].version !== 2 || replacedList[0].versionPatch !== 0 || replacedList[0].title !== 'ไทย') throw new Error('The mobile list did not show the replacing version.');
 await data.close();
 `;
 }

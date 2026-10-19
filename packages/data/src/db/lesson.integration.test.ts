@@ -3,14 +3,23 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
+import { lessonDetailSchema } from "@ez-dk-citizen/api-contracts";
 import { eq, sql } from "drizzle-orm";
 
+import { createDataOperations } from "../data-operations.js";
+import { patchLesson } from "../features/lessons/mutations.js";
 import {
   expectPostgresError,
   postgresErrorCode,
   useIntegrationDatabase,
 } from "./integration-test-database.js";
-import { language, lesson, lessonText } from "./schema.js";
+import {
+  language,
+  lesson,
+  lessonSource,
+  lessonText,
+  source,
+} from "./schema.js";
 
 const database = useIntegrationDatabase();
 
@@ -303,3 +312,119 @@ test("Languages and localized Lesson Texts retain complete unique identities", a
     postgresErrorCode.restrictViolation,
   );
 });
+
+// A Lesson with a Thai Lesson Text and one Lesson Source, so it meets the publication
+// prerequisites.
+async function publishableLesson(
+  values: typeof lesson.$inferInsert,
+  content: string,
+) {
+  const [cited] = await database
+    .insert(source)
+    .values({ url: `https://example.test/${values.chapter}/${content}` })
+    .returning();
+  const [created] = await database.insert(lesson).values(values).returning();
+  await database
+    .insert(lessonText)
+    .values({ lessonId: created.id, languageCode: "th", title: "บท", content });
+  await database
+    .insert(lessonSource)
+    .values({ lessonId: created.id, sourceId: cited.id });
+  return created;
+}
+
+test("a replacement that fails partway leaves both Lessons as they were", async () => {
+  const published = await publishableLesson(
+    { chapter: 30, version: 1, versionPatch: 0, status: "PUBLISHED" },
+    "เดิม",
+  );
+  const draft = await publishableLesson(
+    { chapter: 30, status: "DRAFT" },
+    "ใหม่",
+  );
+  const snapshot = async () => ({
+    lessons: await database.select().from(lesson).orderBy(lesson.id),
+    texts: await database
+      .select()
+      .from(lessonText)
+      .orderBy(lessonText.lessonId, lessonText.languageCode),
+  });
+  const before = await snapshot();
+  // The replacement completes, with a Lesson Text of its own, then the transaction fails.
+  const failingDatabase = new Proxy(database, {
+    get(target, property, receiver) {
+      if (property !== "transaction") {
+        return Reflect.get(target, property, receiver);
+      }
+      return (callback: Parameters<typeof database.transaction>[0]) =>
+        target.transaction(async (transaction) => {
+          assert.equal(await callback(transaction), draft.id);
+          throw new Error("forced rollback");
+        });
+    },
+  });
+
+  await assert.rejects(
+    patchLesson(failingDatabase, draft.id, {
+      status: "PUBLISHED",
+      changeKind: "fix",
+      replacesLessonId: published.id,
+      text: { languageCode: "da", title: "Titel", content: "Indhold" },
+    }),
+    /forced rollback/,
+  );
+
+  assert.deepEqual(await snapshot(), before);
+});
+
+test("a publication whose version a concurrent publication took meanwhile is lesson_version_conflict and changes nothing", async () => {
+  const operations = createDataOperations(database);
+  const slow = await publishableLesson({ chapter: 31, status: "DRAFT" }, "ช้า");
+  const fast = await publishableLesson({ chapter: 31, status: "DRAFT" }, "เร็ว");
+  const before = await operations.getLesson(slow.id);
+
+  // Holds the slow publication at its Lesson Text write, after it has given itself 1.0.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let locked!: () => void;
+  const isLocked = new Promise<void>((resolve) => (locked = resolve));
+  const holder = database.transaction(async (transaction) => {
+    await transaction
+      .select()
+      .from(lessonText)
+      .where(eq(lessonText.lessonId, slow.id))
+      .for("update");
+    locked();
+    await released;
+  });
+  await isLocked;
+  const slowPublication = operations.patchLesson(slow.id, {
+    status: "PUBLISHED",
+    text: { languageCode: "th", title: "บท", content: "ช้ากว่า" },
+  });
+  await waitForLockWait();
+
+  // Meanwhile another Draft of the chapter is published as 1.0 and archived.
+  for (const status of ["PUBLISHED", "ARCHIVED"] as const) {
+    const changed = await operations.patchLesson(fast.id, { status });
+    assert.equal(lessonDetailSchema.parse(changed).status, status);
+  }
+  release();
+  await holder;
+
+  assert.equal(await slowPublication, "lesson_version_conflict");
+  assert.deepEqual(await operations.getLesson(slow.id), before);
+});
+
+// Waits until a statement in this database is blocked on a lock.
+async function waitForLockWait() {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const { rows } = await database.execute<{ waiting: number }>(sql`
+      select count(*)::int as waiting from pg_stat_activity
+      where datname = current_database() and wait_event_type = 'Lock'
+    `);
+    if (rows[0]?.waiting) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("No statement waited on a lock.");
+}

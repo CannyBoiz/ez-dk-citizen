@@ -310,6 +310,7 @@ test("Backend patches Lessons through the data module and maps every refusal", a
     95: "published_lesson_conflict",
     96: "lesson_version_conflict",
     97: { missing },
+    98: "lesson_unchanged",
   };
   const calls: string[] = [];
   const data = createTestDataModule({
@@ -340,17 +341,20 @@ test("Backend patches Lessons through the data module and maps every refusal", a
     chapter: 3,
     status: "PUBLISHED",
     changeKind: "fix",
+    replacesLessonId: 6,
   });
   assert.equal(patched.status, 200);
   assert.deepEqual(await patched.json(), detail);
   assert.deepEqual(calls, [
-    '7:{"chapter":3,"status":"PUBLISHED","changeKind":"fix"}',
+    '7:{"chapter":3,"status":"PUBLISHED","changeKind":"fix","replacesLessonId":6}',
   ]);
 
   for (const body of [
     { chapter: 3, version: 2 },
     { status: "ARCHIVED", changeKind: "fix" },
     { status: "PUBLISHED", changeKind: "major" },
+    { status: "ARCHIVED", replacesLessonId: 6 },
+    { status: "PUBLISHED", replacesLessonId: "6" },
   ]) {
     assert.equal((await patch(body)).status, 422, JSON.stringify(body));
   }
@@ -383,7 +387,7 @@ test("Backend patches Lessons through the data module and maps every refusal", a
       95,
       409,
       "published_lesson_conflict",
-      "This chapter already has a Published Lesson.",
+      "This publication does not replace the chapter's current Published Lesson.",
     ],
     [
       96,
@@ -397,6 +401,12 @@ test("Backend patches Lessons through the data module and maps every refusal", a
       "lesson_publication_incomplete",
       "Lesson is missing publication prerequisites.",
       missing,
+    ],
+    [
+      98,
+      409,
+      "lesson_unchanged",
+      "The Draft's Lesson Texts and Lesson Sources are identical to the Published Lesson's.",
     ],
   ] as const) {
     const refused = await patch({ chapter, status: "PUBLISHED" });
