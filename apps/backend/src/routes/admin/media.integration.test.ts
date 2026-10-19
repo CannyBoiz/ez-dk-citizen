@@ -311,3 +311,55 @@ test("current Lesson Audio serves the current rendition with a fresh Playback UR
   assert.equal(archive.status, 200);
   await expectAudio(current);
 });
+
+test("completion stays idempotent for a Media Asset a new version shares, and new uploads stay in their own Lesson", async () => {
+  const original = await lessonWithTexts(77, ["th", "da"]);
+  const first = await upload(original.id, "th");
+  await publish(original.id, "https://example.com/shared-completion");
+  const copied = await request("/lessons", "POST", {
+    copyFromLessonId: original.id,
+  });
+  assert.equal(copied.status, 201);
+  const copy = await copied.json();
+  const other = await lessonWithTexts(78);
+  const currentAudio = async (lessonId: number) =>
+    (await (await request(`/lessons/${lessonId}/audio/th`)).json()).audio;
+
+  // A retry for the original upload still answers the original Lesson Audio.
+  const retry = await complete(first.id, original.id, "th");
+  assert.equal(retry.status, 200);
+  assert.deepEqual(await retry.json(), first.completion);
+
+  // The copy's Lesson Audio for that Media Asset answers for the copy, and no other is made.
+  const copyRetry = await complete(first.id, copy.id, "th");
+  assert.equal(copyRetry.status, 200);
+  const { mediaAsset: completed, lessonAudio } = await copyRetry.json();
+  assert.deepEqual(completed, first.completion.mediaAsset);
+  assert.notEqual(lessonAudio.id, first.completion.lessonAudio.id);
+  assert.equal(lessonAudio.lessonId, copy.id);
+  assert.equal(lessonAudio.languageCode, "th");
+  assert.equal(lessonAudio.audioVersion, 1);
+  assert.equal(lessonAudio.isCurrent, true);
+
+  // A Lesson and Language with no Lesson Audio for it is a rebind, even beside a shared one.
+  for (const [lessonId, languageCode] of [
+    [copy.id, "da"],
+    [original.id, "da"],
+    [other.id, "th"],
+  ] as const) {
+    const rebind = await complete(first.id, lessonId, languageCode);
+    assert.equal(rebind.status, 409, `${lessonId}:${languageCode}`);
+    assert.equal(await code(rebind), "media_asset_rebind_conflict");
+  }
+  assert.equal(await currentAudio(other.id), null);
+
+  // A new upload on the copy follows its one copied version, and the original keeps its audio.
+  const correction = await upload(copy.id, "th");
+  assert.equal(correction.completion.lessonAudio.audioVersion, 2);
+  assert.equal(correction.completion.lessonAudio.lessonId, copy.id);
+  assert.equal((await currentAudio(copy.id)).mediaAssetId, correction.id);
+  const originalAudio = await currentAudio(original.id);
+  assert.equal(originalAudio.mediaAssetId, first.id);
+  assert.equal(originalAudio.audioVersion, 1);
+  assert.equal((await mediaAsset(first.id)).status, "READY");
+});

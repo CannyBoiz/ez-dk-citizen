@@ -27,6 +27,17 @@ export function createAdminLessonRoutes(
       const detail = await data.createLesson(
         c.req.valid("json") as CreateLessonRequest,
       );
+      if (detail === "lesson_not_found") {
+        return problem(c, 404, detail, "Lesson was not found.");
+      }
+      if (detail === "lesson_not_copyable") {
+        return problem(
+          c,
+          409,
+          detail,
+          "Only Published and Archived Lessons can be copied.",
+        );
+      }
       c.header("Location", `/api/admin/lessons/${detail.id}`);
       return c.json(detail, 201);
     })

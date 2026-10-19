@@ -4,6 +4,7 @@ import type {
   AdminLessonAudio,
   ChangeKind,
   CompleteMediaAssetRequest,
+  CreateLessonRequest,
   CreateSourceRequest,
   CreateUploadIntentRequest,
   LessonDetail,
@@ -423,10 +424,49 @@ export function fakeBackend(
 
     if (!id) {
       if (request.method === "POST") {
-        const created = lessonDetail(
-          Math.max(0, ...lessons.map((lesson) => lesson.id)) + 1,
-          { chapter: (request.body as { chapter: number }).chapter },
+        const body = request.body as CreateLessonRequest;
+        const createdId =
+          Math.max(0, ...lessons.map((lesson) => lesson.id)) + 1;
+        if ("chapter" in body) {
+          const created = lessonDetail(createdId, { chapter: body.chapter });
+          lessons.push(created);
+          return { status: 201, body: created };
+        }
+        // A new version starts with its source's texts, citations, and current audio at
+        // version 1 on the same Media Asset.
+        const original = lessons.find(
+          (lesson) => lesson.id === body.copyFromLessonId,
         );
+        if (!original)
+          return problem(
+            404,
+            "lesson_not_found",
+            "Lesson was not found.",
+            "req-404",
+          );
+        if (original.status === "DRAFT")
+          return problem(
+            409,
+            "lesson_not_copyable",
+            "Only Published and Archived Lessons can be copied.",
+            "req-409-copy",
+          );
+        const { chapter, availableLanguageCodes, lessonTexts, lessonSources } =
+          structuredClone(original);
+        const created = lessonDetail(createdId, {
+          chapter,
+          availableLanguageCodes,
+          lessonTexts,
+          lessonSources,
+        });
+        for (const { languageCode } of lessonTexts) {
+          const stored = currentAudio[`${original.id}:${languageCode}`];
+          if (stored)
+            currentAudio[`${createdId}:${languageCode}`] = {
+              ...stored,
+              audioVersion: 1,
+            };
+        }
         lessons.push(created);
         return { status: 201, body: created };
       }

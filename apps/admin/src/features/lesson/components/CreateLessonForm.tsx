@@ -1,7 +1,7 @@
-// The form behind Create draft: it asks for the chapter and says where that chapter stands, and
-// nothing reaches the Backend until the admin confirms.
+// The form behind Create draft and Create new version: it asks for the chapter, or shows the
+// fixed chapter of a new version, and nothing reaches the Backend until the admin confirms.
 import type { LessonSummary } from "@ez-dk-citizen/api-contracts/schemas";
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 import {
   EditForm,
@@ -19,37 +19,55 @@ const chapterField: Field = {
 };
 
 export function CreateLessonForm({
-  lessons,
-  value,
-  onChange,
+  lessons = null,
+  value = {},
+  onChange = () => undefined,
   onCreate,
   onClose,
+  fixedChapter,
+  name = "New Draft",
+  submitLabel = "Create draft",
+  confirmMessage = `Create a new Draft of chapter ${value.chapter}?`,
+  children,
 }: {
-  // The Lesson list the chapter's standing is read from; null until it is loaded.
-  lessons: LessonSummary[] | null;
+  // The Lesson list the typed chapter's standing is read from; null until it is loaded.
+  lessons?: LessonSummary[] | null;
   // What the admin has typed, held by the caller.
-  value: Values;
-  onChange: (value: Values) => void;
+  value?: Values;
+  onChange?: (value: Values) => void;
   // Creates the Lesson once the admin confirms; a refusal is shown in the form.
   onCreate: (chapter: number) => Promise<void>;
   // Cancel, once nothing typed is left to lose or the admin agreed to discard it.
   onClose: () => void;
+  // A new version's chapter, which it keeps from the Lesson it copies: shown, never typed.
+  fixedChapter?: number;
+  name?: string;
+  submitLabel?: string;
+  confirmMessage?: string;
+  // Shown below the chapter, such as what a new version copies.
+  children?: ReactNode;
 }) {
   const form = useRef<HTMLFormElement>(null);
 
-  // Starts on the chapter field, as the admin opened the form to fill it in.
-  useEffect(() => form.current?.querySelector("input")?.focus(), []);
+  // Starts on the first control the admin can use: the chapter, or else the submit.
+  useEffect(
+    () =>
+      form.current
+        ?.querySelector<HTMLElement>("input:not([readonly]), button")
+        ?.focus(),
+    [],
+  );
 
   return (
     <EditForm
       ref={form}
-      name="New Draft"
-      fields={[chapterField]}
+      name={name}
+      fields={fixedChapter === undefined ? [chapterField] : []}
       value={value}
       onChange={onChange}
-      submitLabel="Create draft"
-      confirmMessage={`Create a new Draft of chapter ${value.chapter}?`}
-      onSave={({ chapter }) => onCreate(Number(chapter))}
+      submitLabel={submitLabel}
+      confirmMessage={confirmMessage}
+      onSave={({ chapter }) => onCreate(fixedChapter ?? Number(chapter))}
       onCancel={onClose}
       cancelMessage={
         value.chapter?.trim()
@@ -57,8 +75,16 @@ export function CreateLessonForm({
           : null
       }
     >
-      {/* Always rendered, so screen readers announce it as the chapter changes. */}
-      <p role="status">{standing(lessons, value.chapter)}</p>
+      {fixedChapter === undefined ? (
+        // Always rendered, so screen readers announce it as the chapter changes.
+        <p role="status">{standing(lessons, value.chapter)}</p>
+      ) : (
+        <label>
+          Chapter
+          <input type="number" value={fixedChapter} readOnly />
+        </label>
+      )}
+      {children}
     </EditForm>
   );
 }

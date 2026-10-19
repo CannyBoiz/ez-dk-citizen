@@ -284,6 +284,21 @@ try { await storage.inspectObject(discardedKey); throw new Error('Deleted Draft 
 await storage.inspectObject(storage.uploads[1].key);
 const refusedDelete = await call('/api/admin/lessons/' + fix.body.id, 'DELETE');
 if (refusedDelete.response.status !== 409 || refusedDelete.body.code !== 'lesson_not_editable' || (await call('/api/admin/lessons/' + fix.body.id, 'GET')).body.status !== 'PUBLISHED') throw new Error('A Published Lesson was deleted.');
+const sharedIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: fix.body.id, languageCode: 'th', originalFilename: 'shared.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const sharedKey = storage.uploads.at(-1).key;
+storage.putObject(sharedKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
+if ((await call('/api/admin/media/' + sharedIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: fix.body.id, languageCode: 'th' })).response.status !== 200) throw new Error('Audio upload to a Published Lesson failed.');
+const uploadsBeforeCopy = storage.uploads.length;
+const newVersion = await call('/api/admin/lessons', 'POST', { copyFromLessonId: fix.body.id });
+if (newVersion.response.status !== 201 || newVersion.body.status !== 'DRAFT' || newVersion.body.chapter !== 2 || newVersion.body.version !== null || JSON.stringify(newVersion.body.lessonTexts) !== JSON.stringify(fixed.body.lessonTexts) || JSON.stringify(newVersion.body.lessonSources) !== JSON.stringify(fixed.body.lessonSources)) throw new Error('A Published Lesson was not copied into a new version.');
+const copiedAudio = await call('/api/admin/lessons/' + newVersion.body.id + '/audio/th', 'GET');
+if (copiedAudio.response.status !== 200 || copiedAudio.body.audio?.mediaAssetId !== sharedIntent.body.mediaAssetId || copiedAudio.body.audio?.audioVersion !== 1 || storage.playbackAuthorizations.at(-1) !== sharedKey || storage.uploads.length !== uploadsBeforeCopy) throw new Error('The new version did not play the shared audio without an upload.');
+const notCopyable = await call('/api/admin/lessons', 'POST', { copyFromLessonId: newVersion.body.id });
+if (notCopyable.response.status !== 409 || notCopyable.body.code !== 'lesson_not_copyable') throw new Error('A Draft was copied.');
+const deletedCopy = await call('/api/admin/lessons/' + newVersion.body.id, 'DELETE');
+if (deletedCopy.response.status !== 204 || (await data.getMediaAsset(sharedIntent.body.mediaAssetId)).status !== 'READY') throw new Error('Deleting the new version did not keep the shared Media Asset.');
+await storage.inspectObject(sharedKey);
+if ((await call('/api/mobile/lessons/' + fix.body.id, 'GET')).body.audio?.mediaAssetId !== sharedIntent.body.mediaAssetId) throw new Error('Deleting the new version took the shared audio from the Published Lesson.');
 await data.close();
 `;
 }

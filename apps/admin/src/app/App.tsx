@@ -64,8 +64,9 @@ export function App({ network }: { network: Network }) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [warnOnUnload]);
 
-  const leaveWarning =
-    losses.length === 0 ? null : `${losses.join(" ")} Leave anyway?`;
+  // What leaving the open screen would discard, if anything.
+  const discards = losses.length === 0 ? null : losses.join(" ");
+  const leaveWarning = discards && `${discards} Leave anyway?`;
 
   function disconnect() {
     setToken(null);
@@ -142,13 +143,17 @@ export function App({ network }: { network: Network }) {
             {screen === "sources" ? (
               <SourceFinder call={call} onUnsavedChange={setUnsaved} />
             ) : (
+              // Keyed, so another Lesson's editor starts afresh.
               <LessonView
+                key={screen.lessonId}
                 call={call}
                 putObject={network.putObject}
                 lessonId={screen.lessonId}
                 onUnsavedChange={setUnsaved}
                 onUploadChange={setUpload}
                 onDelete={() => setScreen("catalogue")}
+                onOpen={(lessonId) => setScreen({ lessonId })}
+                discards={discards}
               />
             )}
           </>

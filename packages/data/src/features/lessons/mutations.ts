@@ -31,14 +31,85 @@ export async function createLesson(
   database: DataDatabase,
   input: CreateLessonRequest,
 ) {
-  const [created] = await database.transaction(async (transaction) =>
-    transaction
-      .insert(lesson)
-      .values({ chapter: input.chapter, status: "DRAFT" })
-      .returning({ id: lesson.id }),
+  return database.transaction((transaction) =>
+    "chapter" in input
+      ? insertDraft(transaction, input.chapter)
+      : copyLesson(transaction, input.copyFromLessonId),
   );
+}
+
+async function insertDraft(transaction: DataTransaction, chapter: number) {
+  const [created] = await transaction
+    .insert(lesson)
+    .values({ chapter, status: "DRAFT" })
+    .returning({ id: lesson.id });
   if (!created) throw new Error("Lesson insert returned no row.");
   return created.id;
+}
+
+// A new version: a Draft of the source's chapter with its Lesson Texts, its Lesson Sources and
+// their references, and each Language's current READY audio as audio version 1 on the same
+// Media Asset (ADR-0008); audio history stays behind. Only Published and Archived Lessons are
+// copied, as deleteLesson relies on: their Lesson Audio is never deleted.
+async function copyLesson(transaction: DataTransaction, sourceId: number) {
+  const [original] = await transaction
+    .select({ chapter: lesson.chapter, status: lesson.status })
+    .from(lesson)
+    .where(eq(lesson.id, sourceId));
+  if (!original) return "lesson_not_found" as const;
+  if (original.status === "DRAFT") return "lesson_not_copyable" as const;
+
+  const id = await insertDraft(transaction, original.chapter);
+  const texts = await transaction
+    .select({
+      languageCode: lessonText.languageCode,
+      title: lessonText.title,
+      content: lessonText.content,
+    })
+    .from(lessonText)
+    .where(eq(lessonText.lessonId, sourceId));
+  const citations = await transaction
+    .select({
+      sourceId: lessonSource.sourceId,
+      pageFrom: lessonSource.pageFrom,
+      pageTo: lessonSource.pageTo,
+      sectionReference: lessonSource.sectionReference,
+    })
+    .from(lessonSource)
+    .where(eq(lessonSource.lessonId, sourceId));
+  const currentAudio = await transaction
+    .select({
+      languageCode: lessonAudio.languageCode,
+      mediaAssetId: lessonAudio.mediaAssetId,
+    })
+    .from(lessonAudio)
+    .innerJoin(mediaAsset, eq(mediaAsset.id, lessonAudio.mediaAssetId))
+    .where(
+      and(
+        eq(lessonAudio.lessonId, sourceId),
+        eq(lessonAudio.isCurrent, true),
+        eq(mediaAsset.status, "READY"),
+      ),
+    );
+  // The audio follows the texts, whose Lesson Text it requires.
+  if (texts.length)
+    await transaction
+      .insert(lessonText)
+      .values(texts.map((text) => ({ lessonId: id, ...text })));
+  if (citations.length)
+    await transaction
+      .insert(lessonSource)
+      .values(citations.map((citation) => ({ lessonId: id, ...citation })));
+  if (currentAudio.length)
+    await transaction.insert(lessonAudio).values(
+      currentAudio.map((audio) => ({
+        lessonId: id,
+        ...audio,
+        audioVersion: 1,
+        isCurrent: true,
+      })),
+    );
+  return id;
 }
 
 // Deletes a Draft with its Lesson Audio, and with its Lesson Texts and Lesson Sources by cascade.

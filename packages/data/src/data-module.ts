@@ -56,7 +56,10 @@ export interface DataModule {
     | "lesson_archived"
     | "lesson_text_not_found"
   >;
-  createLesson(input: CreateLessonRequest): Promise<LessonDetail>;
+  // Copying refuses a Draft as not copyable, and a missing Lesson as not found.
+  createLesson(
+    input: CreateLessonRequest,
+  ): Promise<LessonDetail | "lesson_not_found" | "lesson_not_copyable">;
   listLessons(status?: LessonStatus): Promise<LessonListResponse>;
   // Lessons with a Lesson Text in the Language, in full.
   listLessonsInLanguage(

@@ -295,6 +295,27 @@ test("Lesson transport contracts are strict and keep database fields private", (
   );
 });
 
+test("a Lesson is created either for a chapter or as a new version copied from another Lesson", () => {
+  assert.deepEqual(createLessonRequestSchema.parse({ copyFromLessonId: 7 }), {
+    copyFromLessonId: 7,
+  });
+  for (const invalid of [
+    { copyFromLessonId: 0 },
+    { copyFromLessonId: 1.5 },
+    { copyFromLessonId: "7" },
+    // A new version keeps its source's chapter.
+    { chapter: 2, copyFromLessonId: 7 },
+    { copyFromLessonId: 7, extra: true },
+    {},
+  ]) {
+    assert.equal(
+      createLessonRequestSchema.safeParse(invalid).success,
+      false,
+      JSON.stringify(invalid),
+    );
+  }
+});
+
 test("Lesson versions are a positive major and a non-negative patch, both absent on Drafts", () => {
   const summary = {
     id: 1,
