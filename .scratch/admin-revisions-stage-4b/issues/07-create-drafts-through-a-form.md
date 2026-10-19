@@ -10,12 +10,12 @@ See the spec section "Admin" (Create form) and user stories 6–9.
 
 **Blocked by:** 02 — Give versions at publication
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Clicking Create draft opens the form and sends no request
-- [ ] The form shows the typed chapter's highest Published or Archived version and its status, or says the chapter has none
-- [ ] Confirm requires the in-page confirmation; confirming creates the Draft and opens its editor
-- [ ] Cancelling the confirmation makes no request and keeps the form
-- [ ] Cancel on an empty form closes it at once; on a filled form it asks before discarding
-- [ ] A backend error is shown in the form with the chapter kept
-- [ ] Whole-app tests cover the above
+- [x] Clicking Create draft opens the form and sends no request
+- [x] The form shows the typed chapter's highest Published or Archived version and its status, or says the chapter has none
+- [x] Confirm requires the in-page confirmation; confirming creates the Draft and opens its editor
+- [x] Cancelling the confirmation makes no request and keeps the form
+- [x] Cancel on an empty form closes it at once; on a filled form it asks before discarding
+- [x] A backend error is shown in the form with the chapter kept
+- [x] Whole-app tests cover the above

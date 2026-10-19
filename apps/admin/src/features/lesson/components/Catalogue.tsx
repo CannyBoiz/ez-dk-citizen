@@ -1,4 +1,4 @@
-// The Lesson catalogue: every Lesson filtered in the browser, plus the New Draft Lesson form.
+// The Lesson catalogue: every Lesson filtered in the browser, plus Create draft and its form.
 // A Draft has no version until it is published, so it is shown with its creation date.
 import {
   type CreateLessonRequest,
@@ -7,14 +7,16 @@ import {
   lessonListResponseSchema,
   lessonStatusSchema,
 } from "@ez-dk-citizen/api-contracts/schemas";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
-import { EditForm, type Values } from "../../../shared/components/EditForm";
+import type { Values } from "../../../shared/components/EditForm";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
 import type { Call } from "../../../shared/lib/backend";
 import type { CatalogueFilters } from "../types";
 import { statusLabels } from "../utils/statusLabels";
 import { lessonLabel, versionLabel } from "../utils/versions";
+import { CreateLessonForm } from "./CreateLessonForm";
 
 // Mounted afresh whenever the admin returns to it, so it always reloads from the backend.
 export function Catalogue({
@@ -30,11 +32,19 @@ export function Catalogue({
 }) {
   const [lessons, setLessons] = useState<LessonSummary[] | null>(null);
   const [error, setError] = useState<unknown>(null);
+  // The New Draft form's values while it is open; null while it is closed.
   const [newDraft, setNewDraft] = useState(readNewDraft);
+  const opener = useRef<HTMLButtonElement>(null);
 
-  function changeNewDraft(value: Values) {
+  function changeNewDraft(value: Values | null) {
     setNewDraft(value);
-    storeNewDraft(value);
+    storeNewDraft(value ?? {});
+  }
+
+  // Create draft comes back with focus. Synchronously, so it is in the page before it takes focus.
+  function closeNewDraft() {
+    flushSync(() => changeNewDraft(null));
+    opener.current?.focus();
   }
 
   async function load() {
@@ -75,30 +85,38 @@ export function Catalogue({
         <button type="button" onClick={load}>
           Refresh
         </button>
+        {newDraft === null && (
+          <button
+            type="button"
+            ref={opener}
+            className="primary"
+            onClick={() => changeNewDraft({ chapter: "" })}
+          >
+            Create draft
+          </button>
+        )}
       </div>
       {error !== null && <ErrorMessage error={error} onRetry={load} />}
-      <EditForm
-        name="New Draft Lesson"
-        fields={[
-          { name: "chapter", label: "New Draft chapter", kind: "number" },
-        ]}
-        value={newDraft}
-        onChange={changeNewDraft}
-        submitLabel="Create Draft"
-        className="inline-form"
-        onSave={async ({ chapter }) => {
-          const created = await call(
-            {
-              method: "POST",
-              path: "/api/admin/lessons",
-              body: { chapter: Number(chapter) } satisfies CreateLessonRequest,
-            },
-            lessonDetailSchema,
-          );
-          storeNewDraft({});
-          onOpen(created.id);
-        }}
-      />
+      {newDraft !== null && (
+        <CreateLessonForm
+          lessons={lessons}
+          value={newDraft}
+          onChange={changeNewDraft}
+          onCreate={async (chapter) => {
+            const created = await call(
+              {
+                method: "POST",
+                path: "/api/admin/lessons",
+                body: { chapter } satisfies CreateLessonRequest,
+              },
+              lessonDetailSchema,
+            );
+            storeNewDraft({});
+            onOpen(created.id);
+          }}
+          onClose={closeNewDraft}
+        />
+      )}
       {lessons?.length === 0 && <p>No Lessons yet.</p>}
       {!!lessons?.length && (
         <>
@@ -189,12 +207,13 @@ export function Catalogue({
 // no secret: the token never touches storage. Storage can be unavailable, so failures are ignored.
 const newDraftKey = "ez-dk-citizen.admin.newDraft";
 
-function readNewDraft(): Values {
+// A form left filled in opens again with its values; otherwise it starts closed.
+function readNewDraft(): Values | null {
   try {
     const stored = JSON.parse(localStorage.getItem(newDraftKey) ?? "{}");
-    return { chapter: String(stored.chapter ?? "") };
+    return stored.chapter ? { chapter: String(stored.chapter) } : null;
   } catch {
-    return { chapter: "" };
+    return null;
   }
 }
 

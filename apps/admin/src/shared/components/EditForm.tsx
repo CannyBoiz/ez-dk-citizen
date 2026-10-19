@@ -1,5 +1,11 @@
 // The shared explicitly saved form behind every editable form in the Admin.
-import { type SubmitEvent, useId, useState } from "react";
+import {
+  type ReactNode,
+  type Ref,
+  type SubmitEvent,
+  useId,
+  useState,
+} from "react";
 
 import { BackendError } from "../lib/backend";
 import { ConfirmButton } from "./ConfirmButton";
@@ -38,8 +44,11 @@ export function EditForm({
   readOnly = false,
   submitLabel = "Save",
   status,
-  className,
   confirmMessage,
+  ref,
+  children,
+  onCancel,
+  cancelMessage = null,
 }: {
   name: string;
   fields: Field[];
@@ -53,10 +62,15 @@ export function EditForm({
   readOnly?: boolean;
   submitLabel?: string;
   status?: string;
-  // Extra layout class for the form, such as "inline-form".
-  className?: string;
   // Asked in the page once the fields pass their checks, before anything is saved.
   confirmMessage?: string;
+  ref?: Ref<HTMLFormElement>;
+  // Shown below the fields, such as where the typed values lead.
+  children?: ReactNode;
+  // A Cancel beside the submit that closes the form: at once, or after asking in the page
+  // when `cancelMessage` says what closing would discard.
+  onCancel?: () => void;
+  cancelMessage?: string | null;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -93,10 +107,31 @@ export function EditForm({
     if (onSave && !confirmMessage && check()) await save();
   }
 
+  const saveButton =
+    !readOnly &&
+    onSave &&
+    (confirmMessage ? (
+      // Checked again on confirming, in case a field changed while it asked.
+      <ConfirmButton
+        disabled={busy}
+        message={confirmMessage}
+        confirmLabel={submitLabel}
+        canOpen={check}
+        onConfirm={() => (check() ? save() : undefined)}
+      >
+        {submitLabel}
+      </ConfirmButton>
+    ) : (
+      <button type="submit" disabled={busy}>
+        {submitLabel}
+      </button>
+    ));
+
   return (
     <form
+      ref={ref}
       aria-label={name}
-      className={className ? `card ${className}` : "card"}
+      className="card"
       noValidate
       onSubmit={submit}
     >
@@ -142,24 +177,23 @@ export function EditForm({
           </div>
         );
       })}
-      {!readOnly &&
-        onSave &&
-        (confirmMessage ? (
-          // Checked again on confirming, in case a field changed while it asked.
+      {children}
+      {onCancel ? (
+        <div className="form-actions">
+          {saveButton}
+          {/* Held back while saving, so a form being saved is never closed under it. */}
           <ConfirmButton
             disabled={busy}
-            message={confirmMessage}
-            confirmLabel={submitLabel}
-            canOpen={check}
-            onConfirm={() => (check() ? save() : undefined)}
+            message={cancelMessage}
+            confirmLabel="Discard"
+            onConfirm={onCancel}
           >
-            {submitLabel}
+            Cancel
           </ConfirmButton>
-        ) : (
-          <button type="submit" disabled={busy}>
-            {submitLabel}
-          </button>
-        ))}
+        </div>
+      ) : (
+        saveButton
+      )}
       {error !== null && <ErrorMessage error={error} />}
     </form>
   );
