@@ -72,7 +72,8 @@ export interface DataModule {
     | "lesson_not_found"
     | "lesson_text_not_found"
   >;
-  // A publication refused for missing prerequisites lists them as `missing`.
+  // A publication refused for missing prerequisites lists them as `missing`. Publishing over
+  // the chapter's Published Lesson archives it, when `replacesLessonId` names it.
   patchLesson(
     id: number,
     input: PatchLessonRequest,
@@ -84,6 +85,7 @@ export interface DataModule {
     | "unsupported_language"
     | "change_kind_required"
     | "published_lesson_conflict"
+    | "lesson_unchanged"
     | "lesson_version_conflict"
     | { missing: NonNullable<ProblemDetails["errors"]> }
   >;

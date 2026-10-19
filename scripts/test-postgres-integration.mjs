@@ -284,6 +284,14 @@ try { await storage.inspectObject(discardedKey); throw new Error('Deleted Draft 
 await storage.inspectObject(storage.uploads[1].key);
 const refusedDelete = await call('/api/admin/lessons/' + fix.body.id, 'DELETE');
 if (refusedDelete.response.status !== 409 || refusedDelete.body.code !== 'lesson_not_editable' || (await call('/api/admin/lessons/' + fix.body.id, 'GET')).body.status !== 'PUBLISHED') throw new Error('A Published Lesson was deleted.');
+const successor = await call('/api/admin/lessons', 'POST', { chapter: 2 });
+await call('/api/admin/lessons/' + successor.body.id + '/sources/' + source.body.id, 'PUT', {});
+const unnamed = await call('/api/admin/lessons/' + successor.body.id, 'PATCH', { status: 'PUBLISHED', changeKind: 'content', text: { languageCode: 'th', title: 'ไทย', content: 'ฉบับใหม่' } });
+if (unnamed.response.status !== 409 || unnamed.body.code !== 'published_lesson_conflict' || (await call('/api/admin/lessons/' + fix.body.id, 'GET')).body.status !== 'PUBLISHED') throw new Error('A publication replaced a Published Lesson it did not name.');
+const replacement = await call('/api/admin/lessons/' + successor.body.id, 'PATCH', { status: 'PUBLISHED', changeKind: 'content', replacesLessonId: fix.body.id, text: { languageCode: 'th', title: 'ไทย', content: 'ฉบับใหม่' } });
+if (replacement.response.status !== 200 || replacement.body.status !== 'PUBLISHED' || replacement.body.version !== 2 || replacement.body.versionPatch !== 0 || (await call('/api/admin/lessons/' + fix.body.id, 'GET')).body.status !== 'ARCHIVED') throw new Error('The replacement did not archive the Published Lesson and publish the Draft.');
+const replacedList = (await call('/api/mobile/lessons', 'GET')).body.items.filter((item) => item.chapter === 2);
+if (replacedList.length !== 1 || replacedList[0].id !== successor.body.id || replacedList[0].version !== 2 || replacedList[0].versionPatch !== 0 || replacedList[0].title !== 'ไทย') throw new Error('The mobile list did not show the replacing version.');
 await data.close();
 `;
 }

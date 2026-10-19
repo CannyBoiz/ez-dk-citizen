@@ -73,6 +73,8 @@ export const patchLessonRequestSchema = z
       .optional(),
     status: lessonStatusSchema.optional(),
     changeKind: changeKindSchema.optional(),
+    // The chapter's Published Lesson as the admin last saw it, which publication archives.
+    replacesLessonId: safePositiveInteger.optional(),
   })
   .refine(
     (value) =>
@@ -85,6 +87,14 @@ export const patchLessonRequestSchema = z
     {
       path: ["changeKind"],
       message: "A change kind is allowed only when publishing.",
+    },
+  )
+  .refine(
+    (value) =>
+      value.replacesLessonId === undefined || value.status === "PUBLISHED",
+    {
+      path: ["replacesLessonId"],
+      message: "A replaced Lesson is allowed only when publishing.",
     },
   );
 

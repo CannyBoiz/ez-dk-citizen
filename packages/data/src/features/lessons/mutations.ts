@@ -119,10 +119,14 @@ export async function patchLesson(
     const status = input.status ?? existing.status;
     // The version publication gives; other changes leave it as it is.
     let given: LessonVersion | undefined;
+    // The chapter's Published Lesson, which a replacement archives.
+    let replaced: { id: number; updatedAt: Date } | undefined;
 
     if (status === "PUBLISHED") {
-      const [published] = await transaction
-        .select({ id: lesson.id })
+      // Locked, so concurrent replacements of one Lesson take turns, and the later one finds
+      // it archived.
+      [replaced] = await transaction
+        .select({ id: lesson.id, updatedAt: lesson.updatedAt })
         .from(lesson)
         .where(
           and(
@@ -130,8 +134,12 @@ export async function patchLesson(
             eq(lesson.status, "PUBLISHED"),
             ne(lesson.id, id),
           ),
-        );
-      if (published) return "published_lesson_conflict" as const;
+        )
+        .for("update");
+      // The admin names the Published Lesson it expects to replace, so a stale page never
+      // archives another one.
+      if (replaced?.id !== input.replacesLessonId)
+        return "published_lesson_conflict" as const;
 
       const [thaiText] = await transaction
         .select({ lessonId: lessonText.lessonId })
@@ -164,6 +172,13 @@ export async function patchLesson(
       ];
       if (missing.length) return { missing };
 
+      if (
+        replaced &&
+        (await citedContent(transaction, id, input.text)) ===
+          (await citedContent(transaction, replaced.id))
+      )
+        return "lesson_unchanged" as const;
+
       const next = nextVersion(
         await selectHighestVersion(transaction, chapter),
         input.changeKind,
@@ -177,6 +192,15 @@ export async function patchLesson(
       const { languageCode, ...text } = input.text;
       await writeLessonText(transaction, id, languageCode, text);
     }
+    if (replaced) {
+      await transaction
+        .update(lesson)
+        .set({
+          status: "ARCHIVED",
+          updatedAt: nextUpdatedAt(replaced.updatedAt),
+        })
+        .where(eq(lesson.id, replaced.id));
+    }
     await transaction
       .update(lesson)
       .set({
@@ -188,6 +212,50 @@ export async function patchLesson(
       .where(eq(lesson.id, id));
     return id;
   });
+}
+
+// What a replacement must change, comparable as a string: every Lesson Text, with `text` saved
+// over its Language's, and every Lesson Source with its references. Audio is left out, since
+// an audio-only change goes straight onto the Published Lesson.
+async function citedContent(
+  transaction: DataTransaction,
+  lessonId: number,
+  text?: PatchLessonRequest["text"],
+) {
+  const texts = new Map(
+    (
+      await transaction
+        .select({
+          languageCode: lessonText.languageCode,
+          title: lessonText.title,
+          content: lessonText.content,
+        })
+        .from(lessonText)
+        .where(eq(lessonText.lessonId, lessonId))
+    ).map((saved) => [saved.languageCode, saved]),
+  );
+  if (text) texts.set(text.languageCode, text);
+  const sources = await transaction
+    .select({
+      sourceId: lessonSource.sourceId,
+      pageFrom: lessonSource.pageFrom,
+      pageTo: lessonSource.pageTo,
+      sectionReference: lessonSource.sectionReference,
+    })
+    .from(lessonSource)
+    .where(eq(lessonSource.lessonId, lessonId))
+    .orderBy(lessonSource.sourceId);
+  return JSON.stringify([
+    [...texts.values()]
+      .map(({ languageCode, title, content }) => [languageCode, title, content])
+      .sort(([a], [b]) => (a < b ? -1 : 1)),
+    sources.map(({ sourceId, pageFrom, pageTo, sectionReference }) => [
+      sourceId,
+      pageFrom,
+      pageTo,
+      sectionReference,
+    ]),
+  ]);
 }
 
 export async function upsertLessonText(

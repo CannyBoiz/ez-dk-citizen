@@ -2,12 +2,10 @@
 
 import type {
   AdminLessonAudio,
-  ChangeKind,
   CompleteMediaAssetRequest,
   CreateSourceRequest,
   CreateUploadIntentRequest,
   LessonDetail,
-  LessonStatus,
   LessonSummary,
   PatchLessonRequest,
   SourceResponse,
@@ -258,15 +256,28 @@ export function fakeBackend(
       ].map((source) => [source.id, source]),
     ).values(),
   ];
-  // Every accepted transition succeeds; tests inject the backend's refusals through `override`.
-  // Publication gives the version as the data module does: 1.0 for the chapter's first, and
-  // otherwise the highest Published or Archived version raised by the change kind.
+  // Every accepted transition succeeds; tests inject the backend's other refusals through
+  // `override`. Publication gives the version as the data module does: 1.0 for the chapter's
+  // first, and otherwise the highest Published or Archived version raised by the change kind.
+  // It archives the chapter's Published Lesson, which `replacesLessonId` must name.
   function transition(
     lesson: LessonDetail,
-    status: LessonStatus,
-    changeKind?: ChangeKind,
+    { status, changeKind, replacesLessonId }: PatchLessonRequest,
   ): BackendResponse {
     if (status === "PUBLISHED") {
+      const published = lessons.find(
+        (other) =>
+          other !== lesson &&
+          other.chapter === lesson.chapter &&
+          other.status === "PUBLISHED",
+      );
+      if (published?.id !== replacesLessonId)
+        return problem(
+          409,
+          "published_lesson_conflict",
+          "This publication does not replace the chapter's current Published Lesson.",
+          "req-409-published",
+        );
       const [highest] = lessons
         .filter(
           (other) => other.chapter === lesson.chapter && other.version !== null,
@@ -305,8 +316,12 @@ export function fakeBackend(
                 versionPatch: highest.versionPatch! + 1,
               },
       );
+      if (published) {
+        published.status = "ARCHIVED";
+        touch(published);
+      }
     }
-    lesson.status = status;
+    lesson.status = status!;
     touch(lesson);
     return { status: 200, body: lesson };
   }
@@ -464,10 +479,9 @@ export function fakeBackend(
       };
     }
     if (request.method === "GET") return { status: 200, body: lesson };
-    const { status, changeKind } =
-      (request.body as PatchLessonRequest | undefined) ?? {};
-    if (request.method === "PATCH" && status)
-      return transition(lesson, status, changeKind);
+    const command = (request.body as PatchLessonRequest | undefined) ?? {};
+    if (request.method === "PATCH" && command.status)
+      return transition(lesson, command);
     if (lesson.status !== "DRAFT")
       return problem(
         409,

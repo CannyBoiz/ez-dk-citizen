@@ -447,6 +447,41 @@ test("only a publication carries a change kind, and only content or fix", () => 
   }
 });
 
+test("only a publication names the Published Lesson it replaces, by its ID", () => {
+  assert.deepEqual(
+    patchLessonRequestSchema.parse({
+      status: "PUBLISHED",
+      changeKind: "fix",
+      replacesLessonId: 7,
+    }),
+    { status: "PUBLISHED", changeKind: "fix", replacesLessonId: 7 },
+  );
+  for (const replacesLessonId of [0, -1, 1.5, "7", null]) {
+    assert.throws(
+      () =>
+        patchLessonRequestSchema.parse({
+          status: "PUBLISHED",
+          replacesLessonId,
+        }),
+      undefined,
+      String(replacesLessonId),
+    );
+  }
+  for (const body of [
+    { replacesLessonId: 7 },
+    { chapter: 2, replacesLessonId: 7 },
+    { status: "ARCHIVED", replacesLessonId: 7 },
+  ]) {
+    const result = patchLessonRequestSchema.safeParse(body);
+    assert.equal(result.success, false, JSON.stringify(body));
+    if (body.chapter === undefined && body.status === undefined) continue;
+    assert.deepEqual(
+      result.error?.issues.map((issue) => issue.path),
+      [["replacesLessonId"]],
+    );
+  }
+});
+
 test("Source contracts accept only trimmed HTTP URLs and offset timestamps", () => {
   assert.deepEqual(
     createSourceRequestSchema.parse({
