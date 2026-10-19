@@ -450,6 +450,71 @@ function replaceButton() {
   });
 }
 
+// The Publication actions by their visible names.
+function actions() {
+  return within(publication())
+    .queryAllByRole("button")
+    .map((button) => button.textContent);
+}
+
+// Publish named Replace, once the editor's read of the Lesson list shows the chapter's Published version.
+function replaceTrigger() {
+  return within(publication()).findByRole("button", { name: "Replace" });
+}
+
+test("Publish reads Replace on a Draft whose chapter has a Published version, as the Lesson list read when the editor opens shows it", async () => {
+  const backend = fakeBackend([
+    complete(1, { status: "PUBLISHED" }),
+    complete(2, { chapter: 1 }),
+    complete(3, { chapter: 2, status: "ARCHIVED" }),
+  ]);
+  await openFirst(backend, draftOfChapterOne);
+
+  await waitFor(() => expect(actions()).toEqual(["Replace", "Delete"]));
+
+  // Moved to a chapter with no Published version, the Draft publishes without replacing.
+  type("Chapter", "2", chapterForm());
+  fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
+  await screen.findByRole("heading", {
+    name: "Chapter 2 · Draft, created 11 Oct 2026",
+  });
+  expect(actions()).toEqual(["Publish", "Delete"]);
+});
+
+test("Replace follows the confirmation's fresh read when the chapter gained a Published version after the editor opened", async () => {
+  let elsewhere = false;
+  const backend = fakeBackend([complete(1)], {
+    // Another tab published chapter 1 after this editor opened.
+    override: (request) =>
+      elsewhere &&
+      request.method === "GET" &&
+      request.path === "/api/admin/lessons"
+        ? {
+            status: 200,
+            body: {
+              items: [
+                lessonSummary(1, { availableLanguageCodes: ["th"] }),
+                lessonSummary(2, { chapter: 1, status: "PUBLISHED" }),
+              ],
+            },
+          }
+        : undefined,
+  });
+  await openFirst(backend);
+  await settle();
+  expect(actions()).toEqual(["Publish", "Delete"]);
+  elsewhere = true;
+
+  fireEvent.click(publishButton());
+
+  await waitFor(() => expect(replaceButton()).toBeTruthy());
+  expect(confirmation(publication()).textContent).toContain(
+    "Archive version 1.0 and publish this Draft",
+  );
+  answer("Cancel", publication());
+  expect(actions()).toEqual(["Replace", "Delete"]);
+});
+
 test("when the chapter has a Published version, the confirmation replaces it, naming both versions, and the catalogue reflects both changes", async () => {
   const backend = fakeBackend([
     complete(1, { status: "PUBLISHED", version: 2, versionPatch: 1 }),
@@ -459,7 +524,7 @@ test("when the chapter has a Published version, the confirmation replaces it, na
   const message = () =>
     confirmation(publication()).querySelector("p")?.textContent;
 
-  fireEvent.click(publishButton());
+  fireEvent.click(await replaceTrigger());
   await waitFor(() =>
     expect(choices()).toEqual(["Content change → 3.0", "Fix → 2.2"]),
   );
@@ -488,7 +553,7 @@ test("when the chapter has a Published version, the confirmation replaces it, na
   await settle();
   expect(patches(backend)).toEqual([]);
 
-  fireEvent.click(publishButton());
+  fireEvent.click(await replaceTrigger());
   await waitFor(() =>
     expect(choices()).toEqual(["Content change → 3.0", "Fix → 2.2"]),
   );
@@ -532,7 +597,7 @@ test("a replacement that changes nothing is refused inside the confirmation", as
     draftOfChapterOne,
   );
 
-  fireEvent.click(publishButton());
+  fireEvent.click(await replaceTrigger());
   await waitFor(() =>
     expect(choices()).toEqual(["Content change → 2.0", "Fix → 1.1"]),
   );
@@ -548,11 +613,7 @@ test("a replacement that changes nothing is refused inside the confirmation", as
   expect(alert.textContent).toContain("req-409-unchanged");
   expect(screen.getByText("Draft")).toBeTruthy();
   answer("Cancel", publication());
-  expect(
-    within(publication())
-      .getAllByRole("button")
-      .map((button) => button.textContent),
-  ).toEqual(["Publish", "Delete"]);
+  expect(actions()).toEqual(["Replace", "Delete"]);
 });
 
 test("a Published version the confirmation did not know of is refused inside it, which then names the current one", async () => {
@@ -592,7 +653,7 @@ test("a Published version the confirmation did not know of is refused inside it,
   await openFirst(backend, draftOfChapterOne);
   stale = true;
 
-  fireEvent.click(publishButton());
+  fireEvent.click(await replaceTrigger());
   await waitFor(() =>
     expect(choices()).toEqual(["Content change → 2.0", "Fix → 1.1"]),
   );
@@ -630,14 +691,10 @@ test.each([
   ["DRAFT", ["Publish", "Delete"]],
   ["PUBLISHED", ["Archive"]],
   ["ARCHIVED", []],
-] as const)("a %s Lesson offers %j", async (status, actions) => {
+] as const)("a %s Lesson offers %j", async (status, offered) => {
   await openFirst(fakeBackend([complete(1, { status })]));
 
-  expect(
-    within(publication())
-      .queryAllByRole("button")
-      .map((button) => button.textContent),
-  ).toEqual(actions);
+  expect(actions()).toEqual(offered);
 });
 
 test("deleting a Draft asks in the page what will be lost, and then returns to the catalogue without it", async () => {
