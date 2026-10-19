@@ -152,7 +152,8 @@ test("a failed Source create shows the error, keeps the input, and clears the la
   await within(finder()).findByText(
     "Source created: https://example.dk/first.",
   );
-  backend.network.bff = () => Promise.reject(new TypeError("Failed to fetch"));
+  backend.network.backend = () =>
+    Promise.reject(new TypeError("Failed to fetch"));
 
   type("Source URL", "https://example.dk/offline", newSourceForm());
   fireEvent.click(

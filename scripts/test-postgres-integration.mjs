@@ -20,10 +20,9 @@ const composeEnvironment = {
   POSTGRES_DB: databaseName,
   POSTGRES_USER: databaseUser,
   POSTGRES_PASSWORD: databasePassword,
-  DATA_SERVICE_TOKEN: "integration-only-data-service-token",
+  ADMIN_API_TOKEN: "integration-only-admin-token",
   AWS_REGION: "eu-north-1",
   S3_BUCKET: "integration-only-bucket",
-  ...(endToEnd ? { ADMIN_API_TOKEN: "integration-only-admin-token" } : {}),
 };
 const composeArguments = [
   "compose",
@@ -50,16 +49,15 @@ await withTeardown(
       "--wait",
       "--wait-timeout",
       "120",
-      endToEnd ? "bff" : "hono-data",
+      "backend",
     ]);
     if (endToEnd) {
-      await verifyBffReadiness();
-      await verifyDistinctCredentials();
+      await verifyBackendReadiness();
       await runDocker([
         ...composeArguments,
         "exec",
         "-T",
-        "bff",
+        "backend",
         "node",
         "-e",
         tracer(),
@@ -68,7 +66,7 @@ await withTeardown(
         ...composeArguments,
         "exec",
         "-T",
-        "bff",
+        "backend",
         "node",
         "--input-type=module",
         "-e",
@@ -96,6 +94,16 @@ await withTeardown(
       ]);
       await runDocker([
         ...composeArguments,
+        "--profile",
+        "integration",
+        "run",
+        "--build",
+        "--no-deps",
+        "--rm",
+        "backend-test",
+      ]);
+      await runDocker([
+        ...composeArguments,
         "run",
         "--no-deps",
         "--rm",
@@ -110,7 +118,7 @@ await withTeardown(
         "--rm",
         "postgres-check",
       ]);
-      await verifyFailedMigrationBlocksDataService();
+      await verifyFailedMigrationBlocksBackend();
     }
   },
   // A plain `down` skips containers from inactive profiles, such as
@@ -158,19 +166,19 @@ if (detail.content !== 'เนื้อหา' || !detail.availableLanguageCodes
 
 function completionTracer() {
   return String.raw`
-import { createBffApp } from './dist/app.js';
-import { createDataServiceClient } from './dist/data-service/client.js';
+import { createDataModule } from '@ez-dk-citizen/data';
+import { createBackendApp } from './dist/app.js';
 import { FakeStorage } from './dist/storage.js';
 
 const requestId = 'stage-3-completion-tracer';
 const headers = { Authorization: 'Bearer integration-only-admin-token', 'Content-Type': 'application/json', 'X-Request-ID': requestId };
 const storage = new FakeStorage();
-const dataServiceClient = createDataServiceClient('http://hono-data:3000', 'integration-only-data-service-token');
-const app = createBffApp(async () => undefined, {
+const data = createDataModule(process.env.DATABASE_URL, 2000);
+const app = createBackendApp(async () => undefined, {
   adminApiToken: 'integration-only-admin-token',
   storage,
   storageBucket: 'integration-only-bucket',
-  dataServiceClient,
+  data,
 });
 const call = async (path, method, body) => {
   const response = await app.request(path, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -224,33 +232,33 @@ const concurrent = await Promise.all(concurrentIntents.map((intent) => call('/ap
 if (concurrent.some(({ response }) => response.status !== 200) || concurrent.map(({ body }) => body.lessonAudio.audioVersion).sort().join(',') !== '3,4' || !concurrent.some(({ body }) => body.lessonAudio.audioVersion === 4 && body.lessonAudio.isCurrent)) throw new Error('Concurrent corrections were not serialized.');
 const missingIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'missing.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
 const missing = await call('/api/admin/media/' + missingIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
-if (missing.response.status !== 409 || missing.body.code !== 'upload_incomplete' || (await dataServiceClient.getMediaAsset(missingIntent.body.mediaAssetId, requestId)).status !== 'PENDING') throw new Error('Missing upload was not left retryable.');
+if (missing.response.status !== 409 || missing.body.code !== 'upload_incomplete' || (await data.getMediaAsset(missingIntent.body.mediaAssetId)).status !== 'PENDING') throw new Error('Missing upload was not left retryable.');
 const inspectObject = storage.inspectObject.bind(storage);
 const transientIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'transient.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
 const transientKey = storage.uploads.at(-1).key;
 storage.inspectObject = async (key) => key === transientKey ? Promise.reject(Object.assign(new Error('temporary storage failure'), { name: 'SlowDown' })) : inspectObject(key);
 const transient = await call('/api/admin/media/' + transientIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
-if (transient.response.status !== 503 || transient.body.code !== 'storage_unavailable' || (await dataServiceClient.getMediaAsset(transientIntent.body.mediaAssetId, requestId)).status !== 'PENDING') throw new Error('Transient upload failure was not left retryable.');
+if (transient.response.status !== 503 || transient.body.code !== 'storage_unavailable' || (await data.getMediaAsset(transientIntent.body.mediaAssetId)).status !== 'PENDING') throw new Error('Transient upload failure was not left retryable.');
 storage.inspectObject = inspectObject;
 const invalidIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'invalid.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
 const invalidKey = storage.uploads.at(-1).key;
 storage.putObject(invalidKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
 const invalid = await call('/api/admin/media/' + invalidIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
-if (invalid.response.status !== 422 || invalid.body.code !== 'invalid_uploaded_media' || (await dataServiceClient.getMediaAsset(invalidIntent.body.mediaAssetId, requestId)).status !== 'FAILED') throw new Error('Invalid upload was not failed.');
+if (invalid.response.status !== 422 || invalid.body.code !== 'invalid_uploaded_media' || (await data.getMediaAsset(invalidIntent.body.mediaAssetId)).status !== 'FAILED') throw new Error('Invalid upload was not failed.');
 try { await storage.inspectObject(invalidKey); throw new Error('Invalid object was not deleted.'); } catch (error) { if (error.message !== 'S3 object was not found.') throw error; }
 const failedRetry = await call('/api/admin/media/' + invalidIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (failedRetry.response.status !== 409 || failedRetry.body.code !== 'media_asset_failed') throw new Error('Failed upload was not terminal.');
 const typeIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'wrong-type.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
 storage.putObject(storage.uploads.at(-1).key, { contentType: 'audio/ogg', sizeBytes: 1 });
 const wrongType = await call('/api/admin/media/' + typeIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
-if (wrongType.response.status !== 422 || (await dataServiceClient.getMediaAsset(typeIntent.body.mediaAssetId, requestId)).status !== 'FAILED') throw new Error('Wrong content type was not failed.');
+if (wrongType.response.status !== 422 || (await data.getMediaAsset(typeIntent.body.mediaAssetId)).status !== 'FAILED') throw new Error('Wrong content type was not failed.');
 const deleteObject = storage.deleteObject.bind(storage);
 const cleanupIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'cleanup.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
 const cleanupKey = storage.uploads.at(-1).key;
 storage.putObject(cleanupKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
 storage.deleteObject = async (key) => key === cleanupKey ? Promise.reject(Object.assign(new Error('cleanup failed'), { name: 'AccessDenied' })) : deleteObject(key);
 const cleanup = await call('/api/admin/media/' + cleanupIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
-if (cleanup.response.status !== 422 || (await dataServiceClient.getMediaAsset(cleanupIntent.body.mediaAssetId, requestId)).status !== 'FAILED') throw new Error('Cleanup failure restored invalid media.');
+if (cleanup.response.status !== 422 || (await data.getMediaAsset(cleanupIntent.body.mediaAssetId)).status !== 'FAILED') throw new Error('Cleanup failure restored invalid media.');
 const archived = await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'ARCHIVED' });
 if (archived.response.status !== 200 || archived.body.status !== 'ARCHIVED') throw new Error('Completion tracer archive failed.');
 const archivedAudio = await readAdminAudio();
@@ -271,110 +279,100 @@ const discardedKey = storage.uploads.at(-1).key;
 storage.putObject(discardedKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
 await call('/api/admin/media/' + discardedIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: discarded.body.id, languageCode: 'th' });
 const deletedDraft = await call('/api/admin/lessons/' + discarded.body.id, 'DELETE');
-if (deletedDraft.response.status !== 204 || deletedDraft.body !== undefined || (await call('/api/admin/lessons/' + discarded.body.id, 'GET')).response.status !== 404 || (await dataServiceClient.getMediaAsset(discardedIntent.body.mediaAssetId, requestId)).status !== 'DELETED') throw new Error('Draft deletion failed.');
+if (deletedDraft.response.status !== 204 || deletedDraft.body !== undefined || (await call('/api/admin/lessons/' + discarded.body.id, 'GET')).response.status !== 404 || (await data.getMediaAsset(discardedIntent.body.mediaAssetId)).status !== 'DELETED') throw new Error('Draft deletion failed.');
 try { await storage.inspectObject(discardedKey); throw new Error('Deleted Draft audio stayed in storage.'); } catch (error) { if (error.message !== 'S3 object was not found.') throw error; }
 await storage.inspectObject(storage.uploads[1].key);
 const refusedDelete = await call('/api/admin/lessons/' + fix.body.id, 'DELETE');
 if (refusedDelete.response.status !== 409 || refusedDelete.body.code !== 'lesson_not_editable' || (await call('/api/admin/lessons/' + fix.body.id, 'GET')).body.status !== 'PUBLISHED') throw new Error('A Published Lesson was deleted.');
+await data.close();
 `;
 }
 
-async function verifyBffReadiness() {
+async function verifyBackendReadiness() {
   await runDocker([
     ...composeArguments,
     "exec",
     "-T",
-    "bff",
+    "backend",
     "node",
     "-e",
     "Promise.all(['/health', '/ready'].map(async (path) => { const response = await fetch('http://127.0.0.1:3000' + path); if (!response.ok) throw new Error(path + ' is unavailable'); }))",
   ]);
-  await runDocker([...composeArguments, "pause", "hono-data"]);
+  await runDocker([...composeArguments, "pause", "postgres"]);
   try {
     await runDocker([
       ...composeArguments,
       "exec",
       "-T",
-      "bff",
+      "backend",
       "node",
       "-e",
-      "Promise.all([fetch('http://127.0.0.1:3000/health'), fetch('http://127.0.0.1:3000/ready')]).then(async ([health, ready]) => { if (!health.ok || ready.status !== 503) throw new Error('BFF liveness and readiness are not independent'); })",
+      "Promise.all([fetch('http://127.0.0.1:3000/health'), fetch('http://127.0.0.1:3000/ready')]).then(async ([health, ready]) => { if (!health.ok || ready.status !== 503) throw new Error('Backend liveness and readiness are not independent'); })",
     ]);
   } finally {
-    await runDocker([...composeArguments, "unpause", "hono-data"]);
+    await runDocker([...composeArguments, "unpause", "postgres"]);
   }
   await runDocker([
     ...composeArguments,
     "exec",
     "-T",
-    "bff",
+    "backend",
     "node",
     "-e",
-    "for (let attempt = 0; attempt < 20; attempt += 1) { if ((await fetch('http://127.0.0.1:3000/ready')).ok) process.exit(0); await new Promise((resolve) => setTimeout(resolve, 250)); } throw new Error('BFF did not become ready');",
-  ]);
-}
-
-async function verifyDistinctCredentials() {
-  await runDocker([
-    ...composeArguments,
-    "exec",
-    "-T",
-    "bff",
-    "node",
-    "-e",
-    "fetch('http://hono-data:3000/internal/lessons', { headers: { Authorization: 'Bearer integration-only-admin-token' } }).then((response) => { if (response.status !== 401) throw new Error('Admin credential reached the Data Service'); })",
+    "for (let attempt = 0; attempt < 20; attempt += 1) { if ((await fetch('http://127.0.0.1:3000/ready')).ok) process.exit(0); await new Promise((resolve) => setTimeout(resolve, 250)); } throw new Error('Backend did not become ready');",
   ]);
 }
 
 async function verifyTracerLogs() {
-  const logs = await Promise.all(
-    ["bff", "hono-data"].map((service) =>
-      captureDocker([...composeArguments, "logs", "--no-log-prefix", service]),
-    ),
-  );
-  for (const output of logs) {
-    const entries = output
-      .split("\n")
-      .flatMap((line) => {
-        try {
-          return [JSON.parse(line)];
-        } catch {
-          return [];
-        }
-      })
-      .filter((entry) => entry.requestId === "stage-2-tracer");
-    assert.ok(entries.length > 0, "Expected completion logs for the tracer.");
-    for (const entry of entries) {
-      assert.equal(typeof entry.method, "string");
-      assert.equal(typeof entry.path, "string");
-      assert.equal(typeof entry.status, "number");
-      assert.equal(typeof entry.durationMs, "number");
-    }
-    for (const secret of [
-      "integration-only-admin-token",
-      "integration-only-data-service-token",
-      "เนื้อหา",
-    ]) {
-      assert.doesNotMatch(output, new RegExp(secret));
-    }
+  const backendLogs = await captureDocker([
+    ...composeArguments,
+    "logs",
+    "--no-log-prefix",
+    "backend",
+  ]);
+  const entries = backendLogs
+    .split("\n")
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line)];
+      } catch {
+        return [];
+      }
+    })
+    .filter((entry) => entry.requestId === "stage-2-tracer");
+  assert.ok(entries.length > 0, "Expected completion logs for the tracer.");
+  for (const entry of entries) {
+    assert.equal(typeof entry.method, "string");
+    assert.equal(typeof entry.path, "string");
+    assert.equal(typeof entry.status, "number");
+    assert.equal(typeof entry.durationMs, "number");
+  }
+  for (const secret of ["integration-only-admin-token", "เนื้อหา"]) {
+    assert.doesNotMatch(backendLogs, new RegExp(secret));
   }
 }
 
 function assertPrivateCompiledTopology(config) {
+  assert.deepEqual(Object.keys(config.services).sort(), [
+    "backend",
+    "migrate",
+    "postgres",
+  ]);
   assert.equal(config.services.postgres.ports, undefined);
-  assert.equal(config.services["hono-data"].ports, undefined);
-  assert.equal(config.services.bff.ports, undefined);
-  assert.equal(config.services.bff.environment.AWS_ACCESS_KEY_ID, undefined);
+  assert.equal(config.services.backend.ports, undefined);
   assert.equal(
-    config.services.bff.environment.AWS_SECRET_ACCESS_KEY,
+    config.services.backend.environment.AWS_ACCESS_KEY_ID,
     undefined,
   );
   assert.equal(
-    config.services.bff.depends_on["hono-data"].condition,
-    "service_healthy",
+    config.services.backend.environment.AWS_SECRET_ACCESS_KEY,
+    undefined,
   );
+  assert.deepEqual(Object.keys(config.services.backend.depends_on), [
+    "migrate",
+  ]);
   assert.equal(
-    config.services["hono-data"].depends_on.migrate.condition,
+    config.services.backend.depends_on.migrate.condition,
     "service_completed_successfully",
   );
   assert.equal(
@@ -383,7 +381,7 @@ function assertPrivateCompiledTopology(config) {
   );
 }
 
-async function verifyFailedMigrationBlocksDataService() {
+async function verifyFailedMigrationBlocksBackend() {
   const exitCode = await runDockerForExitCode([
     ...composeArguments,
     "--profile",
@@ -393,7 +391,7 @@ async function verifyFailedMigrationBlocksDataService() {
     "--wait",
     "--wait-timeout",
     "30",
-    "data-after-failed-migration",
+    "backend-after-failed-migration",
   ]);
   assert.notEqual(exitCode, 0, "The intentionally broken migration must fail.");
 
@@ -413,12 +411,12 @@ async function verifyFailedMigrationBlocksDataService() {
     "--status",
     "running",
     "--services",
-    "data-after-failed-migration",
+    "backend-after-failed-migration",
   ]);
   assert.equal(
     runningBlockedService.trim(),
     "",
-    "The Data Service must remain stopped after migration failure.",
+    "The Backend must remain stopped after migration failure.",
   );
 }
 

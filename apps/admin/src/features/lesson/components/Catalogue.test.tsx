@@ -229,7 +229,7 @@ test("opening a Lesson shows its structure, Lesson Texts, and Lesson Sources, an
   expect(rows()).toEqual([["1", "1.0", "Archived", "da, th"]]);
 });
 
-test("a Data Service outage shows the error with its request ID and can be retried", async () => {
+test("a database outage shows the error with its request ID and can be retried", async () => {
   let listCalls = 0;
   let outage = true;
   render(
@@ -238,10 +238,10 @@ test("a Data Service outage shows the error with its request ID and can be retri
         fakeNetwork(() =>
           ++listCalls > 1 && outage
             ? problem(
-                502,
-                "data_service_unavailable",
-                "The Data Service is unavailable.",
-                "req-502",
+                503,
+                "database_unavailable",
+                "The database is unavailable.",
+                "req-503",
               )
             : { status: 200, body: { items: catalogue } },
         ).network
@@ -251,8 +251,8 @@ test("a Data Service outage shows the error with its request ID and can be retri
   await connect(validToken);
 
   const alert = await screen.findByRole("alert");
-  expect(alert.textContent).toContain("The Data Service is unavailable.");
-  expect(alert.textContent).toContain("req-502");
+  expect(alert.textContent).toContain("The database is unavailable.");
+  expect(alert.textContent).toContain("req-503");
 
   outage = false;
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));

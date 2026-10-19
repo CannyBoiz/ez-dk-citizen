@@ -9,10 +9,10 @@ Changes to Lesson Audio and completion:
 
 Creating a Lesson also accepts `{ copyFromLessonId }`:
 
-- One Data Service transaction copies the source's chapter, every Lesson Text, and every Lesson Source with its references.
+- One data module transaction copies the source's chapter, every Lesson Text, and every Lesson Source with its references.
 - For each Language with a current `READY` Lesson Audio, it creates a current Lesson Audio at audio version 1 backed by the same Media Asset. Audio history is not copied.
 - A Draft source is a new `409 lesson_not_copyable`, a missing Lesson is `404 lesson_not_found`, and success returns `201` with the Lesson detail.
-- The BFF passes `lesson_not_copyable` through as `409`.
+- The Backend maps `lesson_not_copyable` to `409`.
 
 In the Admin, Published and Archived editors offer Create new version. It opens the form from ticket 07 with the chapter fixed and a read-only list of what will be copied: the Languages with Lesson Text, the number of Lesson Sources, and the Languages with current audio. Confirm creates the copy and opens its editor. The copied audio plays at once.
 
@@ -35,4 +35,4 @@ See the spec sections "Creating Lessons and new versions", "Shared Media Assets 
 - [ ] The Admin offers Create new version on Published and Archived Lessons only, shows the copy list with the chapter fixed, requires the confirmation, and opens the copy's editor
 - [ ] Saving a Lesson Text in a Language with copied audio shows the narration warning
 - [ ] The fake-storage end-to-end tracer copies a Published Lesson with audio, plays the copy's audio without an upload, and deletes the copy with the shared object kept in fake storage
-- [ ] Contract, Data Service (real PostgreSQL), BFF route, and whole-app tests cover the above
+- [ ] Contract, Backend route, Admin API integration (real PostgreSQL), and whole-app tests cover the above

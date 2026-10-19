@@ -1,4 +1,4 @@
-// Connecting with the admin token and reporting BFF errors on connect.
+// Connecting with the admin token and reporting Backend errors on connect.
 import { render, screen } from "@testing-library/react";
 import { expect, test } from "vitest";
 
@@ -49,15 +49,15 @@ test("rejects an invalid token clearly", async () => {
   expect(screen.queryByText(/Connected/)).toBeNull();
 });
 
-test("BFF errors show their message and request ID", async () => {
+test("Backend errors show their message and request ID", async () => {
   render(
     <App
       network={
         fakeNetwork(() =>
           problem(
             503,
-            "data_service_unavailable",
-            "The Data Service is unavailable.",
+            "database_unavailable",
+            "The database is unavailable.",
             "req-503",
           ),
         ).network
@@ -68,15 +68,15 @@ test("BFF errors show their message and request ID", async () => {
   await connect(validToken);
 
   const alert = await screen.findByRole("alert");
-  expect(alert.textContent).toContain("The Data Service is unavailable.");
+  expect(alert.textContent).toContain("The database is unavailable.");
   expect(alert.textContent).toContain("req-503");
 });
 
-test("an unreachable BFF is reported", async () => {
+test("an unreachable Backend is reported", async () => {
   render(
     <App
       network={{
-        bff: () => Promise.reject(new TypeError("Failed to fetch")),
+        backend: () => Promise.reject(new TypeError("Failed to fetch")),
         putObject: () => Promise.reject(new Error("Not used")),
       }}
     />,
@@ -85,6 +85,6 @@ test("an unreachable BFF is reported", async () => {
   await connect(validToken);
 
   expect((await screen.findByRole("alert")).textContent).toContain(
-    "Could not reach the BFF.",
+    "Could not reach the Backend.",
   );
 });

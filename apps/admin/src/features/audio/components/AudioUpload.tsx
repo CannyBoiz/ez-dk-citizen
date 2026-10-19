@@ -13,7 +13,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
-import { BffError, type Call } from "../../../shared/lib/bff";
+import { BackendError, type Call } from "../../../shared/lib/backend";
 import { type Network, StorageError } from "../../../shared/lib/network";
 import type { AudioTarget } from "../types";
 
@@ -66,11 +66,11 @@ const failureKinds = {
   terminal: { help: string };
 };
 
-// A completion failure that a retry may get past: the BFF unreachable, failing upstream, or
+// A completion failure that a retry may get past: the Backend unreachable, failing upstream, or
 // answering unreadably, or the token rejected (re-entered before retrying). Any other 4xx is a
 // refusal that is final for the attempt.
 const isTransient = (error: unknown) =>
-  !(error instanceof BffError) ||
+  !(error instanceof BackendError) ||
   error.status === undefined ||
   error.status === 401 ||
   error.status < 400 ||

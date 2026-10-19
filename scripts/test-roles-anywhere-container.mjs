@@ -42,8 +42,6 @@ const composeEnvironment = {
   ...process.env,
   ADMIN_API_TOKEN:
     process.env.ADMIN_API_TOKEN ?? "roles-anywhere-smoke-admin-token",
-  DATA_SERVICE_TOKEN:
-    process.env.DATA_SERVICE_TOKEN ?? "roles-anywhere-smoke-data-service-token",
   POSTGRES_DB: "roles_anywhere_smoke",
   POSTGRES_USER: "roles_anywhere_smoke",
   POSTGRES_PASSWORD: "roles-anywhere-smoke-password",
@@ -69,11 +67,13 @@ const composeArguments = [
 ];
 
 await runDocker([...composeArguments, "config", "--quiet"]);
+// Every profile, so the one-shot and test containers are checked too.
 const config = JSON.parse(
   (
-    await runDocker([...composeArguments, "config", "--format", "json"], {
-      captureOutput: true,
-    })
+    await runDocker(
+      [...composeArguments, "--profile", "*", "config", "--format", "json"],
+      { captureOutput: true },
+    )
   ).output,
 );
 assertTopology(config);
@@ -88,7 +88,7 @@ await withTeardown(
       "--wait",
       "--wait-timeout",
       "120",
-      "bff",
+      "backend",
     ]);
     await assertImageContents();
     await assertPrivateKeyReadable();
@@ -125,16 +125,18 @@ async function requireFile(file) {
 }
 
 function assertTopology(composeConfig) {
-  const bff = composeConfig.services.bff;
-  assert.equal(bff.environment.AWS_PROFILE, "roles-anywhere");
+  const backend = composeConfig.services.backend;
+  assert.equal(backend.environment.AWS_PROFILE, "roles-anywhere");
   assert.equal(
-    bff.environment.AWS_CONFIG_FILE,
+    backend.environment.AWS_CONFIG_FILE,
     "/run/ez-dk-citizen/aws/config",
   );
-  assert.equal(bff.environment.AWS_ACCESS_KEY_ID, undefined);
-  assert.equal(bff.environment.AWS_SECRET_ACCESS_KEY, undefined);
+  assert.equal(backend.environment.AWS_ACCESS_KEY_ID, undefined);
+  assert.equal(backend.environment.AWS_SECRET_ACCESS_KEY, undefined);
 
-  const mounts = new Map(bff.volumes.map((volume) => [volume.target, volume]));
+  const mounts = new Map(
+    backend.volumes.map((volume) => [volume.target, volume]),
+  );
   for (const target of [
     "/run/ez-dk-citizen/aws/config",
     "/run/ez-dk-citizen/identity/workload.crt",
@@ -151,10 +153,26 @@ function assertTopology(composeConfig) {
     assert.ok(composeConfig.services.postgres.environment[name]);
   }
 
-  for (const name of ["postgres", "migrate", "hono-data"]) {
-    const service = composeConfig.services[name];
-    assert.equal(service.environment.AWS_PROFILE, undefined);
-    assert.equal(service.volumes?.length ?? 0, name === "postgres" ? 1 : 0);
+  // Only the running Backend holds the AWS identity.
+  assert.deepEqual(Object.keys(composeConfig.services).sort(), [
+    "backend",
+    "backend-after-failed-migration",
+    "backend-test",
+    "migrate",
+    "migration-failure",
+    "postgres",
+    "postgres-check",
+    "postgres-test",
+  ]);
+  for (const [name, service] of Object.entries(composeConfig.services)) {
+    if (name === "backend") continue;
+    assert.equal(service.environment.AWS_PROFILE, undefined, name);
+    assert.equal(service.environment.AWS_CONFIG_FILE, undefined, name);
+    assert.equal(
+      service.volumes?.length ?? 0,
+      name === "postgres" ? 1 : 0,
+      name,
+    );
   }
 }
 
@@ -164,7 +182,7 @@ async function assertIdentity() {
       ...composeArguments,
       "exec",
       "-T",
-      "bff",
+      "backend",
       "node",
       "--input-type=module",
       "-e",
@@ -192,7 +210,7 @@ async function assertPrivateKeyReadable() {
     ...composeArguments,
     "exec",
     "-T",
-    "bff",
+    "backend",
     "node",
     "--input-type=module",
     "-e",
@@ -209,7 +227,7 @@ async function assertLegacyVariableRejected(name) {
       "--rm",
       "-e",
       `${name}=stale-key`,
-      "bff",
+      "backend",
     ],
     { captureOutput: true, allowFailure: true },
   );
@@ -220,7 +238,7 @@ async function assertLegacyVariableRejected(name) {
 async function assertImageContents() {
   const image = JSON.parse(
     (
-      await runDocker(["image", "inspect", "ez-dk-citizen-bff:local"], {
+      await runDocker(["image", "inspect", "ez-dk-citizen-backend:local"], {
         captureOutput: true,
       })
     ).output,
@@ -237,7 +255,7 @@ async function assertImageContents() {
     "--rm",
     "--entrypoint",
     "sh",
-    "ez-dk-citizen-bff:local",
+    "ez-dk-citizen-backend:local",
     "-ec",
     "test -x /usr/local/bin/aws_signing_helper; test ! -e /run/ez-dk-citizen/aws/config; test ! -e /run/ez-dk-citizen/identity/workload.crt; test ! -e /run/ez-dk-citizen/identity/workload.key; test ! -e /app/runtime; test ! -e /app/extra-files",
   ]);

@@ -28,16 +28,6 @@ type HttpContext = {
   ): Response;
 };
 
-type HttpApp = {
-  use(
-    path: string,
-    handler: (
-      context: HttpContext,
-      next: () => Promise<void>,
-    ) => Promise<void | Response>,
-  ): unknown;
-};
-
 const problemTitles: Record<number, string> = {
   400: "Bad Request",
   401: "Unauthorized",
@@ -49,11 +39,6 @@ const problemTitles: Record<number, string> = {
   503: "Service Unavailable",
   504: "Gateway Timeout",
 };
-
-export function installRequestLifecycle(app: HttpApp): void {
-  app.use("*", assignRequestId);
-  app.use("*", logRequest);
-}
 
 export async function assignRequestId(
   context: HttpContext,

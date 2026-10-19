@@ -12,7 +12,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 
-import { BffError } from "../lib/bff";
+import { BackendError } from "../lib/backend";
 import { ErrorMessage } from "./ErrorMessage";
 
 export function ConfirmButton({
@@ -97,7 +97,7 @@ export function ConfirmButton({
       {failure !== null && (
         <ErrorMessage error={failure}>
           {/* The backend's reasons, such as each unmet publication prerequisite. */}
-          {failure instanceof BffError && !!failure.errors?.length && (
+          {failure instanceof BackendError && !!failure.errors?.length && (
             <ul>
               {failure.errors.map((entry) => (
                 <li key={entry.path.join(".")}>{entry.message}</li>

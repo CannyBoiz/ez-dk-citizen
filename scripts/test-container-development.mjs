@@ -11,21 +11,21 @@ const repositoryRoot = path.resolve(
   "..",
 );
 const projectName = createProjectName("ez-dk-citizen-development-test-");
-const bffPort = await findAvailablePort();
+const backendPort = await findAvailablePort();
 let postgresPort = await findAvailablePort();
 
-while (postgresPort === bffPort) {
+while (postgresPort === backendPort) {
   postgresPort = await findAvailablePort();
 }
 let adminPort = await findAvailablePort();
 
-while (adminPort === bffPort || adminPort === postgresPort) {
+while (adminPort === backendPort || adminPort === postgresPort) {
   adminPort = await findAvailablePort();
 }
 const composeEnvironment = {
   ...process.env,
   ADMIN_UI_PORT: String(adminPort),
-  BFF_PORT: String(bffPort),
+  BACKEND_PORT: String(backendPort),
   POSTGRES_PORT: String(postgresPort),
 };
 
@@ -35,8 +35,7 @@ for (const name of [
   "AWS_REGION",
   "S3_BUCKET",
   "DATABASE_URL",
-  "VITE_BFF_BASE_URL",
-  "DATA_SERVICE_TOKEN",
+  "VITE_BACKEND_BASE_URL",
   "POSTGRES_DB",
   "POSTGRES_PASSWORD",
   "POSTGRES_USER",
@@ -61,41 +60,32 @@ const { output: configOutput } = await spawnDocker(
 );
 const config = JSON.parse(configOutput);
 
-assertPublishedPort(config.services.bff, bffPort, 3000);
+assertPublishedPort(config.services.backend, backendPort, 3000);
 assertPublishedPort(config.services.postgres, postgresPort, 5432);
 assertPublishedPort(config.services.admin, adminPort, 5173);
 assert.deepEqual(config.services.admin.environment, {
-  VITE_BFF_BASE_URL: `http://127.0.0.1:${bffPort}`,
+  VITE_BACKEND_BASE_URL: `http://127.0.0.1:${backendPort}`,
 });
-assert.equal(config.services["hono-data"].ports, undefined);
+assert.deepEqual(Object.keys(config.services).sort(), [
+  "admin",
+  "backend",
+  "migrate",
+  "postgres",
+]);
+assert.equal(config.services.migrate.ports, undefined);
 assertWatch(
-  config.services.bff,
-  [["apps/bff/src", "/workspace/apps/bff/src"]],
+  config.services.backend,
+  [["apps/backend/src", "/workspace/apps/backend/src"]],
   [
-    "apps/bff/Dockerfile",
-    "apps/bff/package.json",
+    "apps/backend/Dockerfile",
+    "apps/backend/package.json",
     "package.json",
     "packages/api-contracts",
+    "packages/data",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
   ],
 );
-assertWatch(
-  config.services["hono-data"],
-  [
-    ["apps/data/drizzle", "/workspace/apps/data/drizzle"],
-    ["apps/data/src", "/workspace/apps/data/src"],
-  ],
-  [
-    "apps/data/Dockerfile",
-    "apps/data/package.json",
-    "package.json",
-    "packages/api-contracts",
-    "pnpm-lock.yaml",
-    "pnpm-workspace.yaml",
-  ],
-);
-
 assertWatch(
   config.services.admin,
   [["apps/admin/src", "/workspace/apps/admin/src"]],
@@ -121,11 +111,11 @@ await withTeardown(
       "--wait",
       "--wait-timeout",
       "120",
-      "bff",
+      "backend",
       "admin",
     ]);
 
-    const response = await fetch(`http://127.0.0.1:${bffPort}/ready`);
+    const response = await fetch(`http://127.0.0.1:${backendPort}/ready`);
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { status: "ok" });
     await connectTo(postgresPort);

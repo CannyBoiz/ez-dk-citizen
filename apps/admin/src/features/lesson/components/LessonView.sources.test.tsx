@@ -426,8 +426,8 @@ test("a failed detach keeps the Lesson Source and shows the error", async () => 
         request.method === "DELETE"
           ? problem(
               503,
-              "data_service_unavailable",
-              "The Data Service is unavailable.",
+              "database_unavailable",
+              "The database is unavailable.",
               "req-503",
             )
           : undefined,
@@ -436,7 +436,7 @@ test("a failed detach keeps the Lesson Source and shows the error", async () => 
 
   fireEvent.click(screen.getByRole("button", { name: `Detach ${law.url}` }));
   const alert = await screen.findByRole("alert");
-  expect(alert.textContent).toContain("The Data Service is unavailable.");
+  expect(alert.textContent).toContain("The database is unavailable.");
   expect(alert.textContent).toContain("req-503");
   expect(lessonSourceUrls()).toEqual([law.url]);
 });

@@ -1,15 +1,18 @@
 import { z } from "zod";
 
-const positiveInteger = z.number().int().positive();
-const nonNegativeInteger = z.number().int().nonnegative();
-const safePositiveInteger = positiveInteger.refine(Number.isSafeInteger);
+// Field rules shared with the data module's result shapes.
+export const positiveInteger = z.number().int().positive();
+export const nonNegativeInteger = z.number().int().nonnegative();
+export const safePositiveInteger = positiveInteger.refine(Number.isSafeInteger);
 const positiveId = z
   .string()
   .regex(/^[1-9]\d*$/)
   .transform(Number)
   .refine(Number.isSafeInteger);
-const timestamp = z.iso.datetime({ offset: true });
-const nonBlankText = z.string().refine((value) => value.trim().length > 0);
+export const timestamp = z.iso.datetime({ offset: true });
+export const nonBlankText = z
+  .string()
+  .refine((value) => value.trim().length > 0);
 const sourceUrl = z
   .string()
   .trim()
@@ -17,12 +20,7 @@ const sourceUrl = z
   .refine((value) => /^https?:\/\//i.test(value));
 export const maxUploadSizeBytes = 50 * 1024 * 1024;
 const languageCode = z.string().trim().min(1).max(35);
-const mp3Filename = z.string().min(1).endsWith(".mp3");
-const audioObjectKey = z
-  .string()
-  .regex(
-    /^(?:audio|smoke)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.mp3$/,
-  );
+export const mp3Filename = z.string().min(1).endsWith(".mp3");
 
 export const livenessResponseSchema = z.strictObject({
   status: z.literal("ok"),
@@ -51,9 +49,6 @@ export const lessonLanguageParamsSchema = z.strictObject({
 export const lessonTextParamsSchema = lessonLanguageParamsSchema;
 export const languageQuerySchema = z.strictObject({
   language: z.string().min(1).optional(),
-});
-export const lessonReadQuerySchema = languageQuerySchema.extend({
-  status: lessonStatusSchema.optional(),
 });
 
 export const createLessonRequestSchema = z.strictObject({
@@ -188,10 +183,6 @@ export const lessonListResponseSchema = z.strictObject({
   items: z.array(lessonSummarySchema),
 });
 
-export const lessonDetailListResponseSchema = z.strictObject({
-  items: z.array(lessonDetailSchema),
-});
-
 // Mobile lists Published Lessons only, so the version is always whole.
 export const mobileLessonSummarySchema = z.strictObject({
   id: positiveInteger,
@@ -234,42 +225,10 @@ export const createUploadIntentRequestSchema = z.strictObject({
   sizeBytes: uploadSizeBytes,
 });
 
-export const createPendingMediaAssetRequestSchema = z.strictObject({
-  languageCode,
-  storageProvider: z.literal("s3"),
-  storageContainer: nonBlankText,
-  objectKey: audioObjectKey,
-  originalFilename: mp3Filename,
-  contentType: z.literal("audio/mpeg"),
-  sizeBytes: uploadSizeBytes,
-});
-
 export const completeMediaAssetRequestSchema = z.strictObject({
   lessonId: safePositiveInteger,
   languageCode,
 });
-
-export const mediaAssetStatusSchema = z.enum([
-  "PENDING",
-  "READY",
-  "FAILED",
-  "DELETED",
-]);
-
-export const mediaAssetResponseSchema = z.strictObject({
-  id: safePositiveInteger,
-  storageProvider: z.literal("s3"),
-  storageContainer: nonBlankText,
-  objectKey: audioObjectKey,
-  originalFilename: mp3Filename,
-  contentType: z.literal("audio/mpeg"),
-  sizeBytes: safePositiveInteger,
-  durationMs: safePositiveInteger.nullable(),
-  status: mediaAssetStatusSchema,
-  createdAt: timestamp,
-  uploadedAt: timestamp.nullable(),
-});
-export const mediaAssetLookupResponseSchema = mediaAssetResponseSchema;
 
 export const uploadIntentResponseSchema = z.strictObject({
   mediaAssetId: safePositiveInteger,
@@ -300,51 +259,25 @@ export const lessonAudioResponseSchema = z.strictObject({
   createdAt: timestamp,
 });
 
-export const publishedLessonAudioSchema = z.strictObject({
+// A Lesson's current audio for the admin, with a fresh Playback URL and no storage identity.
+export const adminLessonAudioSchema = z.strictObject({
   mediaAssetId: safePositiveInteger,
   audioVersion: positiveInteger,
-  objectKey: audioObjectKey,
   contentType: z.literal("audio/mpeg"),
   sizeBytes: safePositiveInteger,
   durationMs: safePositiveInteger.nullable(),
-});
-
-// The Data Service's current READY rendition for one Lesson and Language, in any Lesson status.
-export const currentLessonAudioSchema = publishedLessonAudioSchema.extend({
   originalFilename: mp3Filename,
+  playbackUrl: z.url(),
+  playbackExpiresAt: timestamp,
 });
-
-export const currentLessonAudioResponseSchema = z.strictObject({
-  audio: currentLessonAudioSchema.nullable(),
-});
-
-// The admin projection: storage identity replaced by a fresh Playback URL.
-export const adminLessonAudioSchema = currentLessonAudioSchema
-  .omit({ objectKey: true })
-  .extend({ playbackUrl: z.url(), playbackExpiresAt: timestamp });
 
 export const adminLessonAudioResponseSchema = z.strictObject({
   audio: adminLessonAudioSchema.nullable(),
 });
 
-export const publishedLessonDetailSchema = z.strictObject({
-  ...lessonDetailShape,
-  version: positiveInteger,
-  versionPatch: nonNegativeInteger,
-  currentAudio: publishedLessonAudioSchema.nullable(),
-});
-
 export const completeMediaAssetResponseSchema = z.strictObject({
   mediaAsset: completedMediaAssetResponseSchema,
   lessonAudio: lessonAudioResponseSchema,
-});
-
-// The Data Service's answer to deleting a Draft: the Media Assets it marked DELETED, whose
-// objects the BFF deletes. The BFF answers its own client with no body.
-export const deleteLessonResponseSchema = z.strictObject({
-  deletedMediaAssets: z.array(
-    z.strictObject({ id: safePositiveInteger, objectKey: audioObjectKey }),
-  ),
 });
 
 export const problemDetailsSchema = z.strictObject({
@@ -383,16 +316,9 @@ export type SourceListResponse = z.infer<typeof sourceListResponseSchema>;
 export type LessonStatus = z.infer<typeof lessonStatusSchema>;
 export type LessonSummary = z.infer<typeof lessonSummarySchema>;
 export type LessonDetail = z.infer<typeof lessonDetailSchema>;
-export type PublishedLessonDetail = z.infer<typeof publishedLessonDetailSchema>;
 export type LessonListResponse = z.infer<typeof lessonListResponseSchema>;
-export type LessonDetailListResponse = z.infer<
-  typeof lessonDetailListResponseSchema
->;
 export type MobileLessonDetail = z.infer<typeof mobileLessonDetailSchema>;
 export type MobileLessonAudio = z.infer<typeof mobileLessonAudioSchema>;
-export type CurrentLessonAudioResponse = z.infer<
-  typeof currentLessonAudioResponseSchema
->;
 export type AdminLessonAudio = z.infer<typeof adminLessonAudioSchema>;
 export type AdminLessonAudioResponse = z.infer<
   typeof adminLessonAudioResponseSchema
@@ -404,15 +330,10 @@ export type ProblemDetails = z.infer<typeof problemDetailsSchema>;
 export type CreateUploadIntentRequest = z.infer<
   typeof createUploadIntentRequestSchema
 >;
-export type CreatePendingMediaAssetRequest = z.infer<
-  typeof createPendingMediaAssetRequestSchema
->;
 export type CompleteMediaAssetRequest = z.infer<
   typeof completeMediaAssetRequestSchema
 >;
-export type MediaAssetResponse = z.infer<typeof mediaAssetResponseSchema>;
 export type UploadIntentResponse = z.infer<typeof uploadIntentResponseSchema>;
 export type CompleteMediaAssetResponse = z.infer<
   typeof completeMediaAssetResponseSchema
 >;
-export type DeleteLessonResponse = z.infer<typeof deleteLessonResponseSchema>;

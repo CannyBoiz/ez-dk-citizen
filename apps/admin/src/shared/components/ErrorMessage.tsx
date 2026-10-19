@@ -1,8 +1,8 @@
-// Shows a BFF or storage error's message and any request ID, with an optional Retry and
-// extra detail. A 500 is a backend bug rather than an outage, so it points at the logs.
+// Shows a Backend or storage error's message and any request ID, with an optional Retry and
+// extra detail. A 500 is a Backend bug rather than an outage, so it points at the logs.
 import type { ReactNode } from "react";
 
-import { BffError } from "../lib/bff";
+import { BackendError } from "../lib/backend";
 import { StorageError } from "../lib/network";
 
 export function ErrorMessage({
@@ -18,11 +18,11 @@ export function ErrorMessage({
   children?: ReactNode;
 }) {
   const { message, requestId } =
-    error instanceof BffError
+    error instanceof BackendError
       ? error
       : error instanceof StorageError
         ? { message: error.message, requestId: undefined }
-        : new BffError("Something went wrong.");
+        : new BackendError("Something went wrong.");
   return (
     <div role="alert">
       {context && `${context}: `}
@@ -33,10 +33,10 @@ export function ErrorMessage({
           Request ID: <code>{requestId}</code>
         </>
       )}
-      {error instanceof BffError && error.status === 500 && (
+      {error instanceof BackendError && error.status === 500 && (
         <>
           {" "}
-          The server failed unexpectedly. Look up the request ID in the backend
+          The server failed unexpectedly. Look up the request ID in the Backend
           logs.
         </>
       )}

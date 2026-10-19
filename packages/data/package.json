@@ -1,0 +1,42 @@
+{
+  "name": "@ez-dk-citizen/data",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/data-module.ts",
+      "default": "./dist/src/data-module.js"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "default": "./dist/src/testing.js"
+    }
+  },
+  "files": [
+    "dist",
+    "drizzle",
+    "test-fixtures"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "test": "pnpm --filter @ez-dk-citizen/api-contracts build && node --import tsx --test src/*.test.ts",
+    "test:compiled": "node --test --test-concurrency=1 dist/src/db/lesson.integration.test.js dist/src/db/source.integration.test.js dist/src/db/media-asset.integration.test.js dist/src/db/lesson-audio.integration.test.js dist/src/db/deletion.integration.test.js"
+  },
+  "dependencies": {
+    "@ez-dk-citizen/api-contracts": "workspace:*",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^1.0.0-rc.4",
+    "pg": "^8.23.0",
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^26.3.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "1.0.0-rc.4",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}

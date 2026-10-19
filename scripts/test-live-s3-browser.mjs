@@ -19,19 +19,11 @@ const repositoryRoot = path.resolve(
 );
 const origin = "http://127.0.0.1:5173";
 const rejectedOrigin = "http://127.0.0.1:5174";
-const image = "ez-dk-citizen-bff:local";
-const requiredEnvironment = [
-  "ADMIN_API_TOKEN",
-  "AWS_REGION",
-  "DATA_SERVICE_TOKEN",
-  "S3_BUCKET",
-];
+const image = "ez-dk-citizen-backend:local";
+const requiredEnvironment = ["ADMIN_API_TOKEN", "AWS_REGION", "S3_BUCKET"];
 const missing = requiredEnvironment.filter((name) => !process.env[name]);
 if (missing.length) {
   throw new Error(`Live S3 tracer requires ${missing.join(", ")}.`);
-}
-if (process.env.ADMIN_API_TOKEN === process.env.DATA_SERVICE_TOKEN) {
-  throw new Error("ADMIN_API_TOKEN and DATA_SERVICE_TOKEN must differ.");
 }
 
 const logFiles = (process.env.LIVE_S3_TRACER_LOG_FILES ?? "")
@@ -51,8 +43,6 @@ for (const name of [
 const browserEnvironment = { ...environment };
 for (const name of [
   "ADMIN_API_TOKEN",
-  "DATA_SERVICE_TOKEN",
-  "DATA_SERVICE_URL",
   "S3_BUCKET",
   ...Object.keys(browserEnvironment).filter((name) => name.startsWith("AWS_")),
 ]) {
@@ -86,13 +76,12 @@ assert.equal(
 );
 
 const projectName = createProjectName("ez-dk-live-s3-");
-const containerName = `${projectName}-bff`;
+const containerName = `${projectName}-backend`;
 const composeEnvironment = {
   ...environment,
   ADMIN_API_TOKEN: process.env.ADMIN_API_TOKEN,
   ADMIN_ORIGINS: origin,
   AWS_REGION: process.env.AWS_REGION,
-  DATA_SERVICE_TOKEN: process.env.DATA_SERVICE_TOKEN,
   POSTGRES_DB: `live_s3_${process.pid}`,
   POSTGRES_USER: `live_s3_${process.pid}`,
   POSTGRES_PASSWORD: `live-s3-${randomSuffix()}`,
@@ -136,18 +125,17 @@ const smokeKeyFile = path.join(smokeKeyFileDirectory, smokeKeyFileName);
 await writeFile(smokeKeyFile, "", { mode: 0o600 });
 const entrypointFile = path.join(
   repositoryRoot,
-  "scripts/test-live-s3-bff-entrypoint.mjs",
+  "scripts/test-live-s3-backend-entrypoint.mjs",
 );
 const bytes = new Uint8Array([73, 68, 51, 4, 0, 0, 0, 0]);
 const languageCode = process.env.LIVE_S3_TRACER_LANGUAGE_CODE ?? "th";
 const sensitiveValues = [
   { name: "admin bearer token", value: process.env.ADMIN_API_TOKEN },
-  { name: "Data Service bearer token", value: process.env.DATA_SERVICE_TOKEN },
 ];
 let currentUploadUrl;
-let bffContainerStarted = false;
+let backendContainerStarted = false;
 let browserProfile;
-let bffServer;
+let backendServer;
 let allowedServer;
 let rejectedServer;
 let port;
@@ -160,23 +148,14 @@ await withTeardown(
       allowedServer = await startPageServer(5173, () => currentUploadUrl);
       rejectedServer = await startPageServer(5174, () => currentUploadUrl);
 
-      tracerPhase = "building the BFF image";
-      await runDocker([...composeArguments, "build", "bff"]);
-      tracerPhase = "inspecting the BFF image";
+      tracerPhase = "building the Backend image";
+      await runDocker([...composeArguments, "build", "backend"]);
+      tracerPhase = "inspecting the Backend image";
       await assertImageContents();
-      tracerPhase = "starting the isolated Data Service";
-      await runDocker([
-        ...composeArguments,
-        "up",
-        "--detach",
-        "--build",
-        "--wait",
-        "--wait-timeout",
-        "120",
-        "hono-data",
-      ]);
-      bffContainerStarted = true;
-      tracerPhase = "starting the test BFF container";
+      tracerPhase = "migrating the isolated database";
+      await runDocker([...composeArguments, "run", "--rm", "migrate"]);
+      backendContainerStarted = true;
+      tracerPhase = "starting the test Backend container";
       await runDocker([
         ...composeArguments,
         "run",
@@ -187,28 +166,33 @@ await withTeardown(
         "--publish",
         `127.0.0.1:${port}:3000`,
         "--volume",
-        `${entrypointFile}:/tmp/test-live-s3-bff-entrypoint.mjs:ro`,
+        `${entrypointFile}:/tmp/test-live-s3-backend-entrypoint.mjs:ro`,
         "--volume",
         `${smokeKeyFile}:/tmp/ez-dk-citizen-live-s3-smoke-keys:rw`,
-        "bff",
+        "backend",
         "node",
-        "/tmp/test-live-s3-bff-entrypoint.mjs",
+        "/tmp/test-live-s3-backend-entrypoint.mjs",
       ]);
-      tracerPhase = "inspecting the test BFF container";
+      tracerPhase = "inspecting the test Backend container";
       await assertRunningContainer();
       tracerPhase = "checking the workload key mount";
       await assertPrivateKeyReadable();
       tracerPhase = "verifying the Roles Anywhere identity";
       await assertRoleIdentity();
-      bffServer = `http://127.0.0.1:${port}`;
-      tracerPhase = "waiting for BFF readiness";
-      await waitForBff(bffServer);
+      backendServer = `http://127.0.0.1:${port}`;
+      tracerPhase = "waiting for Backend readiness";
+      await waitForBackend(backendServer);
       browserProfile = await mkdtemp(path.join(tmpdir(), "ez-dk-s3-browser-"));
 
       tracerPhase = "exercising the live upload and playback flow";
-      const lesson = await requestBff(bffServer, "/api/admin/lessons", "POST", {
-        chapter: 1,
-      });
+      const lesson = await requestBackend(
+        backendServer,
+        "/api/admin/lessons",
+        "POST",
+        {
+          chapter: 1,
+        },
+      );
       assert.equal(
         lesson.response.status,
         201,
@@ -219,8 +203,8 @@ await withTeardown(
         title: "Live S3 tracer",
         content: "Temporary lesson used by the opt-in live S3 tracer.",
       };
-      const text = await requestBff(
-        bffServer,
+      const text = await requestBackend(
+        backendServer,
         `/api/admin/lessons/${lessonId}/texts/${languageCode}`,
         "PUT",
         textBody,
@@ -231,8 +215,8 @@ await withTeardown(
         "Tracer Lesson Text was not saved.",
       );
       if (languageCode !== "th") {
-        const thaiText = await requestBff(
-          bffServer,
+        const thaiText = await requestBackend(
+          backendServer,
           `/api/admin/lessons/${lessonId}/texts/th`,
           "PUT",
           textBody,
@@ -243,17 +227,22 @@ await withTeardown(
           "Tracer Thai Lesson Text was not saved.",
         );
       }
-      const source = await requestBff(bffServer, "/api/admin/sources", "POST", {
-        url: "https://example.test/live-s3-tracer",
-        publishedAt: null,
-      });
+      const source = await requestBackend(
+        backendServer,
+        "/api/admin/sources",
+        "POST",
+        {
+          url: "https://example.test/live-s3-tracer",
+          publishedAt: null,
+        },
+      );
       assert.equal(
         source.response.status,
         201,
         "Tracer Source was not created.",
       );
-      const lessonSource = await requestBff(
-        bffServer,
+      const lessonSource = await requestBackend(
+        backendServer,
         `/api/admin/lessons/${lessonId}/sources/${source.body.id}`,
         "PUT",
         {},
@@ -263,8 +252,8 @@ await withTeardown(
         200,
         "Tracer Lesson Source was not attached.",
       );
-      const published = await requestBff(
-        bffServer,
+      const published = await requestBackend(
+        backendServer,
         `/api/admin/lessons/${lessonId}`,
         "PATCH",
         { status: "PUBLISHED" },
@@ -282,8 +271,8 @@ await withTeardown(
         contentType: "audio/mpeg",
         sizeBytes: bytes.byteLength,
       };
-      const intent = await requestBff(
-        bffServer,
+      const intent = await requestBackend(
+        backendServer,
         "/api/admin/media/upload-intents",
         "POST",
         uploadBody,
@@ -352,8 +341,8 @@ await withTeardown(
         "rejected",
       );
 
-      const completed = await requestBff(
-        bffServer,
+      const completed = await requestBackend(
+        backendServer,
         `/api/admin/media/${intent.body.mediaAssetId}/complete`,
         "POST",
         { lessonId, languageCode },
@@ -385,7 +374,7 @@ await withTeardown(
       ]);
 
       const mobile = await fetch(
-        `${bffServer}/api/mobile/lessons/${lessonId}?language=${encodeURIComponent(languageCode)}`,
+        `${backendServer}/api/mobile/lessons/${lessonId}?language=${encodeURIComponent(languageCode)}`,
       );
       assert.equal(mobile.status, 200, "Mobile Lesson was not returned.");
       const lessonResponse = await mobile.json();
@@ -435,12 +424,17 @@ await withTeardown(
       );
 
       tracerPhase = "deleting a Draft with uploaded audio";
-      const draft = await requestBff(bffServer, "/api/admin/lessons", "POST", {
-        chapter: 1,
-      });
+      const draft = await requestBackend(
+        backendServer,
+        "/api/admin/lessons",
+        "POST",
+        {
+          chapter: 1,
+        },
+      );
       assert.equal(draft.response.status, 201, "Tracer Draft was not created.");
-      const draftText = await requestBff(
-        bffServer,
+      const draftText = await requestBackend(
+        backendServer,
         `/api/admin/lessons/${draft.body.id}/texts/${languageCode}`,
         "PUT",
         textBody,
@@ -450,8 +444,8 @@ await withTeardown(
         200,
         "Tracer Draft Lesson Text was not saved.",
       );
-      const draftIntent = await requestBff(
-        bffServer,
+      const draftIntent = await requestBackend(
+        backendServer,
         "/api/admin/media/upload-intents",
         "POST",
         { ...uploadBody, lessonId: draft.body.id },
@@ -473,8 +467,8 @@ await withTeardown(
         "uploaded",
         "The Draft's audio did not upload.",
       );
-      const draftCompleted = await requestBff(
-        bffServer,
+      const draftCompleted = await requestBackend(
+        backendServer,
         `/api/admin/media/${draftIntent.body.mediaAssetId}/complete`,
         "POST",
         { lessonId: draft.body.id, languageCode },
@@ -490,8 +484,8 @@ await withTeardown(
         200,
         "The Draft's object is not in the bucket.",
       );
-      const deleted = await requestBff(
-        bffServer,
+      const deleted = await requestBackend(
+        backendServer,
         `/api/admin/lessons/${draft.body.id}`,
         "DELETE",
       );
@@ -524,7 +518,7 @@ async function teardown() {
   const cleanupFailures = [];
   let cleanupUnverified = false;
   let teardownFailure;
-  if (bffContainerStarted) {
+  if (backendContainerStarted) {
     const recordedKeys = [];
     try {
       const smokeKeys = await readSmokeKeys();
@@ -545,7 +539,7 @@ async function teardown() {
       await runDocker(["rm", "--force", containerName]);
     } catch {
       teardownFailure ??= new Error(
-        "Could not remove the isolated BFF container.",
+        "Could not remove the isolated Backend container.",
       );
     }
   }
@@ -598,17 +592,19 @@ async function requireFile(file) {
 }
 
 function assertComposeTopology(config) {
-  const bff = config.services.bff;
-  assert.equal(bff.environment.AWS_PROFILE, "roles-anywhere");
+  const backend = config.services.backend;
+  assert.equal(backend.environment.AWS_PROFILE, "roles-anywhere");
   assert.equal(
-    bff.environment.AWS_CONFIG_FILE,
+    backend.environment.AWS_CONFIG_FILE,
     "/run/ez-dk-citizen/aws/config",
   );
-  assert.equal(bff.environment.AWS_ACCESS_KEY_ID, undefined);
-  assert.equal(bff.environment.AWS_SECRET_ACCESS_KEY, undefined);
-  assert.equal(bff.environment.ADMIN_ORIGINS, origin);
+  assert.equal(backend.environment.AWS_ACCESS_KEY_ID, undefined);
+  assert.equal(backend.environment.AWS_SECRET_ACCESS_KEY, undefined);
+  assert.equal(backend.environment.ADMIN_ORIGINS, origin);
 
-  const mounts = new Map(bff.volumes.map((volume) => [volume.target, volume]));
+  const mounts = new Map(
+    backend.volumes.map((volume) => [volume.target, volume]),
+  );
   assert.deepEqual([...mounts.keys()].sort(), [
     "/run/ez-dk-citizen/aws/config",
     "/run/ez-dk-citizen/identity/workload.crt",
@@ -698,7 +694,10 @@ async function assertRunningContainer() {
   ]) {
     assert.equal(mounts.get(target)?.RW, false, `${target} is not read-only`);
   }
-  assert.equal(mounts.get("/tmp/test-live-s3-bff-entrypoint.mjs")?.RW, false);
+  assert.equal(
+    mounts.get("/tmp/test-live-s3-backend-entrypoint.mjs")?.RW,
+    false,
+  );
   assert.equal(mounts.get("/tmp/ez-dk-citizen-live-s3-smoke-keys")?.RW, true);
 }
 
@@ -740,7 +739,7 @@ async function assertRoleIdentity() {
   );
 }
 
-async function waitForBff(baseUrl) {
+async function waitForBackend(baseUrl) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
       const response = await fetch(`${baseUrl}/ready`, {
@@ -752,10 +751,10 @@ async function waitForBff(baseUrl) {
     }
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
-  throw new Error("The containerized BFF did not become ready.");
+  throw new Error("The containerized Backend did not become ready.");
 }
 
-async function requestBff(baseUrl, endpoint, method, body) {
+async function requestBackend(baseUrl, endpoint, method, body) {
   const bodyText = JSON.stringify(body);
   sensitiveValues.push({ name: "request body", value: bodyText });
   for (const [key, value] of Object.entries(body ?? {})) {
@@ -787,16 +786,11 @@ async function requestBff(baseUrl, endpoint, method, body) {
 
 function assertPublicResponse(response, name) {
   const serialized = JSON.stringify(response);
-  for (const [label, value] of [
-    ["admin token", process.env.ADMIN_API_TOKEN],
-    ["Data Service token", process.env.DATA_SERVICE_TOKEN],
-  ]) {
-    assert.equal(
-      serialized.includes(value),
-      false,
-      `${name} exposed its ${label}.`,
-    );
-  }
+  assert.equal(
+    serialized.includes(process.env.ADMIN_API_TOKEN),
+    false,
+    `${name} exposed its admin token.`,
+  );
   for (const field of [
     "accessKeyId",
     "secretAccessKey",
@@ -842,7 +836,7 @@ async function deleteExactSmokeKeys(keys) {
   return report.failed.map(assertSmokeKey);
 }
 
-// The status S3 answers the BFF's role for a HEAD of one exact smoke key.
+// The status S3 answers the Backend's role for a HEAD of one exact smoke key.
 async function smokeObjectStatus(key) {
   assertSmokeKey(key);
   const source = `import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3"; try { await new S3Client({}).send(new HeadObjectCommand({ Bucket: process.env.S3_BUCKET, Key: process.argv[1] })); console.log(200); } catch (error) { console.log(error.$metadata?.httpStatusCode ?? 0); }`;
@@ -854,22 +848,8 @@ async function smokeObjectStatus(key) {
 }
 
 async function assertSafeLogs(extraValues) {
-  const dataServiceContainer = (
-    await runDocker([...composeArguments, "ps", "--quiet", "hono-data"], {
-      captureOutput: true,
-    })
-  ).output.trim();
   const logs = [
     (await runDocker(["logs", containerName], { captureOutput: true })).output,
-    ...(dataServiceContainer
-      ? [
-          (
-            await runDocker(["logs", dataServiceContainer], {
-              captureOutput: true,
-            })
-          ).output,
-        ]
-      : []),
     ...(await Promise.all(logFiles.map((file) => readFile(file, "utf8")))),
   ].join("\n");
   const source = `import { readFileSync } from "node:fs"; import { S3Client } from "@aws-sdk/client-s3"; const input = JSON.parse(readFileSync(0, "utf8")); const credentials = await new S3Client({}).config.credentials(); const privateKey = readFileSync("/run/ez-dk-citizen/identity/workload.key", "utf8"); const values = [...input.values, { name: "session access key", value: credentials.accessKeyId }, { name: "session secret key", value: credentials.secretAccessKey }, { name: "session token", value: credentials.sessionToken }, { name: "workload private key", value: privateKey }]; const leaked = values.filter(({ value, pattern }) => pattern ? new RegExp(pattern).test(input.logs) : value && input.logs.includes(value)).map(({ name }) => name); const patterns = [["AWS access key pattern", /\\b(?:AKIA|ASIA)[A-Z0-9]{16}\\b/], ["private key PEM", /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/], ["presigned URL signature", /X-Amz-Signature=/i], ["bearer authorization", /authorization:\\s*bearer\\s+\\S+/i]]; const matched = patterns.filter(([, pattern]) => pattern.test(input.logs)).map(([name]) => name); const safe = leaked.length === 0 && matched.length === 0; console.log(JSON.stringify({ safe, leaked, matched }));`;

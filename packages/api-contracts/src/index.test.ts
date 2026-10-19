@@ -6,13 +6,11 @@ import {
   completeMediaAssetRequestSchema,
   completeMediaAssetResponseSchema,
   createLessonRequestSchema,
-  createPendingMediaAssetRequestSchema,
   createSourceRequestSchema,
   createUploadIntentRequestSchema,
-  currentLessonAudioResponseSchema,
+  languageQuerySchema,
   lessonDetailSchema,
   lessonIdParamsSchema,
-  lessonReadQuerySchema,
   lessonSummarySchema,
   livenessResponseSchema,
   mediaAssetIdParamsSchema,
@@ -20,7 +18,6 @@ import {
   mobileLessonSummarySchema,
   patchLessonRequestSchema,
   problemDetailsSchema,
-  publishedLessonDetailSchema,
   readinessResponseSchema,
   sourceIdParamsSchema,
   updateSourceRequestSchema,
@@ -47,15 +44,14 @@ test("path, query, and Problem Details contracts are strict", () => {
   assert.deepEqual(mediaAssetIdParamsSchema.parse({ mediaAssetId: "9" }), {
     mediaAssetId: 9,
   });
-  assert.deepEqual(
-    lessonReadQuerySchema.parse({ status: "PUBLISHED", language: "th" }),
-    { status: "PUBLISHED", language: "th" },
-  );
+  assert.deepEqual(languageQuerySchema.parse({ language: "th" }), {
+    language: "th",
+  });
   assert.throws(() => lessonIdParamsSchema.parse({ lessonId: "0" }));
   assert.throws(() =>
     mediaAssetIdParamsSchema.parse({ mediaAssetId: "not-an-id" }),
   );
-  assert.throws(() => lessonReadQuerySchema.parse({ status: "" }));
+  assert.throws(() => languageQuerySchema.parse({ language: "" }));
   assert.throws(() =>
     problemDetailsSchema.parse({ status: 422, code: "validation_failed" }),
   );
@@ -89,18 +85,6 @@ test("Upload Intent contracts accept only one safe declared MP3", () => {
     createUploadIntentRequestSchema.parse({ ...input, extra: true }),
   );
 
-  assert.deepEqual(
-    createPendingMediaAssetRequestSchema.parse({
-      languageCode: "th",
-      storageProvider: "s3",
-      storageContainer: "citizenship-audio",
-      objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
-      originalFilename: "lesson.mp3",
-      contentType: "audio/mpeg",
-      sizeBytes: 1,
-    }).sizeBytes,
-    1,
-  );
   assert.deepEqual(
     uploadIntentResponseSchema.parse({
       mediaAssetId: 1,
@@ -173,18 +157,6 @@ test("Media Asset completion contracts keep storage locators internal", () => {
 });
 
 test("Published Lesson audio stays private until the mobile projection", () => {
-  const detail = {
-    id: 1,
-    chapter: 1,
-    version: 1,
-    versionPatch: 0,
-    status: "PUBLISHED" as const,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
-    availableLanguageCodes: ["th"],
-    lessonTexts: [{ languageCode: "th", title: "ไทย", content: "เนื้อหา" }],
-    lessonSources: [],
-  };
   const currentAudio = {
     mediaAssetId: 2,
     audioVersion: 1,
@@ -194,10 +166,6 @@ test("Published Lesson audio stays private until the mobile projection", () => {
     durationMs: null,
   };
 
-  assert.deepEqual(
-    publishedLessonDetailSchema.parse({ ...detail, currentAudio }),
-    { ...detail, currentAudio },
-  );
   assert.throws(() =>
     mobileLessonDetailSchema.parse({
       id: 1,
@@ -266,18 +234,6 @@ test("admin current audio keeps storage identity internal and requires fresh pla
     sizeBytes: 1024,
     durationMs: null,
   };
-  assert.deepEqual(currentLessonAudioResponseSchema.parse({ audio: current }), {
-    audio: current,
-  });
-  assert.deepEqual(currentLessonAudioResponseSchema.parse({ audio: null }), {
-    audio: null,
-  });
-  assert.throws(() =>
-    currentLessonAudioResponseSchema.parse({
-      audio: { ...current, storageContainer: "bucket" },
-    }),
-  );
-
   const { objectKey: _objectKey, ...visible } = current;
   const audio = {
     ...visible,

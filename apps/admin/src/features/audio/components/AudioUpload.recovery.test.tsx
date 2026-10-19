@@ -12,7 +12,10 @@ import {
 import { expect, test } from "vitest";
 
 import { App } from "../../../app/App";
-import type { BffRequest, BffResponse } from "../../../shared/lib/network";
+import type {
+  BackendRequest,
+  BackendResponse,
+} from "../../../shared/lib/network";
 import {
   answer,
   chooseFile,
@@ -36,14 +39,14 @@ import {
 } from "../../../shared/test/support";
 
 const intentPath = "/api/admin/media/upload-intents";
-const isCompletion = (request: BffRequest) =>
+const isCompletion = (request: BackendRequest) =>
   request.path.endsWith("/complete");
 
 // Answers the first request that `matches` with `response`; a TypeError sends it but no answer
 // arrives, as when the network fails.
 function failFirst(
-  matches: (request: BffRequest) => boolean,
-  response: BffResponse | TypeError,
+  matches: (request: BackendRequest) => boolean,
+  response: BackendResponse | TypeError,
 ) {
   return { matches: firstOnly(matches), response };
 }
@@ -94,12 +97,12 @@ const terminal = "A new upload is required.";
 
 test.each([
   [
-    "the Data Service is unavailable",
+    "the database is unavailable",
     problem(
-      502,
-      "data_service_unavailable",
-      "The Data Service is unavailable.",
-      "req-502",
+      503,
+      "database_unavailable",
+      "The database is unavailable.",
+      "req-503",
     ),
   ],
   ["storage is unavailable", storageOutage()],
@@ -244,7 +247,7 @@ test.each([
   ],
   [
     "the Upload Intent is refused",
-    (request: BffRequest) => request.path === intentPath,
+    (request: BackendRequest) => request.path === intentPath,
     storageOutage(),
   ],
 ] as const)(
@@ -450,7 +453,7 @@ test("Start new upload gives up on a recoverable failure: the recovery is discar
   ]);
 });
 
-test("a 500 during completion stays recoverable and says the request needs investigating in the backend logs", async () => {
+test("a 500 during completion stays recoverable and says the request needs investigating in the Backend logs", async () => {
   const backend = await open(
     failFirst(
       isCompletion,
@@ -470,7 +473,7 @@ test("a 500 during completion stays recoverable and says the request needs inves
     "The request could not be completed. Request ID: req-500",
   );
   expect(failure).toContain(
-    "The server failed unexpectedly. Look up the request ID in the backend logs.",
+    "The server failed unexpectedly. Look up the request ID in the Backend logs.",
   );
   expect(failure).toContain(retryable);
 

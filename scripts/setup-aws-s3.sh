@@ -172,6 +172,6 @@ if [[ "$PREFLIGHT_ONLY" == true ]]; then
   printf 'Running preflight checks without an STS exchange.\n'
   node scripts/test-roles-anywhere-container.mjs --preflight
 else
-  printf 'Running the production-like BFF image, mount, and STS identity checks.\n'
+  printf 'Running the production-like Backend image, mount, and STS identity checks.\n'
   pnpm test:roles-anywhere
 fi

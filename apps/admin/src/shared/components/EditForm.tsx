@@ -1,7 +1,7 @@
 // The shared explicitly saved form behind every editable form in the Admin.
 import { type SubmitEvent, useId, useState } from "react";
 
-import { BffError } from "../lib/bff";
+import { BackendError } from "../lib/backend";
 import { ConfirmButton } from "./ConfirmButton";
 import { ErrorMessage } from "./ErrorMessage";
 
@@ -109,7 +109,7 @@ export function EditForm({
         const message =
           invalid[field.name] ??
           // A field nested in the request, such as ["text", "title"], is named by its last segment.
-          (error instanceof BffError
+          (error instanceof BackendError
             ? error.errors?.find((entry) => entry.path.at(-1) === field.name)
                 ?.message
             : undefined) ??
