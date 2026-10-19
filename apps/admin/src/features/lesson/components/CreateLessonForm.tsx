@@ -1,55 +1,55 @@
-// The form behind Create draft and Create new version: it asks for the chapter, or shows the
-// fixed chapter of a new version, and nothing reaches the Backend until the admin confirms.
-import type { LessonSummary } from "@ez-dk-citizen/api-contracts/schemas";
+// The form behind Create draft and Create new version: nothing reaches the Backend until the
+// admin confirms, and then it creates the Lesson and opens its editor. The caller gives the
+// chapter, as a field to type or shown fixed, and what is said below it.
+import {
+  type CreateLessonRequest,
+  lessonDetailSchema,
+} from "@ez-dk-citizen/api-contracts/schemas";
 import { type ReactNode, useEffect, useRef } from "react";
 
 import {
   EditForm,
   type Field,
-  fieldProblem,
   type Values,
 } from "../../../shared/components/EditForm";
-import { statusLabels } from "../utils/statusLabels";
-import { highestVersionLesson, versionLabel } from "../utils/versions";
-
-const chapterField: Field = {
-  name: "chapter",
-  label: "Chapter",
-  kind: "number",
-};
+import type { Call } from "../../../shared/lib/backend";
 
 export function CreateLessonForm({
-  lessons = null,
+  call,
+  request,
+  onOpen,
+  onClose,
+  name,
+  submitLabel,
+  confirmMessage,
+  fields = [],
   value = {},
   onChange = () => undefined,
-  onCreate,
-  onClose,
-  fixedChapter,
-  name = "New Draft",
-  submitLabel = "Create draft",
-  confirmMessage = `Create a new Draft of chapter ${value.chapter}?`,
+  cancelMessage = null,
   children,
 }: {
-  // The Lesson list the typed chapter's standing is read from; null until it is loaded.
-  lessons?: LessonSummary[] | null;
-  // What the admin has typed, held by the caller.
-  value?: Values;
-  onChange?: (value: Values) => void;
-  // Creates the Lesson once the admin confirms; a refusal is shown in the form.
-  onCreate: (chapter: number) => Promise<void>;
+  call: Call;
+  // What to create, from the typed values once the admin confirms; a refusal is shown in the form.
+  request: (value: Values) => CreateLessonRequest;
+  // Opens the created Lesson's editor.
+  onOpen: (lessonId: number) => void;
   // Cancel, once nothing typed is left to lose or the admin agreed to discard it.
   onClose: () => void;
-  // A new version's chapter, which it keeps from the Lesson it copies: shown, never typed.
-  fixedChapter?: number;
-  name?: string;
-  submitLabel?: string;
-  confirmMessage?: string;
-  // Shown below the chapter, such as what a new version copies.
-  children?: ReactNode;
+  name: string;
+  submitLabel: string;
+  confirmMessage: string;
+  // The fields the admin types, if any, with their values held by the caller.
+  fields?: Field[];
+  value?: Values;
+  onChange?: (value: Values) => void;
+  // What Cancel would discard of the typed values; null closes at once.
+  cancelMessage?: string | null;
+  // Shown below the fields, such as where a typed chapter stands or what a new version copies.
+  children: ReactNode;
 }) {
   const form = useRef<HTMLFormElement>(null);
 
-  // Starts on the first control the admin can use: the chapter, or else the submit.
+  // Starts on the first control the admin can use: a field, or else the submit.
   useEffect(
     () =>
       form.current
@@ -62,39 +62,26 @@ export function CreateLessonForm({
     <EditForm
       ref={form}
       name={name}
-      fields={fixedChapter === undefined ? [chapterField] : []}
+      fields={fields}
       value={value}
       onChange={onChange}
       submitLabel={submitLabel}
       confirmMessage={confirmMessage}
-      onSave={({ chapter }) => onCreate(fixedChapter ?? Number(chapter))}
+      onSave={async (submitted) => {
+        const created = await call(
+          {
+            method: "POST",
+            path: "/api/admin/lessons",
+            body: request(submitted),
+          },
+          lessonDetailSchema,
+        );
+        onOpen(created.id);
+      }}
       onCancel={onClose}
-      cancelMessage={
-        value.chapter?.trim()
-          ? "Discard the chapter entered for this new Draft?"
-          : null
-      }
+      cancelMessage={cancelMessage}
     >
-      {fixedChapter === undefined ? (
-        // Always rendered, so screen readers announce it as the chapter changes.
-        <p role="status">{standing(lessons, value.chapter)}</p>
-      ) : (
-        <label>
-          Chapter
-          <input type="number" value={fixedChapter} readOnly />
-        </label>
-      )}
       {children}
     </EditForm>
   );
-}
-
-// The chapter's highest Published or Archived version and that Lesson's status, once a valid
-// chapter is typed and the Lesson list is loaded.
-function standing(lessons: LessonSummary[] | null, chapter = "") {
-  if (lessons === null || fieldProblem(chapterField, chapter)) return "";
-  const latest = highestVersionLesson(lessons, Number(chapter));
-  return latest
-    ? `Chapter ${chapter}'s latest version is ${versionLabel(latest)}, ${statusLabels[latest.status]}.`
-    : `Chapter ${chapter} has no Published or Archived version yet.`;
 }

@@ -10,9 +10,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { flushSync } from "react-dom";
 
 import { BackendError } from "../lib/backend";
+import { useReturnFocus } from "../lib/useReturnFocus";
 import { ErrorMessage } from "./ErrorMessage";
 
 export function ConfirmButton({
@@ -41,7 +41,8 @@ export function ConfirmButton({
   const [asking, setAsking] = useState(false);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
+  // The button comes back with focus when the confirmation closes.
+  const { opener: trigger, returnFocus } = useReturnFocus();
   const cancelButton = useRef<HTMLButtonElement>(null);
   const messageId = useId();
   // Nothing at stake any more, say once the edits were saved: the button comes back.
@@ -60,11 +61,8 @@ export function ConfirmButton({
     onOpen?.();
   }
 
-  // The button comes back with focus, as after a browser dialog. Synchronously, so it is in
-  // the page again before it takes focus.
   function close() {
-    flushSync(() => setAsking(false));
-    trigger.current?.focus();
+    returnFocus(() => setAsking(false));
   }
 
   async function confirm() {

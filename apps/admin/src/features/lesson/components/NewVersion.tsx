@@ -1,19 +1,15 @@
 // Create new version on a Published or Archived Lesson: the create form with the chapter fixed,
 // listing what the new Draft starts with. The Backend copies the Lesson Texts, the Lesson
 // Sources with their references, and each Language's current audio, which the copy shares.
-import {
-  type CreateLessonRequest,
-  type LessonDetail,
-  lessonDetailSchema,
-} from "@ez-dk-citizen/api-contracts/schemas";
-import { useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import type { LessonDetail } from "@ez-dk-citizen/api-contracts/schemas";
+import { useState } from "react";
 
 import type { Call } from "../../../shared/lib/backend";
 import {
   type LanguageCode,
   languageCodes,
 } from "../../../shared/lib/languages";
+import { useReturnFocus } from "../../../shared/lib/useReturnFocus";
 import { hasLessonText } from "../utils/lessonTexts";
 import { versionLabel } from "../utils/versions";
 import { CreateLessonForm } from "./CreateLessonForm";
@@ -39,7 +35,8 @@ export function NewVersion({
   const [open, setOpen] = useState(false);
   // Whether each Language with a Lesson Text has current audio; undefined while checking.
   const [audio, setAudio] = useState<Map<LanguageCode, boolean | undefined>>();
-  const opener = useRef<HTMLButtonElement>(null);
+  // Create new version comes back with focus when the form closes.
+  const { opener, returnFocus } = useReturnFocus();
   const texts = languageCodes.filter((code) => hasLessonText(lesson, code));
 
   async function openForm() {
@@ -49,10 +46,8 @@ export function NewVersion({
     setAudio(new Map(texts.map((code, index) => [code, found[index]])));
   }
 
-  // Create new version comes back with focus. Synchronously, so it is in the page before it takes focus.
   function close() {
-    flushSync(() => setOpen(false));
-    opener.current?.focus();
+    returnFocus(() => setOpen(false));
   }
 
   if (!open)
@@ -74,7 +69,7 @@ export function NewVersion({
   );
   return (
     <CreateLessonForm
-      fixedChapter={lesson.chapter}
+      call={call}
       name="New version"
       submitLabel="Create new version"
       confirmMessage={[
@@ -83,19 +78,15 @@ export function NewVersion({
       ]
         .filter(Boolean)
         .join(" ")}
-      onCreate={async () => {
-        const created = await call(
-          {
-            method: "POST",
-            path: "/api/admin/lessons",
-            body: { copyFromLessonId: lesson.id } satisfies CreateLessonRequest,
-          },
-          lessonDetailSchema,
-        );
-        onOpen(created.id);
-      }}
+      request={() => ({ copyFromLessonId: lesson.id })}
+      onOpen={onOpen}
       onClose={close}
     >
+      {/* Kept from the Lesson it copies: shown, never typed. */}
+      <label>
+        Chapter
+        <input type="number" value={lesson.chapter} readOnly />
+      </label>
       <ul aria-label="What the new version copies">
         <li>Lesson Texts: {texts.join(", ") || "none"}</li>
         <li>Lesson Sources: {lesson.lessonSources.length}</li>
