@@ -1,9 +1,11 @@
+import { isDeepStrictEqual } from "node:util";
 import type {
   CreateLessonRequest,
   PatchLessonRequest,
   UpsertLessonSourceRequest,
   UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
+
 import { and, eq, inArray, ne, notExists } from "drizzle-orm";
 
 import type { DataDatabase, DataTransaction } from "../../db/database.js";
@@ -47,36 +49,23 @@ async function insertDraft(transaction: DataTransaction, chapter: number) {
   return created.id;
 }
 
-// A new version: a Draft of the source's chapter with its Lesson Texts, its Lesson Sources and
+// A new version: a Draft of the original's chapter with its Lesson Texts, its Lesson Sources and
 // their references, and each Language's current READY audio as audio version 1 on the same
 // Media Asset (ADR-0008); audio history stays behind. Only Published and Archived Lessons are
 // copied, as deleteLesson relies on: their Lesson Audio is never deleted.
-async function copyLesson(transaction: DataTransaction, sourceId: number) {
+async function copyLesson(transaction: DataTransaction, originalId: number) {
   const [original] = await transaction
     .select({ chapter: lesson.chapter, status: lesson.status })
     .from(lesson)
-    .where(eq(lesson.id, sourceId));
+    .where(eq(lesson.id, originalId));
   if (!original) return "lesson_not_found" as const;
   if (original.status === "DRAFT") return "lesson_not_copyable" as const;
 
   const id = await insertDraft(transaction, original.chapter);
-  const texts = await transaction
-    .select({
-      languageCode: lessonText.languageCode,
-      title: lessonText.title,
-      content: lessonText.content,
-    })
-    .from(lessonText)
-    .where(eq(lessonText.lessonId, sourceId));
-  const citations = await transaction
-    .select({
-      sourceId: lessonSource.sourceId,
-      pageFrom: lessonSource.pageFrom,
-      pageTo: lessonSource.pageTo,
-      sectionReference: lessonSource.sectionReference,
-    })
-    .from(lessonSource)
-    .where(eq(lessonSource.lessonId, sourceId));
+  const { texts, citations } = await readTextsAndCitations(
+    transaction,
+    originalId,
+  );
   const currentAudio = await transaction
     .select({
       languageCode: lessonAudio.languageCode,
@@ -86,7 +75,7 @@ async function copyLesson(transaction: DataTransaction, sourceId: number) {
     .innerJoin(mediaAsset, eq(mediaAsset.id, lessonAudio.mediaAssetId))
     .where(
       and(
-        eq(lessonAudio.lessonId, sourceId),
+        eq(lessonAudio.lessonId, originalId),
         eq(lessonAudio.isCurrent, true),
         eq(mediaAsset.status, "READY"),
       ),
@@ -245,8 +234,7 @@ export async function patchLesson(
 
       if (
         replaced &&
-        (await citedContent(transaction, id, input.text)) ===
-          (await citedContent(transaction, replaced.id))
+        (await isUnchanged(transaction, id, replaced.id, input.text))
       )
         return "lesson_unchanged" as const;
 
@@ -285,28 +273,22 @@ export async function patchLesson(
   });
 }
 
-// What a replacement must change, comparable as a string: every Lesson Text, with `text` saved
-// over its Language's, and every Lesson Source with its references. Audio is left out, since
-// an audio-only change goes straight onto the Published Lesson.
-async function citedContent(
+// A Lesson's Lesson Texts, and its Lesson Sources with their references, in a stable order:
+// what a new version copies, and what a replacement must change.
+async function readTextsAndCitations(
   transaction: DataTransaction,
   lessonId: number,
-  text?: PatchLessonRequest["text"],
 ) {
-  const texts = new Map(
-    (
-      await transaction
-        .select({
-          languageCode: lessonText.languageCode,
-          title: lessonText.title,
-          content: lessonText.content,
-        })
-        .from(lessonText)
-        .where(eq(lessonText.lessonId, lessonId))
-    ).map((saved) => [saved.languageCode, saved]),
-  );
-  if (text) texts.set(text.languageCode, text);
-  const sources = await transaction
+  const texts = await transaction
+    .select({
+      languageCode: lessonText.languageCode,
+      title: lessonText.title,
+      content: lessonText.content,
+    })
+    .from(lessonText)
+    .where(eq(lessonText.lessonId, lessonId))
+    .orderBy(lessonText.languageCode);
+  const citations = await transaction
     .select({
       sourceId: lessonSource.sourceId,
       pageFrom: lessonSource.pageFrom,
@@ -316,17 +298,31 @@ async function citedContent(
     .from(lessonSource)
     .where(eq(lessonSource.lessonId, lessonId))
     .orderBy(lessonSource.sourceId);
-  return JSON.stringify([
-    [...texts.values()]
-      .map(({ languageCode, title, content }) => [languageCode, title, content])
-      .sort(([a], [b]) => (a < b ? -1 : 1)),
-    sources.map(({ sourceId, pageFrom, pageTo, sectionReference }) => [
-      sourceId,
-      pageFrom,
-      pageTo,
-      sectionReference,
-    ]),
-  ]);
+  return { texts, citations };
+}
+
+// Whether a Draft, with `text` saved over its Language's Lesson Text, has the same Lesson Texts
+// and Lesson Sources as the Published Lesson it would replace. Audio is left out, since an
+// audio-only change goes straight onto the Published Lesson.
+async function isUnchanged(
+  transaction: DataTransaction,
+  draftId: number,
+  publishedId: number,
+  text?: PatchLessonRequest["text"],
+) {
+  const draft = await readTextsAndCitations(transaction, draftId);
+  const published = await readTextsAndCitations(transaction, publishedId);
+  const byLanguage = (texts: typeof draft.texts) =>
+    new Map(texts.map((saved) => [saved.languageCode, saved]));
+  const draftTexts = byLanguage(draft.texts);
+  if (text) {
+    const { languageCode, title, content } = text;
+    draftTexts.set(languageCode, { languageCode, title, content });
+  }
+  return isDeepStrictEqual(
+    [draftTexts, draft.citations],
+    [byLanguage(published.texts), published.citations],
+  );
 }
 
 export async function upsertLessonText(

@@ -447,7 +447,7 @@ export function fakeBackend(
           lessons.push(created);
           return { status: 201, body: created };
         }
-        // A new version starts with its source's texts, citations, and current audio at
+        // A new version starts with the original's texts, citations, and current audio at
         // version 1 on the same Media Asset.
         const original = lessons.find(
           (lesson) => lesson.id === body.copyFromLessonId,

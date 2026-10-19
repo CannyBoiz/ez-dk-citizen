@@ -303,7 +303,7 @@ test("a Lesson is created either for a chapter or as a new version copied from a
     { copyFromLessonId: 0 },
     { copyFromLessonId: 1.5 },
     { copyFromLessonId: "7" },
-    // A new version keeps its source's chapter.
+    // A new version keeps the original's chapter.
     { chapter: 2, copyFromLessonId: 7 },
     { copyFromLessonId: 7, extra: true },
     {},

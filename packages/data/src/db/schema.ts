@@ -204,8 +204,8 @@ export const lessonAudio = pgTable(
       foreignColumns: [lessonText.lessonId, lessonText.languageCode],
     }),
     check("lesson_audio_version_positive", sql`${table.audioVersion} > 0`),
-    // One Media Asset may back Lesson Audio in several Lessons, as a new version shares its
-    // source's audio (ADR-0008), but only once in each Lesson and Language.
+    // One Media Asset may back Lesson Audio in several Lessons, as a new version shares the
+    // original's audio (ADR-0008), but only once in each Lesson and Language.
     unique("lesson_audio_media_asset_unique").on(
       table.lessonId,
       table.languageCode,

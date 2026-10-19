@@ -1016,7 +1016,7 @@ test("a new version copies the chapter, every Lesson Text and Lesson Source, and
   assert.equal(original.lessonSources[0]?.sectionReference, "§ 4");
   assert.deepEqual(await read(copy.id), copy);
 
-  // The copy plays its source's current audio at once, from the same object: nothing is uploaded.
+  // The copy plays the original's current audio at once, from the same object: nothing is uploaded.
   for (const [languageCode, asset] of [
     ["th", thai],
     ["da", danish],
