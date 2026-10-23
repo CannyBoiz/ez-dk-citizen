@@ -141,7 +141,7 @@ console.log(
 );
 
 function tracer() {
-  return String.raw`
+  return `
 const requestId = 'stage-2-tracer';
 const headers = { Authorization: 'Bearer integration-only-admin-token', 'Content-Type': 'application/json', 'X-Request-ID': requestId };
 const call = async (path, method, body) => {
@@ -165,7 +165,7 @@ if (detail.content !== 'เนื้อหา' || !detail.availableLanguageCodes
 }
 
 function completionTracer() {
-  return String.raw`
+  return `
 import { createDataModule } from '@ez-dk-citizen/data';
 import { createBackendApp } from './dist/app.js';
 import { FakeStorage } from './dist/storage.js';

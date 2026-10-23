@@ -16,6 +16,9 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
+      "style": {
+        "noNonNullAssertion": "off"
+      },
       "nursery": {
         "useConsistentFunctionStyle": {
           "level": "warn",
