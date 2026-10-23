@@ -10,13 +10,13 @@ See the spec section "Testing Decisions" (manual acceptance) and user story 42.
 
 **Status:** ready-for-human
 
-- [ ] The live S3 tracer passes against the current stack
-- [ ] Create a Draft through the form, then save the chapter and the Thai Lesson Text with one Save, and add a second Language
-- [ ] Attach a Source, upload a real ElevenLabs MP3, play it, and publish it; it becomes version 1.0
-- [ ] Create a new version of the Published Lesson; its copied audio plays without an upload
-- [ ] Change a Danish Lesson Text on the new version and Replace as a **Fix**; it becomes 1.1 and the mobile Lesson list shows it
-- [ ] Try to replace with an unchanged copy, and see it refused
-- [ ] Roll back: create a new version from the Archived Lesson and Replace (it becomes 1.2 as a fix, or 2.0 as a content change); the mobile detail shows the earlier content with its audio
-- [ ] Delete a Draft that has its own uploaded audio, and confirm in the AWS console or CLI that its object is gone from the bucket
-- [ ] Edit a Source cited by a Published Lesson, and see the corrected URL in that Lesson's mobile detail
-- [ ] Spot check: every confirmation appears in the page, Archive is offered only on Published Lessons, and Delete only on Drafts
+- [x] The live S3 tracer passes against the current stack
+- [x] Create a Draft through the form, then save the chapter and the Thai Lesson Text with one Save, and add a second Language
+- [x] Attach a Source, upload a real ElevenLabs MP3, play it, and publish it; it becomes version 1.0
+- [x] Create a new version of the Published Lesson; its copied audio plays without an upload
+- [x] Change a Danish Lesson Text on the new version and Replace as a **Fix**; it becomes 1.1 and the mobile Lesson list shows it
+- [x] Try to replace with an unchanged copy, and see it refused
+- [x] Roll back: create a new version from the Archived Lesson and Replace (it becomes 1.2 as a fix, or 2.0 as a content change); the mobile detail shows the earlier content with its audio
+- [x] Delete a Draft that has its own uploaded audio, and confirm in the AWS console or CLI that its object is gone from the bucket
+- [x] Edit a Source cited by a Published Lesson, and see the corrected URL in that Lesson's mobile detail
+- [x] Spot check: every confirmation appears in the page, Archive is offered only on Published Lessons, and Delete only on Drafts
