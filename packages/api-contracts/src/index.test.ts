@@ -295,6 +295,27 @@ test("Lesson transport contracts are strict and keep database fields private", (
   );
 });
 
+test("a Lesson is created either for a chapter or as a new version copied from another Lesson", () => {
+  assert.deepEqual(createLessonRequestSchema.parse({ copyFromLessonId: 7 }), {
+    copyFromLessonId: 7,
+  });
+  for (const invalid of [
+    { copyFromLessonId: 0 },
+    { copyFromLessonId: 1.5 },
+    { copyFromLessonId: "7" },
+    // A new version keeps the original's chapter.
+    { chapter: 2, copyFromLessonId: 7 },
+    { copyFromLessonId: 7, extra: true },
+    {},
+  ]) {
+    assert.equal(
+      createLessonRequestSchema.safeParse(invalid).success,
+      false,
+      JSON.stringify(invalid),
+    );
+  }
+});
+
 test("Lesson versions are a positive major and a non-negative patch, both absent on Drafts", () => {
   const summary = {
     id: 1,
@@ -443,6 +464,41 @@ test("only a publication carries a change kind, and only content or fix", () => 
     assert.deepEqual(
       result.error?.issues.map((issue) => issue.path),
       [["changeKind"]],
+    );
+  }
+});
+
+test("only a publication names the Published Lesson it replaces, by its ID", () => {
+  assert.deepEqual(
+    patchLessonRequestSchema.parse({
+      status: "PUBLISHED",
+      changeKind: "fix",
+      replacesLessonId: 7,
+    }),
+    { status: "PUBLISHED", changeKind: "fix", replacesLessonId: 7 },
+  );
+  for (const replacesLessonId of [0, -1, 1.5, "7", null]) {
+    assert.throws(
+      () =>
+        patchLessonRequestSchema.parse({
+          status: "PUBLISHED",
+          replacesLessonId,
+        }),
+      undefined,
+      String(replacesLessonId),
+    );
+  }
+  for (const body of [
+    { replacesLessonId: 7 },
+    { chapter: 2, replacesLessonId: 7 },
+    { status: "ARCHIVED", replacesLessonId: 7 },
+  ]) {
+    const result = patchLessonRequestSchema.safeParse(body);
+    assert.equal(result.success, false, JSON.stringify(body));
+    if (body.chapter === undefined && body.status === undefined) continue;
+    assert.deepEqual(
+      result.error?.issues.map((issue) => issue.path),
+      [["replacesLessonId"]],
     );
   }
 });

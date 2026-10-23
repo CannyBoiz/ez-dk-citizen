@@ -2,12 +2,11 @@
 
 import type {
   AdminLessonAudio,
-  ChangeKind,
   CompleteMediaAssetRequest,
+  CreateLessonRequest,
   CreateSourceRequest,
   CreateUploadIntentRequest,
   LessonDetail,
-  LessonStatus,
   LessonSummary,
   PatchLessonRequest,
   SourceResponse,
@@ -258,15 +257,28 @@ export function fakeBackend(
       ].map((source) => [source.id, source]),
     ).values(),
   ];
-  // Every accepted transition succeeds; tests inject the backend's refusals through `override`.
-  // Publication gives the version as the data module does: 1.0 for the chapter's first, and
-  // otherwise the highest Published or Archived version raised by the change kind.
+  // Every accepted transition succeeds; tests inject the backend's other refusals through
+  // `override`. Publication gives the version as the data module does: 1.0 for the chapter's
+  // first, and otherwise the highest Published or Archived version raised by the change kind.
+  // It archives the chapter's Published Lesson, which `replacesLessonId` must name.
   function transition(
     lesson: LessonDetail,
-    status: LessonStatus,
-    changeKind?: ChangeKind,
+    { status, changeKind, replacesLessonId }: PatchLessonRequest,
   ): BackendResponse {
     if (status === "PUBLISHED") {
+      const published = lessons.find(
+        (other) =>
+          other !== lesson &&
+          other.chapter === lesson.chapter &&
+          other.status === "PUBLISHED",
+      );
+      if (published?.id !== replacesLessonId)
+        return problem(
+          409,
+          "published_lesson_conflict",
+          "This publication does not replace the chapter's current Published Lesson.",
+          "req-409-published",
+        );
       const [highest] = lessons
         .filter(
           (other) => other.chapter === lesson.chapter && other.version !== null,
@@ -305,8 +317,12 @@ export function fakeBackend(
                 versionPatch: highest.versionPatch! + 1,
               },
       );
+      if (published) {
+        published.status = "ARCHIVED";
+        touch(published);
+      }
     }
-    lesson.status = status;
+    lesson.status = status!;
     touch(lesson);
     return { status: 200, body: lesson };
   }
@@ -423,10 +439,49 @@ export function fakeBackend(
 
     if (!id) {
       if (request.method === "POST") {
-        const created = lessonDetail(
-          Math.max(0, ...lessons.map((lesson) => lesson.id)) + 1,
-          { chapter: (request.body as { chapter: number }).chapter },
+        const body = request.body as CreateLessonRequest;
+        const createdId =
+          Math.max(0, ...lessons.map((lesson) => lesson.id)) + 1;
+        if ("chapter" in body) {
+          const created = lessonDetail(createdId, { chapter: body.chapter });
+          lessons.push(created);
+          return { status: 201, body: created };
+        }
+        // A new version starts with the original's texts, citations, and current audio at
+        // version 1 on the same Media Asset.
+        const original = lessons.find(
+          (lesson) => lesson.id === body.copyFromLessonId,
         );
+        if (!original)
+          return problem(
+            404,
+            "lesson_not_found",
+            "Lesson was not found.",
+            "req-404",
+          );
+        if (original.status === "DRAFT")
+          return problem(
+            409,
+            "lesson_not_copyable",
+            "Only Published and Archived Lessons can be copied.",
+            "req-409-copy",
+          );
+        const { chapter, availableLanguageCodes, lessonTexts, lessonSources } =
+          structuredClone(original);
+        const created = lessonDetail(createdId, {
+          chapter,
+          availableLanguageCodes,
+          lessonTexts,
+          lessonSources,
+        });
+        for (const { languageCode } of lessonTexts) {
+          const stored = currentAudio[`${original.id}:${languageCode}`];
+          if (stored)
+            currentAudio[`${createdId}:${languageCode}`] = {
+              ...stored,
+              audioVersion: 1,
+            };
+        }
         lessons.push(created);
         return { status: 201, body: created };
       }
@@ -464,10 +519,9 @@ export function fakeBackend(
       };
     }
     if (request.method === "GET") return { status: 200, body: lesson };
-    const { status, changeKind } =
-      (request.body as PatchLessonRequest | undefined) ?? {};
-    if (request.method === "PATCH" && status)
-      return transition(lesson, status, changeKind);
+    const command = (request.body as PatchLessonRequest | undefined) ?? {};
+    if (request.method === "PATCH" && command.status)
+      return transition(lesson, command);
     if (lesson.status !== "DRAFT")
       return problem(
         409,

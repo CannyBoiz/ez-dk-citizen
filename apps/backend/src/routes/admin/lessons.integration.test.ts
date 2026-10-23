@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ProblemDetails } from "@ez-dk-citizen/api-contracts";
+import type {
+  LessonDetail,
+  ProblemDetails,
+} from "@ez-dk-citizen/api-contracts";
 import { mediaAssetSchema } from "@ez-dk-citizen/data";
 
 import { code, useBackend } from "../../testing/backend.js";
@@ -557,6 +560,249 @@ test("publication gives the version: 1.0 first, then the chapter's highest versi
   assert.equal((await read(draft)).status, "DRAFT");
 });
 
+// A Draft of the chapter with these Lesson Texts and Lesson Sources (with their references).
+async function draftWith(
+  chapter: number,
+  texts: Array<{ languageCode: string; title: string; content: string }>,
+  sources: Array<{ id: number; pageFrom?: number; sectionReference?: string }>,
+) {
+  const draft = await createLesson(chapter);
+  for (const { languageCode, ...text } of texts) {
+    await request(`/lessons/${draft.id}/texts/${languageCode}`, "PUT", text);
+  }
+  for (const { id, ...references } of sources) {
+    await request(`/lessons/${draft.id}/sources/${id}`, "PUT", references);
+  }
+  return draft.id as number;
+}
+
+test("a replacement archives the chapter's Published Lesson and publishes the Draft with its version, together", async () => {
+  const law = await createSource("https://example.test/replacement-law");
+  const guide = await createSource("https://example.test/replacement-guide");
+  const thai = { languageCode: "th", title: "บท", content: "เนื้อหา" };
+  const published = await draftWith(40, [thai], [{ id: law.id }]);
+  assert.equal(
+    (await request(`/lessons/${published}`, "PATCH", { status: "PUBLISHED" }))
+      .status,
+    200,
+  );
+  const draft = await draftWith(40, [thai], [{ id: law.id }, { id: guide.id }]);
+
+  const replaced = await request(`/lessons/${draft}`, "PATCH", {
+    status: "PUBLISHED",
+    changeKind: "fix",
+    replacesLessonId: published,
+  });
+
+  assert.equal(replaced.status, 200);
+  const detail = await replaced.json();
+  assert.deepEqual(
+    [detail.status, detail.version, detail.versionPatch],
+    ["PUBLISHED", 1, 1],
+  );
+  const archived = await read(published);
+  assert.deepEqual(
+    [archived.status, archived.version, archived.versionPatch],
+    ["ARCHIVED", 1, 0],
+  );
+  // Learners see the new version in place of the old one.
+  const mobile = await (
+    await app.request("/api/mobile/lessons?language=th")
+  ).json();
+  assert.deepEqual(
+    mobile.items.map(
+      (item: { id: number; version: number; versionPatch: number }) => [
+        item.id,
+        `${item.version}.${item.versionPatch}`,
+      ],
+    ),
+    [[draft, "1.1"]],
+  );
+});
+
+test("a publication that does not name the chapter's Published Lesson is refused and changes nothing", async () => {
+  const law = await createSource("https://example.test/stale-replacement");
+  const thai = { languageCode: "th", title: "บท", content: "เนื้อหา" };
+  const publish = (id: number, body: object = {}) =>
+    request(`/lessons/${id}`, "PATCH", { status: "PUBLISHED", ...body });
+  const archivedVersion = await draftWith(41, [thai], [{ id: law.id }]);
+  assert.equal((await publish(archivedVersion)).status, 200);
+  assert.equal(
+    (
+      await request(`/lessons/${archivedVersion}`, "PATCH", {
+        status: "ARCHIVED",
+      })
+    ).status,
+    200,
+  );
+  const published = await draftWith(41, [thai], [{ id: law.id, pageFrom: 2 }]);
+  assert.equal((await publish(published, { changeKind: "fix" })).status, 200);
+  const otherChapter = await draftWith(42, [thai], [{ id: law.id }]);
+  assert.equal((await publish(otherChapter)).status, 200);
+  const draft = await draftWith(41, [thai], [{ id: law.id, pageFrom: 3 }]);
+  const firstOfItsChapter = await draftWith(43, [thai], [{ id: law.id }]);
+
+  const expectConflict = async (id: number, body: object) => {
+    const before = await Promise.all(
+      [id, published, archivedVersion, otherChapter].map(read),
+    );
+    const refused = await publish(id, { changeKind: "content", ...body });
+    assert.equal(refused.status, 409, JSON.stringify(body));
+    assert.equal(await code(refused), "published_lesson_conflict");
+    assert.deepEqual(
+      await Promise.all(
+        [id, published, archivedVersion, otherChapter].map(read),
+      ),
+      before,
+    );
+  };
+  // Missing, or naming the Archived version, another chapter's Published Lesson, the Draft
+  // itself, or no Lesson at all.
+  for (const replacesLessonId of [
+    undefined,
+    archivedVersion,
+    otherChapter,
+    draft,
+    999_999,
+  ]) {
+    await expectConflict(draft, { replacesLessonId });
+  }
+  // A chapter with no Published Lesson has nothing to replace.
+  await expectConflict(firstOfItsChapter, { replacesLessonId: published });
+
+  const replaced = await publish(draft, {
+    changeKind: "content",
+    replacesLessonId: published,
+  });
+  assert.equal(replaced.status, 200);
+  assert.equal((await read(published)).status, "ARCHIVED");
+
+  // Two replacements of one Published Lesson at once: the later finds it archived.
+  const rivals = [
+    await draftWith(41, [thai], [{ id: law.id, pageFrom: 4 }]),
+    await draftWith(41, [thai], [{ id: law.id, pageFrom: 5 }]),
+  ];
+  const outcomes = await Promise.all(
+    rivals.map(async (id) => {
+      const response = await publish(id, {
+        changeKind: "fix",
+        replacesLessonId: draft,
+      });
+      return response.status === 200 ? "replaced" : code(response);
+    }),
+  );
+  assert.deepEqual(outcomes.toSorted(), [
+    "published_lesson_conflict",
+    "replaced",
+  ]);
+  const { items } = await (await request("/lessons")).json();
+  assert.deepEqual(
+    items
+      .filter((item: LessonDetail) => item.chapter === 41)
+      .map(
+        (item: LessonDetail) =>
+          `${item.version}.${item.versionPatch} ${item.status}`,
+      )
+      .toSorted(),
+    [
+      "1.0 ARCHIVED",
+      "1.1 ARCHIVED",
+      "2.0 ARCHIVED",
+      "2.1 PUBLISHED",
+      "null.null DRAFT",
+    ],
+  );
+});
+
+test("a replacement that changes no Lesson Text or Lesson Source is refused, whatever its audio", async () => {
+  const law = await createSource("https://example.test/unchanged-law");
+  const guide = await createSource("https://example.test/unchanged-guide");
+  const texts = [
+    { languageCode: "th", title: "บท", content: "เนื้อหา" },
+    { languageCode: "da", title: "Kapitel", content: "Indhold" },
+  ];
+  const sources = [
+    { id: law.id, pageFrom: 2, pageTo: 3 },
+    { id: guide.id, sectionReference: "§ 3" },
+  ];
+  let published = await draftWith(44, texts, sources);
+  assert.equal(
+    (await request(`/lessons/${published}`, "PATCH", { status: "PUBLISHED" }))
+      .status,
+    200,
+  );
+  await upload(published, "th");
+
+  // Saved in another order, with audio of its own in a Language the Published Lesson has
+  // none in.
+  const unchanged = await draftWith(
+    44,
+    texts.toReversed(),
+    sources.toReversed(),
+  );
+  await upload(unchanged, "th");
+  await upload(unchanged, "da");
+  const replace = (id: number, body: object = {}) =>
+    request(`/lessons/${id}`, "PATCH", {
+      status: "PUBLISHED",
+      changeKind: "fix",
+      replacesLessonId: published,
+      ...body,
+    });
+  const before = await Promise.all([unchanged, published].map(read));
+  const refused = await replace(unchanged);
+  assert.equal(refused.status, 409);
+  const problem = (await refused.json()) as ProblemDetails;
+  assert.equal(problem.code, "lesson_unchanged");
+  assert.equal(
+    problem.detail,
+    "The Draft's Lesson Texts and Lesson Sources are identical to the Published Lesson's.",
+  );
+  assert.deepEqual(await Promise.all([unchanged, published].map(read)), before);
+  // A Lesson Text that would make the Draft identical is not saved either.
+  const reverted = await draftWith(
+    44,
+    [{ ...texts[0], content: "ร่าง" }, texts[1]],
+    sources,
+  );
+  const beforeRevert = await read(reverted);
+  const revert = await replace(reverted, { text: texts[0] });
+  assert.equal(revert.status, 409);
+  assert.equal(await code(revert), "lesson_unchanged");
+  assert.deepEqual(await read(reverted), beforeRevert);
+
+  // Any one difference in a Lesson Text or a Lesson Source is a change, including one made
+  // by the same command. Each replacement is the next one's Published Lesson.
+  const [thai, danish] = texts;
+  const retitled = { ...thai, title: "บทใหม่" };
+  const rewritten = { ...retitled, content: "แก้ไข" };
+  const [lawCitation] = sources;
+  for (const [change, changedTexts, changedSources, command] of [
+    ["title", [retitled, danish], sources],
+    ["content", [retitled, danish], sources, { text: rewritten }],
+    ["one Language fewer", [rewritten], sources],
+    ["one Lesson Source fewer", [rewritten], [lawCitation]],
+    ["page from", [rewritten], [{ ...lawCitation, pageFrom: 1 }]],
+    ["page to", [rewritten], [{ id: law.id, pageFrom: 1 }]],
+    [
+      "section reference",
+      [rewritten],
+      [{ id: law.id, pageFrom: 1, sectionReference: "stk. 2" }],
+    ],
+    [
+      "another Source",
+      [rewritten],
+      [{ id: guide.id, pageFrom: 1, sectionReference: "stk. 2" }],
+    ],
+  ] as const) {
+    const changed = await draftWith(44, [...changedTexts], [...changedSources]);
+    const replaced = await replace(changed, command);
+    assert.equal(replaced.status, 200, change);
+    assert.equal((await read(published)).status, "ARCHIVED", change);
+    published = changed;
+  }
+});
+
 // Creates a Lesson with a Lesson Text per Language, and completes one upload per entry
 // in `uploads`.
 async function lessonWithAudio(chapter: number, uploads: string[]) {
@@ -685,4 +931,178 @@ test("only Drafts can be deleted, and a Draft without audio deletes with no Medi
   const deleted = await request(`/lessons/${silent.id}`, "DELETE");
   assert.equal(deleted.status, 204);
   assert.equal((await request(`/lessons/${silent.id}`)).status, 404);
+});
+
+// The current audio the admin plays for one Lesson and Language, or null.
+async function currentAudio(lessonId: number, languageCode: string) {
+  const response = await request(`/lessons/${lessonId}/audio/${languageCode}`);
+  assert.equal(response.status, 200);
+  return (await response.json()).audio;
+}
+
+// A Published Lesson with Thai, Danish, and English Lesson Texts, two Lesson Sources with
+// references, and audio: two Thai renditions and one Danish, but no English.
+async function publishedLessonToCopy(chapter: number) {
+  const { lesson, assets } = await lessonWithAudio(chapter, ["th", "th", "da"]);
+  const [, thai, danish] = assets;
+  for (const [languageCode, title] of [
+    ["th", "ชื่อเรื่อง"],
+    ["da", "Titel"],
+    ["en", "Title"],
+  ]) {
+    await request(`/lessons/${lesson.id}/texts/${languageCode}`, "PUT", {
+      title,
+      content: `${title} content`,
+    });
+  }
+  for (const [name, references] of [
+    ["first", { pageFrom: 2, pageTo: 3, sectionReference: "§ 4" }],
+    ["second", {}],
+  ] as const) {
+    const source = await createSource(
+      `https://example.test/copied-${chapter}-${name}`,
+    );
+    await request(
+      `/lessons/${lesson.id}/sources/${source.id}`,
+      "PUT",
+      references,
+    );
+  }
+  const published = await request(`/lessons/${lesson.id}`, "PATCH", {
+    status: "PUBLISHED",
+  });
+  assert.equal(published.status, 200);
+  return { lesson: (await published.json()) as LessonDetail, thai, danish };
+}
+
+async function copyLesson(copyFromLessonId: number) {
+  const response = await request("/lessons", "POST", { copyFromLessonId });
+  assert.equal(response.status, 201);
+  const copy: LessonDetail = await response.json();
+  assert.equal(
+    response.headers.get("location"),
+    `/api/admin/lessons/${copy.id}`,
+  );
+  return copy;
+}
+
+test("a new version copies the chapter, every Lesson Text and Lesson Source, and each Language's current audio at version 1 on the same Media Asset", async () => {
+  const { lesson: original, thai, danish } = await publishedLessonToCopy(86);
+  const uploads = storage.uploads.length;
+
+  const copy = await copyLesson(original.id);
+
+  assert.notEqual(copy.id, original.id);
+  const {
+    id: _id,
+    status,
+    version,
+    versionPatch,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    ...copied
+  } = copy;
+  assert.deepEqual(
+    { status, version, versionPatch },
+    { status: "DRAFT", version: null, versionPatch: null },
+  );
+  assert.deepEqual(copied, {
+    chapter: 86,
+    availableLanguageCodes: ["da", "en", "th"],
+    lessonTexts: original.lessonTexts,
+    lessonSources: original.lessonSources,
+  });
+  assert.equal(original.lessonTexts.length, 3);
+  assert.equal(original.lessonSources[0]?.sectionReference, "§ 4");
+  assert.deepEqual(await read(copy.id), copy);
+
+  // The copy plays the original's current audio at once, from the same object: nothing is uploaded.
+  for (const [languageCode, asset] of [
+    ["th", thai],
+    ["da", danish],
+  ] as const) {
+    const audio = await currentAudio(copy.id, languageCode);
+    assert.equal(audio.mediaAssetId, asset?.id);
+    assert.equal(audio.audioVersion, 1);
+    assert.equal(
+      audio.playbackUrl,
+      `https://storage.invalid/${asset?.objectKey}?playback=1`,
+    );
+  }
+  assert.equal(await currentAudio(copy.id, "en"), null);
+  assert.equal(storage.uploads.length, uploads);
+
+  // The original is untouched.
+  assert.deepEqual(await read(original.id), original);
+  const originalThai = await currentAudio(original.id, "th");
+  assert.equal(originalThai.mediaAssetId, thai?.id);
+  assert.equal(originalThai.audioVersion, 2);
+});
+
+test("an Archived Lesson can be copied, but a Draft is not copyable and a missing Lesson is not found", async () => {
+  const { lesson: published, thai } = await publishedLessonToCopy(87);
+  const archived = await request(`/lessons/${published.id}`, "PATCH", {
+    status: "ARCHIVED",
+  });
+  assert.equal(archived.status, 200);
+  const copy = await copyLesson(published.id);
+  assert.equal(copy.chapter, 87);
+  assert.equal(copy.status, "DRAFT");
+  assert.deepEqual(copy.lessonTexts, published.lessonTexts);
+  assert.equal((await currentAudio(copy.id, "th")).mediaAssetId, thai?.id);
+
+  const lessons = async () => (await (await request("/lessons")).json()).items;
+  const before = await lessons();
+  for (const [copyFromLessonId, status, problemCode, detail] of [
+    [
+      copy.id,
+      409,
+      "lesson_not_copyable",
+      "Only Published and Archived Lessons can be copied.",
+    ],
+    [987654, 404, "lesson_not_found", "Lesson was not found."],
+  ] as const) {
+    const refused = await request("/lessons", "POST", { copyFromLessonId });
+    assert.equal(refused.status, status);
+    const problem = (await refused.json()) as ProblemDetails;
+    assert.equal(problem.code, problemCode);
+    assert.equal(problem.detail, detail);
+  }
+  assert.deepEqual(await lessons(), before);
+
+  for (const body of [
+    { copyFromLessonId: 0 },
+    { chapter: 87, copyFromLessonId: published.id },
+  ]) {
+    const invalid = await request("/lessons", "POST", body);
+    assert.equal(invalid.status, 422, JSON.stringify(body));
+    assert.equal(await code(invalid), "validation_failed");
+  }
+  assert.deepEqual(await lessons(), before);
+});
+
+test("deleting a new version keeps the Media Assets it shares READY and stored, and removes only its own", async () => {
+  const { lesson: original, thai, danish } = await publishedLessonToCopy(88);
+  const copy = await copyLesson(original.id);
+  // The copy's own Thai correction supersedes the shared rendition there only.
+  const own = await upload(copy.id, "th");
+  assert.equal(own.completion.lessonAudio.audioVersion, 2);
+
+  const deleted = await request(`/lessons/${copy.id}`, "DELETE");
+
+  assert.equal(deleted.status, 204);
+  assert.equal((await request(`/lessons/${copy.id}`)).status, 404);
+  assert.equal(await mediaAssetStatus(own.id), "DELETED");
+  assert.equal(await inStorage(own.objectKey), false);
+  for (const [languageCode, asset] of [
+    ["th", thai],
+    ["da", danish],
+  ] as const) {
+    assert.ok(asset);
+    assert.equal(await mediaAssetStatus(asset.id), "READY");
+    assert.equal(await inStorage(asset.objectKey), true);
+    const audio = await currentAudio(original.id, languageCode);
+    assert.equal(audio.mediaAssetId, asset.id);
+  }
+  assert.deepEqual(await read(original.id), original);
 });

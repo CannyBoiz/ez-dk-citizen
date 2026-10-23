@@ -224,6 +224,11 @@ input[type="file"] {
   padding: var(--space-1);
 }
 
+/* Numbers here are short: a chapter or a page. */
+input[type="number"] {
+  max-width: 12rem;
+}
+
 input:read-only:not([type="file"]),
 textarea:read-only {
   background: var(--surface-muted);
@@ -532,10 +537,16 @@ main > .lesson {
   background: transparent;
 }
 
-/* The New Draft form lays its two fields and its button in one row when there is room. */
-.inline-form {
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  align-items: end;
+/* A form's submit and Cancel share a row; an in-page confirmation takes a row of its own. */
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--space-2);
+}
+
+.form-actions > [role="alertdialog"] {
+  flex-basis: 100%;
 }
 
 .rows {
@@ -568,8 +579,8 @@ main > .lesson {
   overflow-wrap: anywhere;
 }
 
-/* Sibling buttons outside a flex toolbar, such as Publish and Archive. */
-:not(.toolbar) > button + button {
+/* Sibling buttons outside a flex row, such as Publish and Archive. */
+:not(.toolbar, .form-actions) > button + button {
   margin-left: var(--space-2);
 }
 

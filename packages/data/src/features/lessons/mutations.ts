@@ -1,9 +1,11 @@
+import { isDeepStrictEqual } from "node:util";
 import type {
   CreateLessonRequest,
   PatchLessonRequest,
   UpsertLessonSourceRequest,
   UpsertLessonTextRequest,
 } from "@ez-dk-citizen/api-contracts";
+
 import { and, eq, inArray, ne, notExists } from "drizzle-orm";
 
 import type { DataDatabase, DataTransaction } from "../../db/database.js";
@@ -31,14 +33,72 @@ export async function createLesson(
   database: DataDatabase,
   input: CreateLessonRequest,
 ) {
-  const [created] = await database.transaction(async (transaction) =>
-    transaction
-      .insert(lesson)
-      .values({ chapter: input.chapter, status: "DRAFT" })
-      .returning({ id: lesson.id }),
+  return database.transaction((transaction) =>
+    "chapter" in input
+      ? insertDraft(transaction, input.chapter)
+      : copyLesson(transaction, input.copyFromLessonId),
   );
+}
+
+async function insertDraft(transaction: DataTransaction, chapter: number) {
+  const [created] = await transaction
+    .insert(lesson)
+    .values({ chapter, status: "DRAFT" })
+    .returning({ id: lesson.id });
   if (!created) throw new Error("Lesson insert returned no row.");
   return created.id;
+}
+
+// A new version: a Draft of the original's chapter with its Lesson Texts, its Lesson Sources and
+// their references, and each Language's current READY audio as audio version 1 on the same
+// Media Asset (ADR-0008); audio history stays behind. Only Published and Archived Lessons are
+// copied, as deleteLesson relies on: their Lesson Audio is never deleted.
+async function copyLesson(transaction: DataTransaction, originalId: number) {
+  const [original] = await transaction
+    .select({ chapter: lesson.chapter, status: lesson.status })
+    .from(lesson)
+    .where(eq(lesson.id, originalId));
+  if (!original) return "lesson_not_found" as const;
+  if (original.status === "DRAFT") return "lesson_not_copyable" as const;
+
+  const id = await insertDraft(transaction, original.chapter);
+  const { texts, citations } = await readTextsAndCitations(
+    transaction,
+    originalId,
+  );
+  const currentAudio = await transaction
+    .select({
+      languageCode: lessonAudio.languageCode,
+      mediaAssetId: lessonAudio.mediaAssetId,
+    })
+    .from(lessonAudio)
+    .innerJoin(mediaAsset, eq(mediaAsset.id, lessonAudio.mediaAssetId))
+    .where(
+      and(
+        eq(lessonAudio.lessonId, originalId),
+        eq(lessonAudio.isCurrent, true),
+        eq(mediaAsset.status, "READY"),
+      ),
+    );
+  // The audio follows the texts, whose Lesson Text it requires.
+  if (texts.length)
+    await transaction
+      .insert(lessonText)
+      .values(texts.map((text) => ({ lessonId: id, ...text })));
+  if (citations.length)
+    await transaction
+      .insert(lessonSource)
+      .values(citations.map((citation) => ({ lessonId: id, ...citation })));
+  if (currentAudio.length)
+    await transaction.insert(lessonAudio).values(
+      currentAudio.map((audio) => ({
+        lessonId: id,
+        ...audio,
+        audioVersion: 1,
+        isCurrent: true,
+      })),
+    );
+  return id;
 }
 
 // Deletes a Draft with its Lesson Audio, and with its Lesson Texts and Lesson Sources by cascade.
@@ -119,10 +179,14 @@ export async function patchLesson(
     const status = input.status ?? existing.status;
     // The version publication gives; other changes leave it as it is.
     let given: LessonVersion | undefined;
+    // The chapter's Published Lesson, which a replacement archives.
+    let replaced: { id: number; updatedAt: Date } | undefined;
 
     if (status === "PUBLISHED") {
-      const [published] = await transaction
-        .select({ id: lesson.id })
+      // Locked, so concurrent replacements of one Lesson take turns, and the later one finds
+      // it archived.
+      [replaced] = await transaction
+        .select({ id: lesson.id, updatedAt: lesson.updatedAt })
         .from(lesson)
         .where(
           and(
@@ -130,8 +194,12 @@ export async function patchLesson(
             eq(lesson.status, "PUBLISHED"),
             ne(lesson.id, id),
           ),
-        );
-      if (published) return "published_lesson_conflict" as const;
+        )
+        .for("update");
+      // The admin names the Published Lesson it expects to replace, so a stale page never
+      // archives another one.
+      if (replaced?.id !== input.replacesLessonId)
+        return "published_lesson_conflict" as const;
 
       const [thaiText] = await transaction
         .select({ lessonId: lessonText.lessonId })
@@ -164,6 +232,12 @@ export async function patchLesson(
       ];
       if (missing.length) return { missing };
 
+      if (
+        replaced &&
+        (await isUnchanged(transaction, id, replaced.id, input.text))
+      )
+        return "lesson_unchanged" as const;
+
       const next = nextVersion(
         await selectHighestVersion(transaction, chapter),
         input.changeKind,
@@ -177,6 +251,15 @@ export async function patchLesson(
       const { languageCode, ...text } = input.text;
       await writeLessonText(transaction, id, languageCode, text);
     }
+    if (replaced) {
+      await transaction
+        .update(lesson)
+        .set({
+          status: "ARCHIVED",
+          updatedAt: nextUpdatedAt(replaced.updatedAt),
+        })
+        .where(eq(lesson.id, replaced.id));
+    }
     await transaction
       .update(lesson)
       .set({
@@ -188,6 +271,58 @@ export async function patchLesson(
       .where(eq(lesson.id, id));
     return id;
   });
+}
+
+// A Lesson's Lesson Texts, and its Lesson Sources with their references, in a stable order:
+// what a new version copies, and what a replacement must change.
+async function readTextsAndCitations(
+  transaction: DataTransaction,
+  lessonId: number,
+) {
+  const texts = await transaction
+    .select({
+      languageCode: lessonText.languageCode,
+      title: lessonText.title,
+      content: lessonText.content,
+    })
+    .from(lessonText)
+    .where(eq(lessonText.lessonId, lessonId))
+    .orderBy(lessonText.languageCode);
+  const citations = await transaction
+    .select({
+      sourceId: lessonSource.sourceId,
+      pageFrom: lessonSource.pageFrom,
+      pageTo: lessonSource.pageTo,
+      sectionReference: lessonSource.sectionReference,
+    })
+    .from(lessonSource)
+    .where(eq(lessonSource.lessonId, lessonId))
+    .orderBy(lessonSource.sourceId);
+  return { texts, citations };
+}
+
+// Whether a Draft, with `text` saved over its Language's Lesson Text, has the same Lesson Texts
+// and Lesson Sources as the Published Lesson it would replace. Audio is left out, since an
+// audio-only change goes straight onto the Published Lesson.
+async function isUnchanged(
+  transaction: DataTransaction,
+  draftId: number,
+  publishedId: number,
+  text?: PatchLessonRequest["text"],
+) {
+  const draft = await readTextsAndCitations(transaction, draftId);
+  const published = await readTextsAndCitations(transaction, publishedId);
+  const byLanguage = (texts: typeof draft.texts) =>
+    new Map(texts.map((saved) => [saved.languageCode, saved]));
+  const draftTexts = byLanguage(draft.texts);
+  if (text) {
+    const { languageCode, title, content } = text;
+    draftTexts.set(languageCode, { languageCode, title, content });
+  }
+  return isDeepStrictEqual(
+    [draftTexts, draft.citations],
+    [byLanguage(published.texts), published.citations],
+  );
 }
 
 export async function upsertLessonText(

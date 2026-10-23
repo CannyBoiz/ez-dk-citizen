@@ -84,7 +84,7 @@ export function createDataOperations(database: DataDatabase): DataOperations {
           });
     },
     createLesson: async (input) =>
-      readLessonDetail(await createLesson(database, input)),
+      detailOrOutcome(await createLesson(database, input)),
     listLessons: async (status) =>
       lessonListResponseSchema.parse(await listLessons(database, { status })),
     listLessonsInLanguage: async (languageCode, status) => {

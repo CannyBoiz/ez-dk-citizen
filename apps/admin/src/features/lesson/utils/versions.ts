@@ -36,6 +36,23 @@ export function highestVersion(lessons: LessonSummary[], chapter: number) {
     .at(0);
 }
 
+// The Published or Archived Lesson holding the chapter's highest version, if it has one.
+export function highestVersionLesson(
+  lessons: LessonSummary[],
+  chapter: number,
+) {
+  const highest = highestVersion(lessons, chapter);
+  return (
+    highest &&
+    lessons.find(
+      (lesson) =>
+        lesson.chapter === chapter &&
+        lesson.version === highest.version &&
+        lesson.versionPatch === highest.versionPatch,
+    )
+  );
+}
+
 // A content change raises major and resets patch (2.1 -> 3.0); a fix raises patch (2.1 -> 2.2).
 export function raiseVersion(highest: Version, changeKind: ChangeKind) {
   return changeKind === "content"

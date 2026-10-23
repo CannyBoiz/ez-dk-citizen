@@ -1,4 +1,5 @@
-// Browsing and filtering the catalogue, opening Lessons, and creating Drafts.
+// Browsing and filtering the catalogue and opening Lessons. Creating Drafts is in
+// Catalogue.create.test.tsx.
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, test } from "vitest";
 
@@ -7,14 +8,11 @@ import {
   catalogue,
   chapterStatuses,
   connect,
-  fakeBackend,
   fakeNetwork,
-  lessonDetail,
   problem,
   rows,
   tab,
   textForm,
-  type,
   validToken,
 } from "../../../shared/test/support";
 
@@ -259,63 +257,4 @@ test("a database outage shows the error with its request ID and can be retried",
 
   await screen.findByRole("table");
   expect(screen.queryByRole("alert")).toBeNull();
-});
-
-test("creating a Draft asks only for the chapter, opens its editor, and the Lesson appears in the catalogue", async () => {
-  const { network, requests } = fakeBackend([lessonDetail(1)]);
-  render(<App network={network} />);
-  await connect(validToken);
-  await screen.findByRole("table");
-  expect(
-    within(screen.getByRole("form", { name: "New Draft Lesson" }))
-      .getAllByRole("spinbutton")
-      .map((field) => field.closest("label")?.textContent),
-  ).toEqual(["New Draft chapter"]);
-
-  type("New Draft chapter", "3");
-  fireEvent.click(screen.getByRole("button", { name: "Create Draft" }));
-
-  await screen.findByRole("heading", {
-    name: "Chapter 3 · Draft, created 11 Oct 2026",
-  });
-  expect(requests.find((request) => request.method === "POST")).toEqual({
-    method: "POST",
-    path: "/api/admin/lessons",
-    token: validToken,
-    body: { chapter: 3 },
-  });
-  expect(screen.getByText("Draft")).toBeTruthy();
-
-  fireEvent.click(screen.getByRole("button", { name: "Back to catalogue" }));
-  await screen.findByRole("table");
-  expect(rows()).toContainEqual([
-    "3",
-    "Draft, created 11 Oct 2026",
-    "Draft",
-    "None",
-  ]);
-});
-
-test("New Draft values are kept locally across a closed tab and cleared once the Draft is created", async () => {
-  const { network } = fakeBackend([lessonDetail(1)]);
-  const { unmount } = render(<App network={network} />);
-  await connect(validToken);
-  await screen.findByRole("table");
-  type("New Draft chapter", "4");
-  unmount();
-
-  render(<App network={network} />);
-  await connect(validToken);
-  await screen.findByRole("table");
-  expect(screen.getByLabelText("New Draft chapter")).toHaveProperty(
-    "value",
-    "4",
-  );
-  expect(JSON.stringify(localStorage)).not.toContain(validToken);
-
-  fireEvent.click(screen.getByRole("button", { name: "Create Draft" }));
-  await screen.findByRole("heading", {
-    name: "Chapter 4 · Draft, created 11 Oct 2026",
-  });
-  expect(localStorage.length).toBe(0);
 });

@@ -71,13 +71,13 @@ test("Lesson Audio requires matching localized text but upload records may remai
     [pendingAsset.id, failedAsset.id].map((id) =>
       database.query.mediaAsset.findFirst({
         where: { id },
-        with: { lessonAudio: true },
+        with: { lessonAudios: true },
       }),
     ),
   );
   assert.deepEqual(
-    unattachedAssets.map((asset) => asset?.lessonAudio),
-    [null, null],
+    unattachedAssets.map((asset) => asset?.lessonAudios),
+    [[], []],
   );
 });
 
@@ -195,6 +195,14 @@ test("Lesson Audio retains version history and has one current rendition per Les
     },
   ]);
 
+  // A Media Asset may back Lesson Audio in another Lesson, as a new version shares it, but
+  // only once in each Lesson and Language.
+  await database.insert(lessonAudio).values({
+    lessonId: secondLesson.id,
+    languageCode: "da",
+    mediaAssetId: assets[0].id,
+    audioVersion: 2,
+  });
   await expectPostgresError(
     database.insert(lessonAudio).values({
       lessonId: firstLesson.id,
@@ -262,7 +270,7 @@ test("Lesson Audio relationships resolve every navigation path unambiguously", a
   });
   const assetResult = await database.query.mediaAsset.findFirst({
     where: { id: relatedAsset.id },
-    with: { lessonAudio: true },
+    with: { lessonAudios: true },
   });
   const audioResult = await database.query.lessonAudio.findFirst({
     where: { id: relatedAudio.id },
@@ -277,7 +285,10 @@ test("Lesson Audio relationships resolve every navigation path unambiguously", a
   assert.equal(lessonResult?.lessonAudios[0]?.id, relatedAudio.id);
   assert.equal(languageResult?.lessonAudios[0]?.id, relatedAudio.id);
   assert.equal(textResult?.lessonAudios[0]?.id, relatedAudio.id);
-  assert.equal(assetResult?.lessonAudio?.id, relatedAudio.id);
+  assert.deepEqual(
+    assetResult?.lessonAudios.map(({ id }) => id),
+    [relatedAudio.id],
+  );
   assert.equal(audioResult?.lesson.id, relatedLesson.id);
   assert.equal(audioResult?.language.code, "th");
   assert.equal(audioResult?.lessonText.title, "บทเรียน");

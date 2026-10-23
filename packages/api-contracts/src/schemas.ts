@@ -51,9 +51,12 @@ export const languageQuerySchema = z.strictObject({
   language: z.string().min(1).optional(),
 });
 
-export const createLessonRequestSchema = z.strictObject({
-  chapter: positiveInteger,
-});
+// A Draft of a chapter, or a new version: a Draft copied from a Published or Archived Lesson,
+// which keeps that Lesson's chapter.
+export const createLessonRequestSchema = z.union([
+  z.strictObject({ chapter: positiveInteger }),
+  z.strictObject({ copyFromLessonId: safePositiveInteger }),
+]);
 
 // How a later publication raises the chapter's highest version: a content change raises
 // major and resets patch (2.1 -> 3.0), a fix raises patch (2.1 -> 2.2).
@@ -73,6 +76,8 @@ export const patchLessonRequestSchema = z
       .optional(),
     status: lessonStatusSchema.optional(),
     changeKind: changeKindSchema.optional(),
+    // The chapter's Published Lesson as the admin last saw it, which publication archives.
+    replacesLessonId: safePositiveInteger.optional(),
   })
   .refine(
     (value) =>
@@ -85,6 +90,14 @@ export const patchLessonRequestSchema = z
     {
       path: ["changeKind"],
       message: "A change kind is allowed only when publishing.",
+    },
+  )
+  .refine(
+    (value) =>
+      value.replacesLessonId === undefined || value.status === "PUBLISHED",
+    {
+      path: ["replacesLessonId"],
+      message: "A replaced Lesson is allowed only when publishing.",
     },
   );
 

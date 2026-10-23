@@ -2,17 +2,19 @@
 // a Published Lesson. The checklist mirrors the backend's publication prerequisites; the
 // backend stays the authority, and its refusals are shown.
 // Publishing asks in the page which version the Draft becomes, from the chapter's versions as
-// the backend holds them then. Replacing a Published version is two separate actions: archive
-// it, then publish the Draft.
+// the backend holds them then. When the chapter has a Published Lesson, publishing replaces it:
+// the backend archives it in the same step, and only if it is the one the confirmation named.
+// The editor reads the Lesson list when it opens too, so Publish already reads Replace.
 import {
   type ChangeKind,
   changeKindSchema,
   type LessonDetail,
+  type LessonSummary,
   lessonDetailSchema,
   lessonListResponseSchema,
   type PatchLessonRequest,
 } from "@ez-dk-citizen/api-contracts/schemas";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { ConfirmButton } from "../../../shared/components/ConfirmButton";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
@@ -23,6 +25,7 @@ import {
   changeKindLabels,
   formatVersion,
   highestVersion,
+  lessonVersion,
   raiseVersion,
 } from "../utils/versions";
 
@@ -33,11 +36,11 @@ const deleteWarning =
   "Delete this Draft? Its Lesson Texts, Lesson Source references, and Lesson Audio will be " +
   "lost. Canonical Sources stay. Deleting cannot be undone.";
 
-// The chapter's versions as last read for the publish confirmation.
-type VersionsRead =
+// The Lesson list as last read, when the editor opened or the publish confirmation last did.
+type LessonsRead =
   | { state: "reading" }
   | { state: "failed"; error: unknown }
-  | { state: "read"; highest: ReturnType<typeof highestVersion> };
+  | { state: "read"; items: LessonSummary[] };
 
 export function Publication({
   call,
@@ -59,34 +62,36 @@ export function Publication({
   onDelete: () => void;
 }) {
   const archiving = useAction<"archive">();
-  const [versions, setVersions] = useState<VersionsRead>({ state: "reading" });
+  const [listed, setListed] = useState<LessonsRead>({ state: "reading" });
   const [changeKind, setChangeKind] = useState<ChangeKind | null>(null);
   // Only the latest read may answer, if the confirmation is reopened while one is in flight.
   const reads = useRef(0);
   const choiceName = useId();
   const saved = (state: boolean) => (state ? "Saved" : "Missing");
 
-  async function readVersions() {
+  async function readLessons() {
     const read = ++reads.current;
-    setVersions({ state: "reading" });
+    setListed({ state: "reading" });
     setChangeKind(null);
     try {
       const { items } = await call(
         { method: "GET", path: "/api/admin/lessons" },
         lessonListResponseSchema,
       );
-      if (read === reads.current)
-        setVersions({
-          state: "read",
-          highest: highestVersion(items, lesson.chapter),
-        });
+      if (read === reads.current) setListed({ state: "read", items });
     } catch (error) {
-      if (read === reads.current) setVersions({ state: "failed", error });
+      if (read === reads.current) setListed({ state: "failed", error });
     }
   }
 
+  // Only a Draft publishes. Opening the confirmation reads again, and that read decides.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount only
+  useEffect(() => {
+    if (lesson.status === "DRAFT") void readLessons();
+  }, []);
+
   // The backend gives the version. A kind is chosen only when the chapter already has one.
-  async function publish() {
+  async function publish(replaced: LessonSummary | undefined) {
     try {
       onChange(
         await writeCall(
@@ -96,19 +101,22 @@ export function Publication({
             body: {
               status: "PUBLISHED",
               ...(changeKind && { changeKind }),
+              ...(replaced && { replacesLessonId: replaced.id }),
             } satisfies PatchLessonRequest,
           },
           lessonDetailSchema,
         ),
       );
     } catch (error) {
-      // The chapter gained a version after the confirmation read them: read again, so the
-      // choice the backend asks for appears beside its refusal.
+      // The chapter's versions changed after the confirmation read them: read again, so the
+      // choice the backend asks for, or the Published version it would replace, appears
+      // beside its refusal.
       if (
         error instanceof BackendError &&
-        error.errors?.some((entry) => entry.path[0] === "changeKind")
+        (error.code === "published_lesson_conflict" ||
+          error.errors?.some((entry) => entry.path[0] === "changeKind"))
       )
-        void readVersions();
+        void readLessons();
       throw error;
     }
   }
@@ -136,15 +144,24 @@ export function Publication({
     onDelete();
   }
 
-  const highest = versions.state === "read" ? versions.highest : undefined;
+  // Counted from the Draft's chapter as it is now, which a tab's Save may have changed.
+  const items = listed.state === "read" ? listed.items : undefined;
+  const highest = items && highestVersion(items, lesson.chapter);
+  // The chapter's Published Lesson, which publishing replaces.
+  const published = items?.find(
+    (other) => other.chapter === lesson.chapter && other.status === "PUBLISHED",
+  );
+  const replacedVersion = published && lessonVersion(published);
   const publishMessage =
-    versions.state === "reading"
+    listed.state === "reading"
       ? "Reading this chapter's versions…"
-      : versions.state === "failed"
+      : listed.state === "failed"
         ? "Could not read this chapter's versions."
-        : highest
-          ? `Publish this Draft as a content change or a fix? The chapter's highest version is ${formatVersion(highest)}.`
-          : "Publish as version 1.0?";
+        : replacedVersion && highest
+          ? `Archive version ${formatVersion(replacedVersion)} and publish this Draft as ${changeKind ? formatVersion(raiseVersion(highest, changeKind)) : "a content change or a fix"}?`
+          : highest
+            ? `Publish this Draft as a content change or a fix? The chapter's highest version is ${formatVersion(highest)}.`
+            : "Publish as version 1.0?";
   const waiting = busy || archiving.pending !== null;
   return (
     <section className="card" aria-label="Publication">
@@ -177,10 +194,10 @@ export function Publication({
           disabled={dirty || waiting}
           message={publishMessage}
           details={
-            versions.state === "failed" ? (
+            listed.state === "failed" ? (
               <ErrorMessage
-                error={versions.error}
-                onRetry={() => void readVersions()}
+                error={listed.error}
+                onRetry={() => void readLessons()}
               />
             ) : (
               highest && (
@@ -202,15 +219,15 @@ export function Publication({
               )
             )
           }
-          confirmLabel="Publish"
+          confirmLabel={published ? "Replace" : "Publish"}
           confirmDisabled={
-            versions.state !== "read" ||
+            listed.state !== "read" ||
             (highest !== undefined && changeKind === null)
           }
-          onOpen={() => void readVersions()}
-          onConfirm={publish}
+          onOpen={() => void readLessons()}
+          onConfirm={() => publish(published)}
         >
-          Publish
+          {published ? "Replace" : "Publish"}
         </ConfirmButton>
       )}
       {lesson.status === "DRAFT" && (

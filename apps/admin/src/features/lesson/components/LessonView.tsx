@@ -38,6 +38,7 @@ import {
 } from "../utils/references";
 import { statusLabels } from "../utils/statusLabels";
 import { lessonLabel } from "../utils/versions";
+import { NewVersion } from "./NewVersion";
 import { Publication } from "./Publication";
 
 // Each Lesson Source's reference form is keyed by its Source ID.
@@ -56,6 +57,8 @@ export function LessonView({
   onUnsavedChange,
   onUploadChange,
   onDelete,
+  onOpen,
+  discards,
 }: {
   call: Call;
   putObject: Network["putObject"];
@@ -65,6 +68,10 @@ export function LessonView({
   onUploadChange: (status: UploadStatus) => void;
   // After the Draft is deleted, as there is nothing left to show.
   onDelete: () => void;
+  // Opens another Lesson's editor, such as a new version just created from this one.
+  onOpen: (lessonId: number) => void;
+  // What leaving this editor would discard, as the navigation guards word it; null for nothing.
+  discards: string | null;
 }) {
   const [lesson, setLesson] = useState<LessonDetail | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -343,6 +350,17 @@ export function LessonView({
           {statusLabels[lesson.status]}
         </span>
       </p>
+      {/* An upload in progress keeps this Lesson open, so it holds back the new version too. */}
+      {lesson.status !== "DRAFT" && (
+        <NewVersion
+          call={call}
+          lesson={lesson}
+          audioExists={currentAudioExists}
+          disabled={uploading}
+          discards={discards}
+          onOpen={onOpen}
+        />
+      )}
       {/* No Save of its own: each Language tab's Save sends it. */}
       <EditForm
         name="Chapter"

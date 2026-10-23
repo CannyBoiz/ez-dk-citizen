@@ -34,9 +34,9 @@ test("Media Assets represent pending and completed upload metadata", async () =>
 
   const pendingWithAudio = await database.query.mediaAsset.findFirst({
     where: { id: pendingAsset.id },
-    with: { lessonAudio: true },
+    with: { lessonAudios: true },
   });
-  assert.equal(pendingWithAudio?.lessonAudio, null);
+  assert.deepEqual(pendingWithAudio?.lessonAudios, []);
 
   const uploadedAt = new Date(pendingAsset.createdAt.getTime() + 30_000);
   const [readyAsset] = await database

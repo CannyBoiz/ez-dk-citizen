@@ -81,20 +81,23 @@ export async function completeMediaAsset(
       .where(eq(mediaAsset.id, mediaAssetId))
       .for("update");
     if (!asset) return "media_asset_not_found" as const;
+    // A retry answers the Lesson Audio the asset already backs in the requested Lesson and
+    // Language. A new version may share the asset (ADR-0008), but completion never adds one.
     if (asset.status === "READY") {
       const [audio] = await transaction
         .select()
         .from(lessonAudio)
-        .where(eq(lessonAudio.mediaAssetId, asset.id))
+        .where(
+          and(
+            eq(lessonAudio.mediaAssetId, asset.id),
+            eq(lessonAudio.lessonId, input.lessonId),
+            eq(lessonAudio.languageCode, input.languageCode),
+          ),
+        )
         .for("update");
-      if (!audio) throw new Error("Ready Media Asset has no Lesson Audio.");
-      if (
-        audio.lessonId === input.lessonId &&
-        audio.languageCode === input.languageCode
-      ) {
-        return { readyAsset: asset, audio };
-      }
-      return "media_asset_rebind_conflict" as const;
+      return audio
+        ? { readyAsset: asset, audio }
+        : ("media_asset_rebind_conflict" as const);
     }
     if (asset.status === "FAILED") return "media_asset_failed" as const;
     if (asset.status !== "PENDING") return "media_asset_not_pending" as const;

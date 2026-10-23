@@ -27,6 +27,17 @@ export function createAdminLessonRoutes(
       const detail = await data.createLesson(
         c.req.valid("json") as CreateLessonRequest,
       );
+      if (detail === "lesson_not_found") {
+        return problem(c, 404, detail, "Lesson was not found.");
+      }
+      if (detail === "lesson_not_copyable") {
+        return problem(
+          c,
+          409,
+          detail,
+          "Only Published and Archived Lessons can be copied.",
+        );
+      }
       c.header("Location", `/api/admin/lessons/${detail.id}`);
       return c.json(detail, 201);
     })
@@ -77,7 +88,15 @@ export function createAdminLessonRoutes(
             c,
             409,
             outcome,
-            "This chapter already has a Published Lesson.",
+            "This publication does not replace the chapter's current Published Lesson.",
+          );
+        }
+        if (outcome === "lesson_unchanged") {
+          return problem(
+            c,
+            409,
+            outcome,
+            "The Draft's Lesson Texts and Lesson Sources are identical to the Published Lesson's.",
           );
         }
         if (outcome === "lesson_version_conflict") {

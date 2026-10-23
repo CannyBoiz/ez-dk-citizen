@@ -16,13 +16,13 @@ See the spec sections "The Lesson command" (publication rules) and "Admin" (Publ
 
 **Blocked by:** 02 — Give versions at publication
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A replacement with a matching `replacesLessonId` archives the Published Lesson and publishes the Draft with its computed version, in one transaction
-- [ ] A missing or mismatched `replacesLessonId` while the chapter has a Published Lesson, or one sent while it has none, is `409 published_lesson_conflict` and changes nothing
-- [ ] Identical Lesson Texts and Lesson Sources are `409 lesson_unchanged` and change nothing; a difference only in audio is still `lesson_unchanged`
-- [ ] A failure partway leaves both Lessons as they were
-- [ ] The Backend maps `lesson_unchanged` to `409` with its message
-- [ ] The Admin labels the action Replace, names both versions, sends `replacesLessonId`, shows `409`s inside the confirmation, and makes no request when cancelled
-- [ ] The fake-storage end-to-end tracer replaces a Published Lesson with a Draft: the old one becomes Archived, and the mobile list shows the new version
-- [ ] Contract, Backend route, Admin API integration (real PostgreSQL), and whole-app tests cover the above
+- [x] A replacement with a matching `replacesLessonId` archives the Published Lesson and publishes the Draft with its computed version, in one transaction
+- [x] A missing or mismatched `replacesLessonId` while the chapter has a Published Lesson, or one sent while it has none, is `409 published_lesson_conflict` and changes nothing
+- [x] Identical Lesson Texts and Lesson Sources are `409 lesson_unchanged` and change nothing; a difference only in audio is still `lesson_unchanged`
+- [x] A failure partway leaves both Lessons as they were
+- [x] The Backend maps `lesson_unchanged` to `409` with its message
+- [x] The Admin labels the action Replace, names both versions, sends `replacesLessonId`, shows `409`s inside the confirmation, and makes no request when cancelled
+- [x] The fake-storage end-to-end tracer replaces a Published Lesson with a Draft: the old one becomes Archived, and the mobile list shows the new version
+- [x] Contract, Backend route, Admin API integration (real PostgreSQL), and whole-app tests cover the above

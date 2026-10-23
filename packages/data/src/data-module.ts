@@ -56,7 +56,10 @@ export interface DataModule {
     | "lesson_archived"
     | "lesson_text_not_found"
   >;
-  createLesson(input: CreateLessonRequest): Promise<LessonDetail>;
+  // Copying refuses a Draft as not copyable, and a missing Lesson as not found.
+  createLesson(
+    input: CreateLessonRequest,
+  ): Promise<LessonDetail | "lesson_not_found" | "lesson_not_copyable">;
   listLessons(status?: LessonStatus): Promise<LessonListResponse>;
   // Lessons with a Lesson Text in the Language, in full.
   listLessonsInLanguage(
@@ -72,7 +75,8 @@ export interface DataModule {
     | "lesson_not_found"
     | "lesson_text_not_found"
   >;
-  // A publication refused for missing prerequisites lists them as `missing`.
+  // A publication refused for missing prerequisites lists them as `missing`. Publishing over
+  // the chapter's Published Lesson archives it, when `replacesLessonId` names it.
   patchLesson(
     id: number,
     input: PatchLessonRequest,
@@ -84,6 +88,7 @@ export interface DataModule {
     | "unsupported_language"
     | "change_kind_required"
     | "published_lesson_conflict"
+    | "lesson_unchanged"
     | "lesson_version_conflict"
     | { missing: NonNullable<ProblemDetails["errors"]> }
   >;

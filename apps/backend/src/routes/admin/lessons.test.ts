@@ -203,6 +203,80 @@ test("Backend upserts a localized Lesson Text through the data module", async ()
   assert.equal(calls.length, 1);
 });
 
+test("Backend creates a new version through the data module and maps its refusals", async () => {
+  const copy = lessonDetailSchema.parse({
+    id: 8,
+    chapter: 3,
+    version: null,
+    versionPatch: null,
+    status: "DRAFT",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    availableLanguageCodes: ["th"],
+    lessonTexts: [{ languageCode: "th", title: "ไทย", content: "เนื้อหา" }],
+    lessonSources: [],
+  });
+  const calls: string[] = [];
+  const data = createTestDataModule({
+    async createLesson(input) {
+      calls.push(JSON.stringify(input));
+      if (!("copyFromLessonId" in input)) throw new Error("not a copy");
+      return input.copyFromLessonId === 90
+        ? "lesson_not_found"
+        : input.copyFromLessonId === 91
+          ? "lesson_not_copyable"
+          : copy;
+    },
+  });
+  const app = createBackendApp(async () => undefined, {
+    adminApiToken: "admin-token",
+    data,
+  });
+  const create = (body: unknown) =>
+    app.request("/api/admin/lessons", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+  const created = await create({ copyFromLessonId: 7 });
+  assert.equal(created.status, 201);
+  assert.equal(created.headers.get("location"), "/api/admin/lessons/8");
+  assert.deepEqual(await created.json(), copy);
+
+  for (const [copyFromLessonId, status, code, detail] of [
+    [90, 404, "lesson_not_found", "Lesson was not found."],
+    [
+      91,
+      409,
+      "lesson_not_copyable",
+      "Only Published and Archived Lessons can be copied.",
+    ],
+  ] as const) {
+    const refused = await create({ copyFromLessonId });
+    assert.equal(refused.status, status, code);
+    assert.equal(refused.headers.get("location"), null);
+    const problem = problemDetailsSchema.parse(await refused.json());
+    assert.equal(problem.code, code);
+    assert.equal(problem.detail, detail);
+  }
+
+  for (const body of [
+    { copyFromLessonId: 0 },
+    { copyFromLessonId: 7, chapter: 3 },
+  ]) {
+    assert.equal((await create(body)).status, 422, JSON.stringify(body));
+  }
+  assert.deepEqual(calls, [
+    '{"copyFromLessonId":7}',
+    '{"copyFromLessonId":90}',
+    '{"copyFromLessonId":91}',
+  ]);
+});
+
 test("Backend patches Lessons through the data module and maps every refusal", async () => {
   const detail = lessonDetailSchema.parse({
     id: 7,
@@ -236,6 +310,7 @@ test("Backend patches Lessons through the data module and maps every refusal", a
     95: "published_lesson_conflict",
     96: "lesson_version_conflict",
     97: { missing },
+    98: "lesson_unchanged",
   };
   const calls: string[] = [];
   const data = createTestDataModule({
@@ -266,17 +341,20 @@ test("Backend patches Lessons through the data module and maps every refusal", a
     chapter: 3,
     status: "PUBLISHED",
     changeKind: "fix",
+    replacesLessonId: 6,
   });
   assert.equal(patched.status, 200);
   assert.deepEqual(await patched.json(), detail);
   assert.deepEqual(calls, [
-    '7:{"chapter":3,"status":"PUBLISHED","changeKind":"fix"}',
+    '7:{"chapter":3,"status":"PUBLISHED","changeKind":"fix","replacesLessonId":6}',
   ]);
 
   for (const body of [
     { chapter: 3, version: 2 },
     { status: "ARCHIVED", changeKind: "fix" },
     { status: "PUBLISHED", changeKind: "major" },
+    { status: "ARCHIVED", replacesLessonId: 6 },
+    { status: "PUBLISHED", replacesLessonId: "6" },
   ]) {
     assert.equal((await patch(body)).status, 422, JSON.stringify(body));
   }
@@ -309,7 +387,7 @@ test("Backend patches Lessons through the data module and maps every refusal", a
       95,
       409,
       "published_lesson_conflict",
-      "This chapter already has a Published Lesson.",
+      "This publication does not replace the chapter's current Published Lesson.",
     ],
     [
       96,
@@ -323,6 +401,12 @@ test("Backend patches Lessons through the data module and maps every refusal", a
       "lesson_publication_incomplete",
       "Lesson is missing publication prerequisites.",
       missing,
+    ],
+    [
+      98,
+      409,
+      "lesson_unchanged",
+      "The Draft's Lesson Texts and Lesson Sources are identical to the Published Lesson's.",
     ],
   ] as const) {
     const refused = await patch({ chapter, status: "PUBLISHED" });

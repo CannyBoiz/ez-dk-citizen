@@ -90,7 +90,7 @@ test("A representative Lesson graph loads bidirectionally through Drizzle", asyn
   });
   const pending = await database.query.mediaAsset.findFirst({
     where: { id: pendingAsset.id },
-    with: { lessonAudio: true },
+    with: { lessonAudios: true },
   });
 
   assert.equal(graph?.lessonTexts.length, 2);
@@ -107,7 +107,7 @@ test("A representative Lesson graph loads bidirectionally through Drizzle", asyn
       .sort((left, right) => left - right),
     [30, 31],
   );
-  assert.equal(pending?.lessonAudio, null);
+  assert.deepEqual(pending?.lessonAudios, []);
 });
 
 test("Deleting a Lesson removes owned associations but preserves shared parents", async () => {
