@@ -1,5 +1,5 @@
 // Whether the backend holds a Lesson Text in a Language, as the checklist and upload rules need.
-import type { LessonDetail } from "@ez-dk-citizen/api-contracts/schemas";
+import type { LessonDetail } from "@ez-dk-citizen/api-contracts";
 
 export function hasLessonText(
   lesson: Pick<LessonDetail, "lessonTexts">,

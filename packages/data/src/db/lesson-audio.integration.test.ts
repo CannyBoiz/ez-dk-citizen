@@ -335,10 +335,12 @@ test("Media Asset completion rolls back every promotion write", async () => {
   });
 
   await assert.rejects(
-    completeMediaAsset(failingDatabase, pendingAsset.id, {
-      lessonId: audioLesson.id,
-      languageCode: "th",
-    }),
+    completeMediaAsset(
+      failingDatabase,
+      pendingAsset.id,
+      { lessonId: audioLesson.id, languageCode: "th" },
+      { contentType: "audio/mpeg", sizeBytes: 1_024 },
+    ),
     /forced rollback/,
   );
 

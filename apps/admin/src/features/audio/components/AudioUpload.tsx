@@ -9,7 +9,7 @@ import {
   maxUploadSizeBytes,
   type UploadIntentResponse,
   uploadIntentResponseSchema,
-} from "@ez-dk-citizen/api-contracts/schemas";
+} from "@ez-dk-citizen/api-contracts";
 import { useEffect, useRef, useState } from "react";
 
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";

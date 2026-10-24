@@ -713,9 +713,9 @@ additional S3 metadata request and returns its expiry with the URL.
 ## 8.7 Upload acceptance and validation
 
 The PoC accepts filenames ending in `.mp3`, declared as `audio/mpeg`, with a
-size from 1 byte through 50 MiB. After upload, the Backend checks S3 object metadata
-for the expected content type and exact declared size. It does not download or
-inspect MP3 bytes. The signed upload requires `If-None-Match: *`, and the bucket
+size from 1 byte through 50 MiB. After upload, the Backend reads S3 object
+metadata, and the data module checks it for the expected content type and exact
+declared size. Neither downloads or inspects MP3 bytes. The signed upload requires `If-None-Match: *`, and the bucket
 policy enforces conditional writes so a generated object key can be written
 only once. The signature also binds the declared exact `Content-Length` and
 `Content-Type`. The browser tracer must prove those signed headers work before
@@ -744,11 +744,14 @@ First completion requires a matching Lesson Text and a Lesson in `DRAFT` or
 An idempotent retry for an already-`READY` Media Asset and its original target
 returns the existing Lesson Audio even after archival, without mutating it.
 
-After the Backend validates S3 metadata, one data module operation uses one
-PostgreSQL transaction to mark the Media Asset `READY`, allocate the next audio
-version, demote the previous current version, create the new current Lesson
-Audio, and advance the Lesson's `updated_at`. A transaction failure leaves the
-object and `PENDING` row safe to retry.
+The Backend inspects the stored object and passes its S3 metadata to one data
+module operation, which decides in one PostgreSQL transaction. A content-type or
+exact-size mismatch marks the Media Asset `FAILED` and returns
+`invalid_uploaded_media`; the Backend then deletes the object (§8.10). A match
+marks the Media Asset `READY`, allocates the next audio version, demotes the
+previous current version, creates the new current Lesson Audio, and advances
+the Lesson's `updated_at`. A transaction failure leaves the object and
+`PENDING` row safe to retry.
 
 Superseded `READY` objects and Lesson Audio rows remain as immutable history.
 A `FAILED` Media Asset is terminal and requires a new Upload Intent. `DELETED`
@@ -900,7 +903,7 @@ Responsibilities:
 - upload-intent creation,
 - temporary upload URL generation,
 - temporary playback URL generation,
-- object metadata validation.
+- stored-object inspection for completion.
 
 The Backend's routes must not:
 
@@ -973,9 +976,11 @@ MP3 bytes should bypass the Backend.
    `Content-Length`, `Content-Type: audio/mpeg`, and `If-None-Match: *`.
 7. Browser PUTs directly to object storage.
 8. Browser notifies the Backend of completion.
-9. Backend validates the object's exact content length and `audio/mpeg` content
-   type through S3 object metadata.
-10. Backend marks the Media Asset READY through the data module.
+9. Backend reads the object's content length and content type from S3 object
+   metadata and passes them to the data module.
+10. The data module marks the Media Asset READY if they match the exact declared
+    size and `audio/mpeg`; a mismatch marks it FAILED, and the Backend deletes
+    the object.
 11. In the same transaction, Lesson Audio association/version is created or updated.
 ```
 

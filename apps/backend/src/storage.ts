@@ -20,15 +20,16 @@ export type UploadAuthorization = {
   expiresAt: string;
 };
 
+// What S3 reports for an object; a field it omits stays undefined.
+export type StoredObject = { contentType?: string; sizeBytes?: number };
+
 export interface Storage {
   createUploadAuthorization(input: {
     key: string;
     contentType: "audio/mpeg";
     sizeBytes: number;
   }): Promise<UploadAuthorization>;
-  inspectObject(
-    key: string,
-  ): Promise<{ contentType?: string; sizeBytes?: number }>;
+  inspectObject(key: string): Promise<StoredObject>;
   createPlaybackAuthorization(key: string): Promise<{
     playbackUrl: string;
     expiresAt: string;
@@ -131,10 +132,7 @@ export class FakeStorage implements Storage {
     sizeBytes: number;
   }> = [];
   readonly playbackAuthorizations: string[] = [];
-  private readonly objects = new Map<
-    string,
-    { contentType: string; sizeBytes: number }
-  >();
+  private readonly objects = new Map<string, StoredObject>();
 
   async createUploadAuthorization(input: {
     key: string;
@@ -149,13 +147,11 @@ export class FakeStorage implements Storage {
     };
   }
 
-  putObject(key: string, object: { contentType: string; sizeBytes: number }) {
+  putObject(key: string, object: StoredObject) {
     this.objects.set(key, object);
   }
 
-  async inspectObject(
-    key: string,
-  ): Promise<{ contentType?: string; sizeBytes?: number }> {
+  async inspectObject(key: string): Promise<StoredObject> {
     const object = this.objects.get(key);
     if (!object)
       throw Object.assign(new Error("S3 object was not found."), {

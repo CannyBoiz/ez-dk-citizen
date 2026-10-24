@@ -7,7 +7,7 @@ import {
   sourceListResponseSchema,
   sourceResponseSchema,
   type UpdateSourceRequest,
-} from "@ez-dk-citizen/api-contracts/schemas";
+} from "@ez-dk-citizen/api-contracts";
 import { useEffect, useState } from "react";
 
 import { ConfirmButton } from "../../../shared/components/ConfirmButton";

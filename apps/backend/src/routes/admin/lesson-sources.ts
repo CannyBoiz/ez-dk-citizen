@@ -1,22 +1,13 @@
 import {
   lessonSourceParamsSchema,
-  type RequestIdEnvironment,
-  type UpsertLessonSourceRequest,
   upsertLessonSourceRequestSchema,
-  validateJson,
-  validateRequest,
 } from "@ez-dk-citizen/api-contracts";
 import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
-import { refuseWith } from "../../errors/problem-details.js";
-
-// The refusals both Lesson Source routes answer.
-const refuse = refuseWith({
-  lesson_not_found: [404, "Lesson was not found."],
-  source_not_found: [404, "Source was not found."],
-  lesson_not_editable: [409, "Only Draft Lessons can be edited."],
-});
+import { refuse } from "../../errors/problem-details.js";
+import type { RequestIdEnvironment } from "../../middleware/request-id.js";
+import { validateJson, validateRequest } from "../../middleware/validation.js";
 
 export function createAdminLessonSourceRoutes(data: DataModule) {
   return new Hono<RequestIdEnvironment>()
@@ -25,14 +16,11 @@ export function createAdminLessonSourceRoutes(data: DataModule) {
       validateRequest("param", lessonSourceParamsSchema),
       validateJson(upsertLessonSourceRequestSchema),
       async (c) => {
-        const { lessonId, sourceId } = c.req.valid("param") as {
-          lessonId: number;
-          sourceId: number;
-        };
+        const { lessonId, sourceId } = c.req.valid("param");
         const outcome = await data.upsertLessonSource(
           lessonId,
           sourceId,
-          c.req.valid("json") as UpsertLessonSourceRequest,
+          c.req.valid("json"),
         );
         return typeof outcome === "string"
           ? refuse(c, outcome)
@@ -43,10 +31,7 @@ export function createAdminLessonSourceRoutes(data: DataModule) {
       "/:lessonId/sources/:sourceId",
       validateRequest("param", lessonSourceParamsSchema),
       async (c) => {
-        const { lessonId, sourceId } = c.req.valid("param") as {
-          lessonId: number;
-          sourceId: number;
-        };
+        const { lessonId, sourceId } = c.req.valid("param");
         const outcome = await data.deleteLessonSource(lessonId, sourceId);
         return outcome ? refuse(c, outcome) : c.body(null, 204);
       },

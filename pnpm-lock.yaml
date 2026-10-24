@@ -73,9 +73,15 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.4)
+      '@hono/standard-validator':
+        specifier: ^0.4.0
+        version: 0.4.0(@standard-schema/spec@1.1.0)(hono@4.13.4)
       hono:
         specifier: 4.13.4
         version: 4.13.4
+      zod:
+        specifier: 4.1.12
+        version: 4.1.12
     devDependencies:
       '@types/node':
         specifier: ^26.3.0
@@ -89,12 +95,6 @@ importers:
 
   packages/api-contracts:
     dependencies:
-      '@hono/standard-validator':
-        specifier: ^0.4.0
-        version: 0.4.0(@standard-schema/spec@1.1.0)(hono@4.13.4)
-      hono:
-        specifier: 4.13.4
-        version: 4.13.4
       zod:
         specifier: 4.1.12
         version: 4.1.12
@@ -119,7 +119,7 @@ importers:
         version: 17.4.2
       drizzle-orm:
         specifier: ^1.0.0-rc.4
-        version: 1.0.0-rc.4(@types/pg@8.23.1)(pg@8.23.0)(zod@4.5.4)
+        version: 1.0.0-rc.4(@types/pg@8.23.1)(pg@8.23.0)(zod@4.1.12)
       pg:
         specifier: ^8.23.0
         version: 8.23.0
@@ -1672,9 +1672,6 @@ packages:
   zod@4.1.12:
     resolution: {integrity: sha512-JInaHOamG8pt5+Ey8kGmdcAcg3OL9reK8ltczgHTAwNhMys/6ThXHityHxVV2p3fkw/c+MAvBHFVYHFZDmjMCQ==}
 
-  zod@4.5.4:
-    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
-
 snapshots:
 
   '@asamuzakjp/css-color@7.1.2':
@@ -2393,11 +2390,11 @@ snapshots:
       get-tsconfig: 4.14.3
       jiti: 2.7.0
 
-  drizzle-orm@1.0.0-rc.4(@types/pg@8.23.1)(pg@8.23.0)(zod@4.5.4):
+  drizzle-orm@1.0.0-rc.4(@types/pg@8.23.1)(pg@8.23.0)(zod@4.1.12):
     optionalDependencies:
       '@types/pg': 8.23.1
       pg: 8.23.0
-      zod: 4.5.4
+      zod: 4.1.12
 
   entities@8.1.0: {}
 
@@ -2822,6 +2819,3 @@ snapshots:
   xtend@4.0.2: {}
 
   zod@4.1.12: {}
-
-  zod@4.5.4:
-    optional: true

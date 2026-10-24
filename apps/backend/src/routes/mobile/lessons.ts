@@ -2,25 +2,19 @@ import {
   languageQuerySchema,
   lessonIdParamsSchema,
   mobileLessonDetailSchema,
-  type RequestIdEnvironment,
-  validateRequest,
 } from "@ez-dk-citizen/api-contracts";
 import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
 import type { BackendAppOptions } from "../../app.js";
-import { refuseWith } from "../../errors/problem-details.js";
+import { refuse } from "../../errors/problem-details.js";
+import type { RequestIdEnvironment } from "../../middleware/request-id.js";
+import { validateRequest } from "../../middleware/validation.js";
 import {
   composeMobileLessonDetail,
   composeMobileLessonList,
 } from "../../mobile/compose.js";
 import { authorizePlayback } from "../../playback.js";
-
-const refuse = refuseWith({
-  lesson_not_found: [404, "Lesson was not found."],
-  lesson_text_not_found: [404, "Lesson Text was not found."],
-  unsupported_language: [422, "Language is not supported."],
-});
 
 export function createMobileLessonRoutes(
   data: DataModule,
@@ -28,9 +22,7 @@ export function createMobileLessonRoutes(
 ) {
   return new Hono<RequestIdEnvironment>()
     .get("/", validateRequest("query", languageQuerySchema), async (c) => {
-      const { language: languageCode = "th" } = c.req.valid("query") as {
-        language?: string;
-      };
+      const { language: languageCode = "th" } = c.req.valid("query");
       const lessons = await data.listLessonsInLanguage(
         languageCode,
         "PUBLISHED",
@@ -45,10 +37,8 @@ export function createMobileLessonRoutes(
       validateRequest("param", lessonIdParamsSchema),
       validateRequest("query", languageQuerySchema),
       async (c) => {
-        const { lessonId: id } = c.req.valid("param") as { lessonId: number };
-        const { language: languageCode = "th" } = c.req.valid("query") as {
-          language?: string;
-        };
+        const { lessonId: id } = c.req.valid("param");
+        const { language: languageCode = "th" } = c.req.valid("query");
         const lesson = await data.getPublishedLesson(id, languageCode);
         if (typeof lesson === "string") {
           return refuse(c, lesson);

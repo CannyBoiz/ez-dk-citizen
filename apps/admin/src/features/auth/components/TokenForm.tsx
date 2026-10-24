@@ -1,5 +1,5 @@
 // Collects the admin token and verifies it with an authenticated read before accepting it.
-import { lessonListResponseSchema } from "@ez-dk-citizen/api-contracts/schemas";
+import { lessonListResponseSchema } from "@ez-dk-citizen/api-contracts";
 import { type SubmitEvent, useState } from "react";
 
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";

@@ -1,7 +1,7 @@
 import {
   type ProblemDetails,
   problemDetailsSchema,
-} from "@ez-dk-citizen/api-contracts/schemas";
+} from "@ez-dk-citizen/api-contracts";
 
 import type { BackendRequest, BackendResponse, Network } from "./network";
 

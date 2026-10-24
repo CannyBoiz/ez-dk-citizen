@@ -50,29 +50,14 @@ export async function createPendingMediaAsset(
   return created;
 }
 
-export async function failMediaAsset(
-  database: DataDatabase,
-  mediaAssetId: number,
-) {
-  return database.transaction(async (transaction) => {
-    const [asset] = await transaction
-      .select({ status: mediaAsset.status })
-      .from(mediaAsset)
-      .where(eq(mediaAsset.id, mediaAssetId))
-      .for("update");
-    if (!asset) return "media_asset_not_found" as const;
-    if (asset.status !== "PENDING") return "media_asset_not_pending" as const;
-    await transaction
-      .update(mediaAsset)
-      .set({ status: "FAILED" })
-      .where(eq(mediaAsset.id, mediaAssetId));
-  });
-}
+// What Storage found under a Media Asset's object key.
+export type StoredObject = { contentType?: string; sizeBytes?: number };
 
 export async function completeMediaAsset(
   database: DataDatabase,
   mediaAssetId: number,
   input: CompleteMediaAssetRequest,
+  storedObject?: StoredObject,
 ) {
   return database.transaction(async (transaction) => {
     const [asset] = await transaction
@@ -101,6 +86,23 @@ export async function completeMediaAsset(
     }
     if (asset.status === "FAILED") return "media_asset_failed" as const;
     if (asset.status !== "PENDING") return "media_asset_not_pending" as const;
+
+    // A mismatched upload fails for good, even when its target is also refused.
+    if (!storedObject) {
+      throw new Error(
+        "A pending Media Asset completes only with its stored object.",
+      );
+    }
+    if (
+      storedObject.contentType !== asset.contentType ||
+      storedObject.sizeBytes !== Number(asset.sizeBytes)
+    ) {
+      await transaction
+        .update(mediaAsset)
+        .set({ status: "FAILED" })
+        .where(eq(mediaAsset.id, asset.id));
+      return "invalid_uploaded_media" as const;
+    }
 
     const [supported] = await transaction
       .select({ code: language.code })

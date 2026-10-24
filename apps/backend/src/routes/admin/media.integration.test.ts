@@ -145,6 +145,7 @@ test("a size or content-type mismatch fails the Media Asset for good and deletes
   for (const object of [
     { contentType: "audio/mpeg", sizeBytes: 2 },
     { contentType: "audio/ogg", sizeBytes: 1 },
+    {},
   ]) {
     const { id, objectKey } = await requestUpload(lesson.id, "th");
     storage.putObject(objectKey, object);
@@ -161,6 +162,15 @@ test("a size or content-type mismatch fails the Media Asset for good and deletes
     assert.equal(retry.status, 409);
     assert.equal(await code(retry), "media_asset_failed");
   }
+
+  // The mismatch is decided before the target, so a refused target cannot keep it PENDING.
+  const { id, objectKey } = await requestUpload(lesson.id, "th");
+  storage.putObject(objectKey, { contentType: "audio/mpeg", sizeBytes: 2 });
+  const refusedTarget = await complete(id, 987654, "th");
+  assert.equal(refusedTarget.status, 422);
+  assert.equal(await code(refusedTarget), "invalid_uploaded_media");
+  assert.equal((await mediaAsset(id)).status, "FAILED");
+  assert.equal(await inStorage(objectKey), false);
   assert.deepEqual(
     await (await request(`/lessons/${lesson.id}/audio/th`)).json(),
     { audio: null },

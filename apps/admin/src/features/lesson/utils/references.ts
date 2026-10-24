@@ -2,7 +2,7 @@
 import type {
   LessonDetail,
   UpsertLessonSourceRequest,
-} from "@ez-dk-citizen/api-contracts/schemas";
+} from "@ez-dk-citizen/api-contracts";
 
 import type {
   Field,

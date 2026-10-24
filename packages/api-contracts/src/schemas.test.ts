@@ -24,7 +24,7 @@ import {
   uploadIntentResponseSchema,
   upsertLessonSourceRequestSchema,
   upsertLessonTextRequestSchema,
-} from "./index.js";
+} from "./schemas.js";
 
 test("health contracts reject response drift", () => {
   assert.deepEqual(livenessResponseSchema.parse({ status: "ok" }), {

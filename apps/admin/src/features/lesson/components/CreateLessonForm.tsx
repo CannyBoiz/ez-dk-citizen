@@ -4,7 +4,7 @@
 import {
   type CreateLessonRequest,
   lessonDetailSchema,
-} from "@ez-dk-citizen/api-contracts/schemas";
+} from "@ez-dk-citizen/api-contracts";
 import { type ReactNode, useEffect, useRef } from "react";
 
 import {

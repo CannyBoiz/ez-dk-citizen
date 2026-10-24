@@ -9,10 +9,6 @@
   ],
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./dist/index.js"
-    },
-    "./schemas": {
       "types": "./src/schemas.ts",
       "default": "./dist/schemas.js"
     }
@@ -20,11 +16,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
-    "test": "pnpm build && node --import tsx --test src/index.test.ts"
+    "test": "pnpm build && node --import tsx --test src/schemas.test.ts"
   },
   "dependencies": {
-    "@hono/standard-validator": "^0.4.0",
-    "hono": "4.13.4",
     "zod": "4.1.12"
   },
   "devDependencies": {

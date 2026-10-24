@@ -4,7 +4,7 @@ import {
   type LessonSummary,
   lessonListResponseSchema,
   lessonStatusSchema,
-} from "@ez-dk-citizen/api-contracts/schemas";
+} from "@ez-dk-citizen/api-contracts";
 import { useEffect, useState } from "react";
 
 import {
