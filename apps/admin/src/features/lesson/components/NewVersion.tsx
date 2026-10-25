@@ -1,7 +1,7 @@
 // Create new version on a Published or Archived Lesson: the create form with the chapter fixed,
 // listing what the new Draft starts with. The Backend copies the Lesson Texts, the Lesson
 // Sources with their references, and each Language's current audio, which the copy shares.
-import type { LessonDetail } from "@ez-dk-citizen/api-contracts/schemas";
+import type { LessonDetail } from "@ez-dk-citizen/api-contracts";
 import { useState } from "react";
 
 import type { Call } from "../../../shared/lib/backend";

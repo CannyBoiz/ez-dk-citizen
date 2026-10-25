@@ -1,9 +1,10 @@
 import {
   livenessResponseSchema,
-  type RequestIdEnvironment,
   readinessResponseSchema,
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
+
+import type { RequestIdEnvironment } from "../middleware/request-id.js";
 
 export function createHealthRoutes(checkReadiness: () => Promise<void>) {
   return new Hono<RequestIdEnvironment>()

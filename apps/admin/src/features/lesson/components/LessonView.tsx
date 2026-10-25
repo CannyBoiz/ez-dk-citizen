@@ -7,7 +7,7 @@ import {
   type LessonDetail,
   lessonDetailSchema,
   type PatchLessonRequest,
-} from "@ez-dk-citizen/api-contracts/schemas";
+} from "@ez-dk-citizen/api-contracts";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { ConfirmButton } from "../../../shared/components/ConfirmButton";

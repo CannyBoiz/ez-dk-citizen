@@ -22,7 +22,9 @@
     "@ez-dk-citizen/api-contracts": "workspace:*",
     "@ez-dk-citizen/data": "workspace:*",
     "@hono/node-server": "^2.1.1",
-    "hono": "4.13.4"
+    "@hono/standard-validator": "^0.4.0",
+    "hono": "4.13.4",
+    "zod": "4.1.12"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",

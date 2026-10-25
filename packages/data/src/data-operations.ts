@@ -27,7 +27,6 @@ import {
 import {
   completeMediaAsset,
   createPendingMediaAsset,
-  failMediaAsset,
 } from "./features/media-assets/mutations.js";
 import { findMediaAsset } from "./features/media-assets/queries.js";
 import {
@@ -73,9 +72,13 @@ export function createDataOperations(database: DataDatabase): DataOperations {
         ? mediaAssetSchema.parse(toMediaAsset(asset))
         : "media_asset_not_found";
     },
-    failMediaAsset: (id) => failMediaAsset(database, id),
-    completeMediaAsset: async (id, input) => {
-      const outcome = await completeMediaAsset(database, id, input);
+    completeMediaAsset: async (id, input, storedObject) => {
+      const outcome = await completeMediaAsset(
+        database,
+        id,
+        input,
+        storedObject,
+      );
       return typeof outcome === "string"
         ? outcome
         : completeMediaAssetResponseSchema.parse({

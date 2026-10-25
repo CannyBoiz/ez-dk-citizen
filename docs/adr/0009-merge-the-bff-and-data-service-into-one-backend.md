@@ -26,11 +26,17 @@ because the workload key already sat in the internet-facing process.
   two listeners are the Backend's.
 - Default tests stay offline. Backend route tests stub the data module and use
   `FakeStorage`; real-PostgreSQL tests drive the Backend's HTTP routes.
+- Data package tests go below the data module interface only to inject faults,
+  a forced rollback or a held lock, through the database handle.
 
 ## Considered Options
 
 - **Keep the BFF and Data Service split**: rejected. Every feature costs twice
   and the boundary protects little.
+- **Design module interfaces for a later HTTP split**: rejected. No service
+  split is planned at this scale, and the data module's interface already
+  returns contract-shaped results and outcome codes, so a later split would
+  stay cheap.
 - **A separate internal Storage Service holding the AWS identity**: rejected
   for simplicity, for the PoC and after it. Its one gain is that code execution
   in the Backend could not copy the workload key and keep using it off the

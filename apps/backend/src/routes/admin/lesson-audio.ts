@@ -1,14 +1,14 @@
 import {
   adminLessonAudioResponseSchema,
   lessonLanguageParamsSchema,
-  type RequestIdEnvironment,
-  validateRequest,
 } from "@ez-dk-citizen/api-contracts";
 import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
 import type { BackendAppOptions } from "../../app.js";
-import { problem } from "../../errors/problem-details.js";
+import { refuse } from "../../errors/problem-details.js";
+import type { RequestIdEnvironment } from "../../middleware/request-id.js";
+import { validateRequest } from "../../middleware/validation.js";
 import { authorizePlayback } from "../../playback.js";
 
 // The current Lesson Audio for any Lesson status, with a fresh Playback URL. Unlike the
@@ -21,16 +21,10 @@ export function createAdminLessonAudioRoutes(
     "/:lessonId/audio/:languageCode",
     validateRequest("param", lessonLanguageParamsSchema),
     async (c) => {
-      const { lessonId, languageCode } = c.req.valid("param") as {
-        lessonId: number;
-        languageCode: string;
-      };
+      const { lessonId, languageCode } = c.req.valid("param");
       const current = await data.getCurrentLessonAudio(lessonId, languageCode);
-      if (current === "lesson_not_found") {
-        return problem(c, 404, current, "Lesson was not found.");
-      }
-      if (current === "unsupported_language") {
-        return problem(c, 422, current, "Language is not supported.");
+      if (typeof current === "string") {
+        return refuse(c, current);
       }
 
       c.header("Cache-Control", "no-store");

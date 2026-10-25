@@ -12,7 +12,7 @@ import type {
   SourceResponse,
   UpdateSourceRequest,
   UpsertLessonSourceRequest,
-} from "@ez-dk-citizen/api-contracts/schemas";
+} from "@ez-dk-citizen/api-contracts";
 import {
   act,
   fireEvent,

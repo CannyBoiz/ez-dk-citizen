@@ -1,8 +1,8 @@
-import type { RequestIdEnvironment } from "@ez-dk-citizen/api-contracts";
 import type { Context } from "hono";
 
 import { problem } from "./errors/problem-details.js";
 import { logStorageFailure, storageFailureProblem } from "./errors/storage.js";
+import type { RequestIdEnvironment } from "./middleware/request-id.js";
 import type { Storage } from "./storage.js";
 
 // Signs a fresh Playback URL for current Lesson Audio. On failure it logs without secrets

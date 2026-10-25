@@ -1,7 +1,7 @@
 // Recovering an interrupted upload on the page, without false success or a silent second
 // Upload Intent (ticket 10).
 
-import type { LessonDetail } from "@ez-dk-citizen/api-contracts/schemas";
+import type { LessonDetail } from "@ez-dk-citizen/api-contracts";
 import {
   fireEvent,
   render,

@@ -148,7 +148,7 @@ test("Backend returns a completion retry for superseded audio as not current", a
   assert.deepEqual(await response.json(), completion);
 });
 
-test("Backend keeps incomplete uploads pending and fails invalid uploads before exact cleanup", async (context) => {
+test("Backend keeps incomplete uploads pending and deletes the exact object of invalid uploaded media", async (context) => {
   const asset = mediaAssetSchema.parse({
     id: 9,
     storageProvider: "s3",
@@ -262,74 +262,46 @@ test("Backend keeps incomplete uploads pending and fails invalid uploads before 
     );
   });
 
-  await context.test("fails incomplete metadata before cleanup", async () => {
-    const storage = new FakeStorage();
-    const calls: string[] = [];
-    storage.inspectObject = async () => ({});
-    storage.deleteObject = async (key) => {
-      assert.equal(key, asset.objectKey);
-      calls.push("delete");
-    };
-    const app = createBackendApp(async () => undefined, {
-      adminApiToken: "admin-token",
-      storage,
-      data: createTestDataModule({
-        async getMediaAsset() {
-          return asset;
-        },
-        async failMediaAsset() {
-          calls.push("fail");
-          return undefined;
-        },
-      }),
-    });
-
-    assert.equal((await request(app)).status, 422);
-    assert.deepEqual(calls, ["fail", "delete"]);
-  });
-
   await context.test(
-    "fails metadata mismatches before deleting the exact object",
+    "deletes the exact object and refuses invalid uploaded media",
     async () => {
-      for (const object of [
-        { contentType: "audio/mpeg", sizeBytes: 2 },
-        { contentType: "audio/ogg", sizeBytes: 1 },
-      ]) {
-        const storage = new FakeStorage();
-        const calls: string[] = [];
-        storage.putObject(asset.objectKey, object);
-        storage.deleteObject = async (key) => {
-          assert.equal(key, asset.objectKey);
-          calls.push("delete");
-        };
-        const app = createBackendApp(async () => undefined, {
-          adminApiToken: "admin-token",
-          storage,
-          data: createTestDataModule({
-            async getMediaAsset() {
-              return asset;
-            },
-            async failMediaAsset(id) {
-              assert.equal(id, asset.id);
-              calls.push("fail");
-              return undefined;
-            },
-            async completeMediaAsset() {
-              throw new Error("invalid media must not complete");
-            },
-          }),
-        });
+      const storage = new FakeStorage();
+      const stored = { contentType: "audio/ogg", sizeBytes: 1 };
+      const deleted: string[] = [];
+      storage.putObject(asset.objectKey, stored);
+      storage.deleteObject = async (key) => {
+        deleted.push(key);
+      };
+      const app = createBackendApp(async () => undefined, {
+        adminApiToken: "admin-token",
+        storage,
+        data: createTestDataModule({
+          async getMediaAsset() {
+            return asset;
+          },
+          async completeMediaAsset(id, input, storedObject) {
+            assert.equal(id, asset.id);
+            assert.deepEqual(input, { lessonId: 7, languageCode: "th" });
+            assert.deepEqual(storedObject, stored);
+            return "invalid_uploaded_media";
+          },
+        }),
+      });
 
-        const response = await request(app);
-        assert.equal(response.status, 422);
-        assert.equal((await response.json()).code, "invalid_uploaded_media");
-        assert.deepEqual(calls, ["fail", "delete"]);
-      }
+      const response = await request(app);
+      assert.equal(response.status, 422);
+      const body = await response.json();
+      assert.equal(body.code, "invalid_uploaded_media");
+      assert.equal(
+        body.detail,
+        "Uploaded object does not match its declared media metadata.",
+      );
+      assert.deepEqual(deleted, [asset.objectKey]);
     },
   );
 
   await context.test(
-    "keeps failed media terminal when cleanup and storage diagnostics fail",
+    "logs a failed delete without secrets and still refuses invalid uploaded media",
     async () => {
       const storage = new FakeStorage();
       const calls: string[] = [];
@@ -355,9 +327,9 @@ test("Backend keeps incomplete uploads pending and fails invalid uploads before 
           async getMediaAsset() {
             return asset;
           },
-          async failMediaAsset() {
-            calls.push("fail");
-            return undefined;
+          async completeMediaAsset() {
+            calls.push("complete");
+            return "invalid_uploaded_media";
           },
         }),
       });
@@ -371,7 +343,7 @@ test("Backend keeps incomplete uploads pending and fails invalid uploads before 
         console.log = originalLog;
       }
 
-      assert.deepEqual(calls, ["fail", "delete"]);
+      assert.deepEqual(calls, ["complete", "delete"]);
       const cleanupLog = logs
         .map((entry) => JSON.parse(String(entry)))
         .find((entry) => entry.operation === "delete");
@@ -465,28 +437,6 @@ test("Backend maps completion refusals to Problem Details", async () => {
   );
   assert.equal(missing.status, 404);
   assert.equal((await missing.json()).code, "media_asset_not_found");
-
-  // A mismatched upload that another request settles first keeps its object.
-  const storage = new FakeStorage();
-  const mismatched = { contentType: "audio/mpeg", sizeBytes: 2 };
-  storage.putObject(asset.objectKey, mismatched);
-  const settled = await complete(
-    createBackendApp(async () => undefined, {
-      adminApiToken: "admin-token",
-      storage,
-      data: createTestDataModule({
-        async getMediaAsset() {
-          return { ...asset, status: "PENDING" };
-        },
-        async failMediaAsset() {
-          return "media_asset_not_pending";
-        },
-      }),
-    }),
-  );
-  assert.equal(settled.status, 409);
-  assert.equal((await settled.json()).code, "media_asset_not_pending");
-  assert.deepEqual(await storage.inspectObject(asset.objectKey), mismatched);
 });
 
 test("Backend retries ready media without inspecting storage", async () => {

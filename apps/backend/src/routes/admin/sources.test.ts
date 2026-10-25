@@ -85,9 +85,16 @@ test("Backend creates and lists canonical Sources through the data module", asyn
       Authorization: "Bearer admin-token",
       "Content-Type": "text/plain",
     },
-    body: "https://example.com/source",
+    body: JSON.stringify({
+      url: "https://example.com/source",
+      publishedAt: null,
+    }),
   });
   assert.equal(nonJson.status, 422);
+  assert.equal(
+    problemDetailsSchema.parse(await nonJson.json()).code,
+    "invalid_content_type",
+  );
 
   const created = await app.request("/api/admin/sources", {
     method: "POST",

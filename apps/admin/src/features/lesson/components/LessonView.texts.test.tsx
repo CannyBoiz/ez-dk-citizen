@@ -1,6 +1,6 @@
 // Authoring localized Lesson Texts in the da, en, and th tabs, each saved with the chapter.
 
-import type { PatchLessonRequest } from "@ez-dk-citizen/api-contracts/schemas";
+import type { PatchLessonRequest } from "@ez-dk-citizen/api-contracts";
 import {
   fireEvent,
   render,

@@ -20,7 +20,10 @@ import { createDataOperations } from "./data-operations.js";
 import { createDataDatabase } from "./db/database.js";
 import { databaseTimeoutMessage } from "./db/errors.js";
 import type { LessonReadFilters } from "./features/lessons/queries.js";
-import type { PendingMediaAsset } from "./features/media-assets/mutations.js";
+import type {
+  PendingMediaAsset,
+  StoredObject,
+} from "./features/media-assets/mutations.js";
 import type {
   CurrentLessonAudioResult,
   DeleteLessonResult,
@@ -39,17 +42,18 @@ export interface DataModule {
     input: PendingMediaAsset,
   ): Promise<MediaAsset | "unsupported_language">;
   getMediaAsset(id: number): Promise<MediaAsset | "media_asset_not_found">;
-  failMediaAsset(
-    id: number,
-  ): Promise<"media_asset_not_found" | "media_asset_not_pending" | undefined>;
+  // A PENDING asset needs `storedObject`, what Storage found under its object key. A
+  // mismatch with the declared metadata fails the asset for good, before any target check.
   completeMediaAsset(
     id: number,
     input: CompleteMediaAssetRequest,
+    storedObject?: StoredObject,
   ): Promise<
     | CompleteMediaAssetResponse
     | "media_asset_not_found"
     | "media_asset_not_pending"
     | "media_asset_failed"
+    | "invalid_uploaded_media"
     | "media_asset_rebind_conflict"
     | "unsupported_language"
     | "lesson_not_found"

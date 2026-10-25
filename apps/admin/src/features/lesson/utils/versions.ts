@@ -1,10 +1,7 @@
 // Lesson versions as the admin sees them. Publication gives a Lesson its `major.patch`
 // version, so Published and Archived Lessons are named by it, and Drafts, which have none
 // yet, by the day they were created.
-import type {
-  ChangeKind,
-  LessonSummary,
-} from "@ez-dk-citizen/api-contracts/schemas";
+import type { ChangeKind, LessonSummary } from "@ez-dk-citizen/api-contracts";
 
 type Version = { version: number; versionPatch: number };
 
