@@ -5,7 +5,7 @@ WORKDIR /workspace
 RUN apt-get update \
  && apt-get install --no-install-recommends --yes ca-certificates curl \
  && rm -rf /var/lib/apt/lists/* \
- && npm install --global pnpm@11.24.0
+ && npm install --global pnpm@12.15.0
 
 ARG AWS_SIGNING_HELPER_VERSION=1.8.5
 ARG AWS_SIGNING_HELPER_SHA256=beec9ed1c492d93db809890f16713e3556353294b823c2184ad4e891f1b2b54d
