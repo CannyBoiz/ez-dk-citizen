@@ -26,11 +26,11 @@ export function createAdminLessonRoutes(
   return new Hono<RequestIdEnvironment>()
     .post("/", validateJson(createLessonRequestSchema), async (c) => {
       const created = await data.createLesson(c.req.valid("json"));
-      if (typeof created === "string") {
-        return refuse(c, created);
+      if (!created.ok) {
+        return refuse(c, created.code);
       }
-      c.header("Location", `/api/admin/lessons/${created.id}`);
-      return c.json(created, 201);
+      c.header("Location", `/api/admin/lessons/${created.value.id}`);
+      return c.json(created.value, 201);
     })
     .patch(
       "/:lessonId",
@@ -39,7 +39,10 @@ export function createAdminLessonRoutes(
       async (c) => {
         const { lessonId: id } = c.req.valid("param");
         const outcome = await data.patchLesson(id, c.req.valid("json"));
-        if (outcome === "change_kind_required") {
+        if (outcome.ok) {
+          return c.json(outcome.value);
+        }
+        if (outcome.code === "change_kind_required") {
           return problem(
             c,
             422,
@@ -54,19 +57,16 @@ export function createAdminLessonRoutes(
             ],
           );
         }
-        if (typeof outcome === "string") {
-          return refuse(c, outcome);
-        }
-        if ("missing" in outcome) {
+        if (outcome.code === "lesson_publication_incomplete") {
           return problem(
             c,
             409,
-            "lesson_publication_incomplete",
+            outcome.code,
             "Lesson is missing publication prerequisites.",
             outcome.missing,
           );
         }
-        return c.json(outcome);
+        return refuse(c, outcome.code);
       },
     )
     .delete(
@@ -84,12 +84,12 @@ export function createAdminLessonRoutes(
         }
 
         const deleted = await data.deleteLesson(id);
-        if (typeof deleted === "string") {
-          return refuseDeletion(c, deleted);
+        if (!deleted.ok) {
+          return refuseDeletion(c, deleted.code);
         }
         // The Draft is already gone, so a storage failure only leaves its object behind
         // under the DELETED Media Asset; the keys never leave the Backend.
-        for (const asset of deleted.deletedMediaAssets) {
+        for (const asset of deleted.value.deletedMediaAssets) {
           try {
             await options.storage.deleteObject(asset.objectKey);
           } catch (error) {
@@ -110,10 +110,10 @@ export function createAdminLessonRoutes(
           languageCode,
           c.req.valid("json"),
         );
-        if (typeof outcome === "string") {
-          return refuse(c, outcome);
+        if (!outcome.ok) {
+          return refuse(c, outcome.code);
         }
-        return c.json(outcome);
+        return c.json(outcome.value);
       },
     )
     .get("/", async (c) => c.json(await data.listLessons()))
@@ -123,10 +123,10 @@ export function createAdminLessonRoutes(
       async (c) => {
         const { lessonId: id } = c.req.valid("param");
         const lesson = await data.getLesson(id);
-        if (typeof lesson === "string") {
-          return refuse(c, lesson);
+        if (!lesson.ok) {
+          return refuse(c, lesson.code);
         }
-        return c.json(lesson);
+        return c.json(lesson.value);
       },
     );
 }

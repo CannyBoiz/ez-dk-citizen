@@ -3,11 +3,11 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
-import { lessonDetailSchema } from "@ez-dk-citizen/api-contracts";
 import { eq, sql } from "drizzle-orm";
 
 import { createDataOperations } from "../data-operations.js";
 import { patchLesson } from "../features/lessons/mutations.js";
+import { fail, ok } from "../outcome.js";
 import {
   expectPostgresError,
   postgresErrorCode,
@@ -358,7 +358,7 @@ test("a replacement that fails partway leaves both Lessons as they were", async 
       }
       return (callback: Parameters<typeof database.transaction>[0]) =>
         target.transaction(async (transaction) => {
-          assert.equal(await callback(transaction), draft.id);
+          assert.deepEqual(await callback(transaction), ok(draft.id));
           throw new Error("forced rollback");
         });
     },
@@ -407,12 +407,13 @@ test("a publication whose version a concurrent publication took meanwhile is les
   // Meanwhile another Draft of the chapter is published as 1.0 and archived.
   for (const status of ["PUBLISHED", "ARCHIVED"] as const) {
     const changed = await operations.patchLesson(fast.id, { status });
-    assert.equal(lessonDetailSchema.parse(changed).status, status);
+    assert.ok(changed.ok);
+    assert.equal(changed.value.status, status);
   }
   release();
   await holder;
 
-  assert.equal(await slowPublication, "lesson_version_conflict");
+  assert.deepEqual(await slowPublication, fail("lesson_version_conflict"));
   assert.deepEqual(await operations.getLesson(slow.id), before);
 });
 

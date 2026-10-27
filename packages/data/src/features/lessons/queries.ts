@@ -11,6 +11,7 @@ import {
   mediaAsset,
   source,
 } from "../../db/schema.js";
+import { fail, ok } from "../../outcome.js";
 
 export type LessonReadFilters = { language?: string; status?: LessonStatus };
 
@@ -22,30 +23,36 @@ const catalogueOrder = [
   desc(lesson.id),
 ];
 
+// Lessons with a Lesson Text in the Language, in full.
+export async function listLessonsInLanguage(
+  database: DataDatabase,
+  languageCode: string,
+  filteredStatus?: LessonStatus,
+) {
+  const [supported] = await database
+    .select({ code: language.code })
+    .from(language)
+    .where(eq(language.code, languageCode));
+  if (!supported) return fail("unsupported_language");
+  const rows = await database
+    .select({ id: lesson.id })
+    .from(lesson)
+    .where(filteredStatus ? eq(lesson.status, filteredStatus) : undefined)
+    .orderBy(...catalogueOrder);
+  const items = (
+    await Promise.all(rows.map(({ id }) => loadLessonDetail(database, id)))
+  )
+    .filter((detail): detail is NonNullable<typeof detail> => Boolean(detail))
+    .filter((detail) =>
+      detail.lessonTexts.some((item) => item.languageCode === languageCode),
+    );
+  return ok({ items });
+}
+
 export async function listLessons(
   database: DataDatabase,
-  { language: languageCode, status: filteredStatus }: LessonReadFilters,
+  filteredStatus?: LessonStatus,
 ) {
-  if (languageCode !== undefined) {
-    const [supported] = await database
-      .select({ code: language.code })
-      .from(language)
-      .where(eq(language.code, languageCode));
-    if (!supported) return "unsupported_language" as const;
-    const rows = await database
-      .select({ id: lesson.id })
-      .from(lesson)
-      .where(filteredStatus ? eq(lesson.status, filteredStatus) : undefined)
-      .orderBy(...catalogueOrder);
-    const items = (
-      await Promise.all(rows.map(({ id }) => loadLessonDetail(database, id)))
-    )
-      .filter((detail): detail is NonNullable<typeof detail> => Boolean(detail))
-      .filter((detail) =>
-        detail.lessonTexts.some((item) => item.languageCode === languageCode),
-      );
-    return { items };
-  }
   const rows = await database
     .select()
     .from(lesson)
@@ -71,19 +78,19 @@ export async function readLesson(
       .select({ code: language.code })
       .from(language)
       .where(eq(language.code, languageCode));
-    if (!supported) return "unsupported_language" as const;
+    if (!supported) return fail("unsupported_language");
   }
   const detail = await loadLessonDetail(database, id);
-  if (!detail) return "lesson_not_found" as const;
+  if (!detail) return fail("lesson_not_found");
   if (filteredStatus && detail.status !== filteredStatus)
-    return "lesson_not_found" as const;
+    return fail("lesson_not_found");
   if (languageCode) {
     const text = detail.lessonTexts.find(
       (item) => item.languageCode === languageCode,
     );
-    if (!text) return "lesson_text_not_found" as const;
+    if (!text) return fail("lesson_text_not_found");
   }
-  return detail;
+  return ok(detail);
 }
 
 // A Published Lesson read in one Language, with that Language's current audio or null.
@@ -96,11 +103,11 @@ export async function readPublishedLesson(
     language: languageCode,
     status: "PUBLISHED",
   });
-  if (typeof detail === "string") return detail;
+  if (!detail.ok) return detail;
   const currentAudio = await selectCurrentAudio(database, id, languageCode);
-  if (!currentAudio) return { ...detail, currentAudio: null };
+  if (!currentAudio) return ok({ ...detail.value, currentAudio: null });
   const { originalFilename: _originalFilename, ...published } = currentAudio;
-  return { ...detail, currentAudio: published };
+  return ok({ ...detail.value, currentAudio: published });
 }
 
 // The current READY Lesson Audio for one Lesson and Language, whatever the Lesson's status.
@@ -113,15 +120,15 @@ export async function readCurrentLessonAudio(
     .select({ code: language.code })
     .from(language)
     .where(eq(language.code, languageCode));
-  if (!supported) return "unsupported_language" as const;
+  if (!supported) return fail("unsupported_language");
   const [existing] = await database
     .select({ id: lesson.id })
     .from(lesson)
     .where(eq(lesson.id, id));
-  if (!existing) return "lesson_not_found" as const;
-  return {
+  if (!existing) return fail("lesson_not_found");
+  return ok({
     audio: (await selectCurrentAudio(database, id, languageCode)) ?? null,
-  };
+  });
 }
 
 async function selectCurrentAudio(

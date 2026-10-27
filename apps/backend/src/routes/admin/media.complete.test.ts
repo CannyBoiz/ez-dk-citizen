@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mediaAssetSchema } from "@ez-dk-citizen/data";
+import { fail, mediaAssetSchema, ok } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
 import { FakeStorage } from "../../storage.js";
@@ -31,12 +31,12 @@ test("Backend completes matching stored media through the admin route", async ()
     data: createTestDataModule({
       async getMediaAsset(id) {
         assert.equal(id, asset.id);
-        return asset;
+        return ok(asset);
       },
       async completeMediaAsset(id, input) {
         assert.equal(id, asset.id);
         assert.deepEqual(input, { lessonId: 7, languageCode: "th" });
-        return {
+        return ok({
           mediaAsset: {
             id,
             status: "READY",
@@ -53,7 +53,7 @@ test("Backend completes matching stored media through the admin route", async ()
             isCurrent: true,
             createdAt: "2026-01-01T00:01:00.000Z",
           },
-        };
+        });
       },
     }),
   });
@@ -115,22 +115,24 @@ test("Backend returns a completion retry for superseded audio as not current", a
     storage,
     data: createTestDataModule({
       async getMediaAsset() {
-        return mediaAssetSchema.parse({
-          id: 9,
-          storageProvider: "s3",
-          storageContainer: "citizenship-audio",
-          objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
-          originalFilename: "lesson.mp3",
-          contentType: "audio/mpeg",
-          sizeBytes: 1,
-          status: "READY",
-          durationMs: null,
-          createdAt: "2026-01-01T00:00:00.000Z",
-          uploadedAt: "2026-01-01T00:01:00.000Z",
-        });
+        return ok(
+          mediaAssetSchema.parse({
+            id: 9,
+            storageProvider: "s3",
+            storageContainer: "citizenship-audio",
+            objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
+            originalFilename: "lesson.mp3",
+            contentType: "audio/mpeg",
+            sizeBytes: 1,
+            status: "READY",
+            durationMs: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            uploadedAt: "2026-01-01T00:01:00.000Z",
+          }),
+        );
       },
       async completeMediaAsset() {
-        return completion;
+        return ok(completion);
       },
     }),
   });
@@ -180,7 +182,7 @@ test("Backend keeps incomplete uploads pending and deletes the exact object of i
       storage,
       data: createTestDataModule({
         async getMediaAsset() {
-          return asset;
+          return ok(asset);
         },
       }),
     });
@@ -206,7 +208,7 @@ test("Backend keeps incomplete uploads pending and deletes the exact object of i
           storage,
           data: createTestDataModule({
             async getMediaAsset() {
-              return asset;
+              return ok(asset);
             },
           }),
         });
@@ -234,7 +236,7 @@ test("Backend keeps incomplete uploads pending and deletes the exact object of i
       storage,
       data: createTestDataModule({
         async getMediaAsset() {
-          return asset;
+          return ok(asset);
         },
       }),
     });
@@ -277,13 +279,13 @@ test("Backend keeps incomplete uploads pending and deletes the exact object of i
         storage,
         data: createTestDataModule({
           async getMediaAsset() {
-            return asset;
+            return ok(asset);
           },
           async completeMediaAsset(id, input, storedObject) {
             assert.equal(id, asset.id);
             assert.deepEqual(input, { lessonId: 7, languageCode: "th" });
             assert.deepEqual(storedObject, stored);
-            return "invalid_uploaded_media";
+            return fail("invalid_uploaded_media");
           },
         }),
       });
@@ -325,11 +327,11 @@ test("Backend keeps incomplete uploads pending and deletes the exact object of i
         storage,
         data: createTestDataModule({
           async getMediaAsset() {
-            return asset;
+            return ok(asset);
           },
           async completeMediaAsset() {
             calls.push("complete");
-            return "invalid_uploaded_media";
+            return fail("invalid_uploaded_media");
           },
         }),
       });
@@ -410,10 +412,10 @@ test("Backend maps completion refusals to Problem Details", async () => {
         storage: new FakeStorage(),
         data: createTestDataModule({
           async getMediaAsset() {
-            return asset;
+            return ok(asset);
           },
           async completeMediaAsset() {
-            return outcome;
+            return fail(outcome);
           },
         }),
       }),
@@ -430,7 +432,7 @@ test("Backend maps completion refusals to Problem Details", async () => {
       storage: new FakeStorage(),
       data: createTestDataModule({
         async getMediaAsset() {
-          return "media_asset_not_found";
+          return fail("media_asset_not_found");
         },
       }),
     }),
@@ -462,10 +464,10 @@ test("Backend retries ready media without inspecting storage", async () => {
     storage,
     data: createTestDataModule({
       async getMediaAsset() {
-        return asset;
+        return ok(asset);
       },
       async completeMediaAsset() {
-        return {
+        return ok({
           mediaAsset: {
             id: asset.id,
             status: "READY",
@@ -482,7 +484,7 @@ test("Backend retries ready media without inspecting storage", async () => {
             isCurrent: true,
             createdAt: "2026-01-01T00:01:00.000Z",
           },
-        };
+        });
       },
     }),
   });

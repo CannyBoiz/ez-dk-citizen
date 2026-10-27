@@ -22,9 +22,7 @@ export function createAdminLessonSourceRoutes(data: DataModule) {
           sourceId,
           c.req.valid("json"),
         );
-        return typeof outcome === "string"
-          ? refuse(c, outcome)
-          : c.json(outcome);
+        return outcome.ok ? c.json(outcome.value) : refuse(c, outcome.code);
       },
     )
     .delete(
@@ -33,7 +31,7 @@ export function createAdminLessonSourceRoutes(data: DataModule) {
       async (c) => {
         const { lessonId, sourceId } = c.req.valid("param");
         const outcome = await data.deleteLessonSource(lessonId, sourceId);
-        return outcome ? refuse(c, outcome) : c.body(null, 204);
+        return outcome.ok ? c.body(null, 204) : refuse(c, outcome.code);
       },
     );
 }

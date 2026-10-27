@@ -27,10 +27,10 @@ export function createMobileLessonRoutes(
         languageCode,
         "PUBLISHED",
       );
-      if (lessons === "unsupported_language") {
-        return refuse(c, lessons);
+      if (!lessons.ok) {
+        return refuse(c, lessons.code);
       }
-      return c.json(composeMobileLessonList(lessons.items, languageCode));
+      return c.json(composeMobileLessonList(lessons.value.items, languageCode));
     })
     .get(
       "/:lessonId",
@@ -39,10 +39,11 @@ export function createMobileLessonRoutes(
       async (c) => {
         const { lessonId: id } = c.req.valid("param");
         const { language: languageCode = "th" } = c.req.valid("query");
-        const lesson = await data.getPublishedLesson(id, languageCode);
-        if (typeof lesson === "string") {
-          return refuse(c, lesson);
+        const published = await data.getPublishedLesson(id, languageCode);
+        if (!published.ok) {
+          return refuse(c, published.code);
         }
+        const lesson = published.value;
         const detail = composeMobileLessonDetail(lesson, languageCode);
         if (!detail) {
           return refuse(c, "lesson_text_not_found");

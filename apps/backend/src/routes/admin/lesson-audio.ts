@@ -23,13 +23,13 @@ export function createAdminLessonAudioRoutes(
     async (c) => {
       const { lessonId, languageCode } = c.req.valid("param");
       const current = await data.getCurrentLessonAudio(lessonId, languageCode);
-      if (typeof current === "string") {
-        return refuse(c, current);
+      if (!current.ok) {
+        return refuse(c, current.code);
       }
 
       c.header("Cache-Control", "no-store");
-      if (!current.audio) return c.json({ audio: null });
-      const { objectKey, ...audio } = current.audio;
+      if (!current.value.audio) return c.json({ audio: null });
+      const { objectKey, ...audio } = current.value.audio;
       const playback = await authorizePlayback(c, options.storage, {
         mediaAssetId: audio.mediaAssetId,
         objectKey,

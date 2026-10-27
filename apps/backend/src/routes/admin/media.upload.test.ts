@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { problemDetailsSchema } from "@ez-dk-citizen/api-contracts";
-import { mediaAssetSchema } from "@ez-dk-citizen/data";
+import { fail, mediaAssetSchema, ok } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
 import { FakeStorage } from "../../storage.js";
@@ -27,14 +27,16 @@ test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", 
         assert.equal(input.storageContainer, "citizenship-audio");
         assert.match(input.objectKey, /^audio\/[0-9a-f-]{36}\.mp3$/);
         const { languageCode: _languageCode, ...mediaAsset } = input;
-        return mediaAssetSchema.parse({
-          id: 9,
-          ...mediaAsset,
-          status: "PENDING",
-          durationMs: null,
-          createdAt: "2026-01-01T00:00:00.000Z",
-          uploadedAt: null,
-        });
+        return ok(
+          mediaAssetSchema.parse({
+            id: 9,
+            ...mediaAsset,
+            status: "PENDING",
+            durationMs: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            uploadedAt: null,
+          }),
+        );
       },
     }),
   });
@@ -119,14 +121,16 @@ test("Backend accepts a test-only Upload Intent object-key generator", async () 
           "smoke/123e4567-e89b-12d3-a456-426614174000.mp3",
         );
         const { languageCode: _languageCode, ...mediaAsset } = input;
-        return mediaAssetSchema.parse({
-          id: 10,
-          ...mediaAsset,
-          status: "PENDING",
-          durationMs: null,
-          createdAt: "2026-01-01T00:00:00.000Z",
-          uploadedAt: null,
-        });
+        return ok(
+          mediaAssetSchema.parse({
+            id: 10,
+            ...mediaAsset,
+            status: "PENDING",
+            durationMs: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            uploadedAt: null,
+          }),
+        );
       },
     }),
   });
@@ -164,7 +168,7 @@ test("Backend does not sign when pending Media Asset persistence fails", async (
     storageBucket: "citizenship-audio",
     data: createTestDataModule({
       async createPendingMediaAsset() {
-        return "unsupported_language";
+        return fail("unsupported_language");
       },
     }),
   });
@@ -208,19 +212,21 @@ test("Backend leaves a pending Media Asset and logs safely when storage signing 
     storageBucket: "citizenship-audio",
     data: createTestDataModule({
       async createPendingMediaAsset() {
-        return mediaAssetSchema.parse({
-          id: 10,
-          storageProvider: "s3",
-          storageContainer: "citizenship-audio",
-          objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
-          originalFilename: "lesson.mp3",
-          contentType: "audio/mpeg",
-          sizeBytes: 1,
-          status: "PENDING",
-          durationMs: null,
-          createdAt: "2026-01-01T00:00:00.000Z",
-          uploadedAt: null,
-        });
+        return ok(
+          mediaAssetSchema.parse({
+            id: 10,
+            storageProvider: "s3",
+            storageContainer: "citizenship-audio",
+            objectKey: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
+            originalFilename: "lesson.mp3",
+            contentType: "audio/mpeg",
+            sizeBytes: 1,
+            status: "PENDING",
+            durationMs: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            uploadedAt: null,
+          }),
+        );
       },
     }),
   });

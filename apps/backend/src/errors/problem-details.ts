@@ -40,11 +40,14 @@ export function problem(
   });
 }
 
-// Every outcome code a data module operation can return. `change_kind_required` carries a
-// field error, so the patchLesson route answers it itself.
+// Every outcome code a data module operation can return. `change_kind_required` and
+// `lesson_publication_incomplete` carry field errors, so the patchLesson route answers them itself.
 type OutcomeCode = Exclude<
-  Extract<Awaited<ReturnType<DataModule[keyof DataModule]>>, string>,
-  "change_kind_required"
+  Extract<
+    Awaited<ReturnType<DataModule[keyof DataModule]>>,
+    { ok: false }
+  >["code"],
+  "change_kind_required" | "lesson_publication_incomplete"
 >;
 type Refusal = readonly [Parameters<typeof problem>[1], string];
 

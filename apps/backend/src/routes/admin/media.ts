@@ -58,8 +58,8 @@ export function createAdminMediaRoutes(
           contentType: input.contentType,
           sizeBytes: input.sizeBytes,
         });
-        if (mediaAsset === "unsupported_language") {
-          return refuse(c, mediaAsset);
+        if (!mediaAsset.ok) {
+          return refuse(c, mediaAsset.code);
         }
         let authorization: UploadAuthorization;
         try {
@@ -69,7 +69,12 @@ export function createAdminMediaRoutes(
             sizeBytes: input.sizeBytes,
           });
         } catch (error) {
-          logStorageFailure(c.get("requestId"), "upload", mediaAsset.id, error);
+          logStorageFailure(
+            c.get("requestId"),
+            "upload",
+            mediaAsset.value.id,
+            error,
+          );
           return problem(
             c,
             502,
@@ -79,7 +84,7 @@ export function createAdminMediaRoutes(
         }
         return c.json(
           uploadIntentResponseSchema.parse({
-            mediaAssetId: mediaAsset.id,
+            mediaAssetId: mediaAsset.value.id,
             ...authorization,
           }),
           201,
@@ -102,10 +107,11 @@ export function createAdminMediaRoutes(
           );
         }
 
-        const asset = await data.getMediaAsset(mediaAssetId);
-        if (asset === "media_asset_not_found") {
-          return refuseCompletion(c, asset);
+        const found = await data.getMediaAsset(mediaAssetId);
+        if (!found.ok) {
+          return refuseCompletion(c, found.code);
         }
+        const asset = found.value;
         // A READY retry or a FAILED asset needs no inspection.
         let storedObject: StoredObject | undefined;
         if (asset.status === "PENDING") {
@@ -122,16 +128,16 @@ export function createAdminMediaRoutes(
           storedObject,
         );
         // The data module has marked the asset FAILED; a failed delete leaves an inert orphan.
-        if (completed === "invalid_uploaded_media") {
+        if (!completed.ok && completed.code === "invalid_uploaded_media") {
           try {
             await options.storage.deleteObject(asset.objectKey);
           } catch (error) {
             logStorageFailure(c.get("requestId"), "delete", asset.id, error);
           }
         }
-        return typeof completed === "string"
-          ? refuseCompletion(c, completed)
-          : c.json(completeMediaAssetResponseSchema.parse(completed));
+        return completed.ok
+          ? c.json(completeMediaAssetResponseSchema.parse(completed.value))
+          : refuseCompletion(c, completed.code);
       },
     );
 }

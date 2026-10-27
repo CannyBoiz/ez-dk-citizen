@@ -14,11 +14,11 @@ export function createAdminSourceRoutes(data: DataModule) {
   return new Hono<RequestIdEnvironment>()
     .post("/", validateJson(createSourceRequestSchema), async (c) => {
       const created = await data.createSource(c.req.valid("json"));
-      if (typeof created === "string") {
-        return refuse(c, created);
+      if (!created.ok) {
+        return refuse(c, created.code);
       }
-      c.header("Location", `/api/admin/sources/${created.id}`);
-      return c.json(created, 201);
+      c.header("Location", `/api/admin/sources/${created.value.id}`);
+      return c.json(created.value, 201);
     })
     .patch(
       "/:sourceId",
@@ -27,10 +27,10 @@ export function createAdminSourceRoutes(data: DataModule) {
       async (c) => {
         const { sourceId } = c.req.valid("param");
         const updated = await data.updateSource(sourceId, c.req.valid("json"));
-        if (typeof updated === "string") {
-          return refuse(c, updated);
+        if (!updated.ok) {
+          return refuse(c, updated.code);
         }
-        return c.json(updated);
+        return c.json(updated.value);
       },
     )
     .get("/", async (c) => c.json(await data.listSources()));

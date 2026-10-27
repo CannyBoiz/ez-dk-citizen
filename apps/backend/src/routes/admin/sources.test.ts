@@ -4,6 +4,7 @@ import {
   problemDetailsSchema,
   sourceResponseSchema,
 } from "@ez-dk-citizen/api-contracts";
+import { fail, ok } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
 import { createTestDataModule } from "../../testing/data-module.js";
@@ -17,9 +18,9 @@ test("Backend creates and lists canonical Sources through the data module", asyn
   const calls: string[] = [];
   const data = createTestDataModule({
     async createSource(input) {
-      if (input.url.endsWith("conflict")) return "source_url_conflict";
+      if (input.url.endsWith("conflict")) return fail("source_url_conflict");
       calls.push(`${input.url}:${input.publishedAt}`);
-      return source;
+      return ok(source);
     },
     async listSources() {
       return { items: [source] };
@@ -139,13 +140,13 @@ test("Backend maps Source corrections and their refusals from the data module", 
   const data = createTestDataModule({
     async updateSource(id, input) {
       calls.push({ id, input });
-      if (id === 404) return "source_not_found";
-      if (input.url?.endsWith("conflict")) return "source_url_conflict";
-      return {
+      if (id === 404) return fail("source_not_found");
+      if (input.url?.endsWith("conflict")) return fail("source_url_conflict");
+      return ok({
         id,
         url: input.url ?? "https://example.com/kept",
         publishedAt: null,
-      };
+      });
     },
   });
   const app = createBackendApp(async () => undefined, {

@@ -19,6 +19,7 @@ import {
 } from "./features/lessons/mutations.js";
 import {
   listLessons,
+  listLessonsInLanguage,
   loadLessonDetail,
   readCurrentLessonAudio,
   readLesson,
@@ -39,6 +40,7 @@ import {
   listSources,
   updateSource,
 } from "./features/sources/operations.js";
+import { fail, ok } from "./outcome.js";
 import {
   currentLessonAudioResultSchema,
   deleteLessonResultSchema,
@@ -55,22 +57,23 @@ export function createDataOperations(database: DataDatabase): DataOperations {
     if (!detail) throw new Error("Lesson could not be read.");
     return lessonDetailSchema.parse(detail);
   };
-  // Feature mutations return the Lesson's id on success and an outcome code otherwise.
-  const detailOrOutcome = async <Outcome>(outcome: number | Outcome) =>
-    typeof outcome === "number" ? readLessonDetail(outcome) : outcome;
+  // Feature mutations succeed with the Lesson's id.
+  const detailOrOutcome = async <Refusal extends { ok: false }>(
+    outcome: { ok: true; value: number } | Refusal,
+  ) => (outcome.ok ? ok(await readLessonDetail(outcome.value)) : outcome);
 
   return {
     createPendingMediaAsset: async (input) => {
       const created = await createPendingMediaAsset(database, input);
-      return typeof created === "string"
-        ? created
-        : mediaAssetSchema.parse(toMediaAsset(created));
+      return created.ok
+        ? ok(mediaAssetSchema.parse(toMediaAsset(created.value)))
+        : created;
     },
     getMediaAsset: async (id) => {
       const asset = await findMediaAsset(database, id);
       return asset
-        ? mediaAssetSchema.parse(toMediaAsset(asset))
-        : "media_asset_not_found";
+        ? ok(mediaAssetSchema.parse(toMediaAsset(asset)))
+        : fail("media_asset_not_found");
     },
     completeMediaAsset: async (id, input, storedObject) => {
       const outcome = await completeMediaAsset(
@@ -79,31 +82,32 @@ export function createDataOperations(database: DataDatabase): DataOperations {
         input,
         storedObject,
       );
-      return typeof outcome === "string"
-        ? outcome
-        : completeMediaAssetResponseSchema.parse({
-            mediaAsset: toCompletedMediaAsset(outcome.readyAsset),
-            lessonAudio: toLessonAudio(outcome.audio),
-          });
+      return outcome.ok
+        ? ok(
+            completeMediaAssetResponseSchema.parse({
+              mediaAsset: toCompletedMediaAsset(outcome.value.readyAsset),
+              lessonAudio: toLessonAudio(outcome.value.audio),
+            }),
+          )
+        : outcome;
     },
     createLesson: async (input) =>
       detailOrOutcome(await createLesson(database, input)),
     listLessons: async (status) =>
-      lessonListResponseSchema.parse(await listLessons(database, { status })),
+      lessonListResponseSchema.parse(await listLessons(database, status)),
     listLessonsInLanguage: async (languageCode, status) => {
-      const result = await listLessons(database, {
-        language: languageCode,
+      const result = await listLessonsInLanguage(
+        database,
+        languageCode,
         status,
-      });
-      return result === "unsupported_language"
-        ? result
-        : lessonDetailListSchema.parse(result);
+      );
+      return result.ok
+        ? ok(lessonDetailListSchema.parse(result.value))
+        : result;
     },
     getLesson: async (id, filters = {}) => {
       const detail = await readLesson(database, id, filters);
-      return typeof detail === "string"
-        ? detail
-        : lessonDetailSchema.parse(detail);
+      return detail.ok ? ok(lessonDetailSchema.parse(detail.value)) : detail;
     },
     patchLesson: async (id, input) => {
       try {
@@ -112,17 +116,22 @@ export function createDataOperations(database: DataDatabase): DataOperations {
         if (
           isPostgresError(error, "23505", "lesson_one_published_per_chapter")
         ) {
-          return "published_lesson_conflict";
+          return fail("published_lesson_conflict");
         }
-        if (isPostgresError(error, "23505")) return "lesson_version_conflict";
+        if (isPostgresError(error, "23505"))
+          return fail("lesson_version_conflict");
         throw error;
       }
     },
     deleteLesson: async (id) => {
       const outcome = await deleteLesson(database, id);
-      return typeof outcome === "string"
-        ? outcome
-        : deleteLessonResultSchema.parse({ deletedMediaAssets: outcome });
+      return outcome.ok
+        ? ok(
+            deleteLessonResultSchema.parse({
+              deletedMediaAssets: outcome.value,
+            }),
+          )
+        : outcome;
     },
     upsertLessonText: async (lessonId, languageCode, input) =>
       detailOrOutcome(
@@ -136,9 +145,9 @@ export function createDataOperations(database: DataDatabase): DataOperations {
       deleteLessonSource(database, lessonId, sourceId),
     getPublishedLesson: async (id, languageCode) => {
       const detail = await readPublishedLesson(database, id, languageCode);
-      return typeof detail === "string"
-        ? detail
-        : publishedLessonDetailSchema.parse(detail);
+      return detail.ok
+        ? ok(publishedLessonDetailSchema.parse(detail.value))
+        : detail;
     },
     getCurrentLessonAudio: async (lessonId, languageCode) => {
       const outcome = await readCurrentLessonAudio(
@@ -146,13 +155,13 @@ export function createDataOperations(database: DataDatabase): DataOperations {
         lessonId,
         languageCode,
       );
-      return typeof outcome === "string"
-        ? outcome
-        : currentLessonAudioResultSchema.parse(outcome);
+      return outcome.ok
+        ? ok(currentLessonAudioResultSchema.parse(outcome.value))
+        : outcome;
     },
     createSource: (input) =>
       orSourceUrlConflict(async () =>
-        sourceResponseSchema.parse(await createSource(database, input)),
+        ok(sourceResponseSchema.parse(await createSource(database, input))),
       ),
     listSources: async () =>
       sourceListResponseSchema.parse(await listSources(database)),
@@ -160,8 +169,8 @@ export function createDataOperations(database: DataDatabase): DataOperations {
       orSourceUrlConflict(async () => {
         const updated = await updateSource(database, id, input);
         return updated
-          ? sourceResponseSchema.parse(updated)
-          : "source_not_found";
+          ? ok(sourceResponseSchema.parse(updated))
+          : fail("source_not_found");
       }),
   };
 }
@@ -170,7 +179,7 @@ async function orSourceUrlConflict<Result>(operation: () => Promise<Result>) {
   try {
     return await operation();
   } catch (error) {
-    if (isPostgresError(error, "23505")) return "source_url_conflict" as const;
+    if (isPostgresError(error, "23505")) return fail("source_url_conflict");
     throw error;
   }
 }

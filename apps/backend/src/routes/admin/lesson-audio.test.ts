@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { currentLessonAudioResultSchema } from "@ez-dk-citizen/data";
+import { currentLessonAudioResultSchema, fail, ok } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
 import { FakeStorage } from "../../storage.js";
@@ -59,7 +59,7 @@ test("admin current audio signs one fresh Playback URL and hides storage identit
     data: createTestDataModule({
       async getCurrentLessonAudio(lessonId, languageCode) {
         reads.push(`${lessonId}:${languageCode}`);
-        return languageCode === "da" ? { audio: null } : current;
+        return ok(languageCode === "da" ? { audio: null } : current);
       },
     }),
   });
@@ -111,7 +111,7 @@ test("admin current audio maps data module refusals to Problem Details", async (
       storage: new FakeStorage(),
       data: createTestDataModule({
         async getCurrentLessonAudio() {
-          return outcome;
+          return fail(outcome);
         },
       }),
     });
@@ -146,7 +146,7 @@ test("admin current audio maps signing failures to storage problems and logs the
       storage,
       data: createTestDataModule({
         async getCurrentLessonAudio() {
-          return current;
+          return ok(current);
         },
       }),
     });

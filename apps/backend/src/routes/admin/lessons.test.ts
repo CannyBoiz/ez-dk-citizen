@@ -4,7 +4,7 @@ import {
   lessonDetailSchema,
   problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts";
-import type { DataModule } from "@ez-dk-citizen/data";
+import { type DataModule, fail, ok } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
 import { FakeStorage } from "../../storage.js";
@@ -37,7 +37,7 @@ test("admin Lesson routes authenticate and use the data module", async () => {
   const data = createTestDataModule({
     async createLesson(input) {
       calls.push(`create:${JSON.stringify(input)}`);
-      return detail;
+      return ok(detail);
     },
     async listLessons(status) {
       calls.push(`list:${status}`);
@@ -45,7 +45,7 @@ test("admin Lesson routes authenticate and use the data module", async () => {
     },
     async getLesson(id, filters) {
       calls.push(`get:${id}:${JSON.stringify(filters)}`);
-      return id === 99 ? "lesson_not_found" : detail;
+      return id === 99 ? fail("lesson_not_found") : ok(detail);
     },
   });
   const app = createBackendApp(async () => undefined, {
@@ -144,11 +144,11 @@ test("Backend upserts a localized Lesson Text through the data module", async ()
   const calls: string[] = [];
   const data = createTestDataModule({
     async upsertLessonText(lessonId, languageCode, input) {
-      if (lessonId === 404) return "lesson_not_found";
-      if (lessonId === 409) return "lesson_not_editable";
-      if (languageCode === "zz") return "unsupported_language";
+      if (lessonId === 404) return fail("lesson_not_found");
+      if (lessonId === 409) return fail("lesson_not_editable");
+      if (languageCode === "zz") return fail("unsupported_language");
       calls.push(`${lessonId}:${languageCode}:${input.title}:${input.content}`);
-      return detail;
+      return ok(detail);
     },
   });
   const app = createBackendApp(async () => undefined, {
@@ -222,10 +222,10 @@ test("Backend creates a new version through the data module and maps its refusal
       calls.push(JSON.stringify(input));
       if (!("copyFromLessonId" in input)) throw new Error("not a copy");
       return input.copyFromLessonId === 90
-        ? "lesson_not_found"
+        ? fail("lesson_not_found")
         : input.copyFromLessonId === 91
-          ? "lesson_not_copyable"
-          : copy;
+          ? fail("lesson_not_copyable")
+          : ok(copy);
     },
   });
   const app = createBackendApp(async () => undefined, {
@@ -302,15 +302,15 @@ test("Backend patches Lessons through the data module and maps every refusal", a
     number,
     Awaited<ReturnType<DataModule["patchLesson"]>>
   > = {
-    90: "lesson_not_found",
-    91: "lesson_not_editable",
-    92: "lesson_lifecycle_conflict",
-    93: "unsupported_language",
-    94: "change_kind_required",
-    95: "published_lesson_conflict",
-    96: "lesson_version_conflict",
-    97: { missing },
-    98: "lesson_unchanged",
+    90: fail("lesson_not_found"),
+    91: fail("lesson_not_editable"),
+    92: fail("lesson_lifecycle_conflict"),
+    93: fail("unsupported_language"),
+    94: fail("change_kind_required"),
+    95: fail("published_lesson_conflict"),
+    96: fail("lesson_version_conflict"),
+    97: { ...fail("lesson_publication_incomplete"), missing },
+    98: fail("lesson_unchanged"),
   };
   const calls: string[] = [];
   const data = createTestDataModule({
@@ -318,7 +318,7 @@ test("Backend patches Lessons through the data module and maps every refusal", a
       const refusal = refusals[input.chapter ?? 0];
       if (refusal) return refusal;
       calls.push(`${id}:${JSON.stringify(input)}`);
-      return detail;
+      return ok(detail);
     },
   });
   const app = createBackendApp(async () => undefined, {
@@ -456,7 +456,7 @@ test("deleting a Draft deletes exactly the objects of the Media Assets the data 
     data: createTestDataModule({
       async deleteLesson(id) {
         calls.push(`data:${id}`);
-        return { deletedMediaAssets };
+        return ok({ deletedMediaAssets });
       },
     }),
   });
@@ -501,7 +501,7 @@ test("a storage failure after the delete commits is logged safely and still answ
     storage,
     data: createTestDataModule({
       async deleteLesson() {
-        return { deletedMediaAssets };
+        return ok({ deletedMediaAssets });
       },
     }),
   });
@@ -547,7 +547,7 @@ test("a refused or missing Lesson deletes nothing from storage", async () => {
       storage,
       data: createTestDataModule({
         async deleteLesson() {
-          return code;
+          return fail(code);
         },
       }),
     });

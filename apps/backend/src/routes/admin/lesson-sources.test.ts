@@ -4,6 +4,7 @@ import {
   lessonDetailSchema,
   problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts";
+import { fail, ok } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
 import { createTestDataModule } from "../../testing/data-module.js";
@@ -34,13 +35,13 @@ test("Backend replaces and detaches Draft Lesson Sources through the data module
   const calls: string[] = [];
   const data = createTestDataModule({
     async upsertLessonSource(lessonId, sourceId, input) {
-      if (sourceId === 99) return "source_not_found";
+      if (sourceId === 99) return fail("source_not_found");
       calls.push(`${lessonId}:${sourceId}:${input.pageFrom}`);
-      return detail;
+      return ok(detail);
     },
     async deleteLessonSource(lessonId, sourceId) {
       calls.push(`delete:${lessonId}:${sourceId}`);
-      return undefined;
+      return ok(undefined);
     },
   });
   const app = createBackendApp(async () => undefined, {
@@ -136,10 +137,10 @@ test("Backend maps Lesson Source refusals from the data module", async () => {
   } as const;
   const data = createTestDataModule({
     async upsertLessonSource(lessonId) {
-      return refusals[lessonId as keyof typeof refusals];
+      return fail(refusals[lessonId as keyof typeof refusals]);
     },
     async deleteLessonSource(lessonId) {
-      return refusals[lessonId as keyof typeof refusals];
+      return fail(refusals[lessonId as keyof typeof refusals]);
     },
   });
   const app = createBackendApp(async () => undefined, {
