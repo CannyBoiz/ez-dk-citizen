@@ -24,11 +24,11 @@ Dockerfile pin it, and all three move together.
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `pnpm outdated -r` lists nothing behind its latest stable release, apart from Drizzle
-- [ ] `drizzle-orm` and `drizzle-kit` are pinned, with no caret, to the same newest release candidate, the one npm's `rc` dist-tag names
-- [ ] `packageManager` and both Dockerfiles pin the same latest stable pnpm, upgraded in its own commit
-- [ ] `pnpm db:generate` produces no new migration from the unchanged schema
-- [ ] Biome's config is migrated if the new version asks (`biome migrate`), and `pnpm lint` passes
-- [ ] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:integration`, and `pnpm test:e2e` pass
+- [x] `pnpm outdated -r` lists nothing behind its latest stable release, apart from Drizzle
+- [x] `drizzle-orm` and `drizzle-kit` are pinned, with no caret, to the same newest release candidate, the one npm's `rc` dist-tag names
+- [x] `packageManager` and both Dockerfiles pin the same latest stable pnpm, upgraded in its own commit
+- [x] `pnpm db:generate` produces no new migration from the unchanged schema
+- [x] Biome's config is migrated if the new version asks (`biome migrate`), and `pnpm lint` passes
+- [x] `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:integration`, and `pnpm test:e2e` pass

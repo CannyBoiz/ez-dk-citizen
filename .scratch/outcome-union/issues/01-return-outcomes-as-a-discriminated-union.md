@@ -36,10 +36,10 @@ that type to read both shapes.
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Every data module operation that can refuse returns an `Outcome`, plus one data-carrying member for `patchLesson`
-- [ ] Every route, `data-operations.ts`, and feature function tells a refusal from a success only by `ok`, and no returned code carries `as const`
-- [ ] `OutcomeCode` derives from the `{ ok: false }` members, and an outcome code without a table row still fails typecheck
-- [ ] Every Admin API and Mobile API status, Problem Details code, and `detail` is unchanged
-- [ ] `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:integration`, and `pnpm test:e2e` pass
+- [x] Every data module operation that can refuse returns an `Outcome`, plus one data-carrying member for `patchLesson`
+- [x] Every route, `data-operations.ts`, and feature function tells a refusal from a success only by `ok`, and no returned code carries `as const`
+- [x] `OutcomeCode` derives from the `{ ok: false }` members, and an outcome code without a table row still fails typecheck
+- [x] Every Admin API and Mobile API status, Problem Details code, and `detail` is unchanged
+- [x] `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:integration`, and `pnpm test:e2e` pass
