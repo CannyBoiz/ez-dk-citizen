@@ -1,6 +1,7 @@
 import { createDataModule, type DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { secureHeaders } from "hono/secure-headers";
 
 import type { BackendConfig } from "./config.js";
 import { installProblemDetails, problem } from "./errors/problem-details.js";
@@ -51,6 +52,7 @@ export function createBackendApp(
 ) {
   const app = new Hono<RequestIdEnvironment>();
 
+  app.use("*", secureHeaders());
   app.use("*", requestId);
   app.use("*", logging);
   installProblemDetails(app);
