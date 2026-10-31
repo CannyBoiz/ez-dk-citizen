@@ -24,6 +24,7 @@ import type {
   PendingMediaAsset,
   StoredObject,
 } from "./features/media-assets/mutations.js";
+import type { Outcome } from "./outcome.js";
 import type {
   CurrentLessonAudioResult,
   DeleteLessonResult,
@@ -33,15 +34,18 @@ import type {
 } from "./results.js";
 
 export { isDatabaseUnavailable } from "./db/errors.js";
+export { fail, type Outcome, ok } from "./outcome.js";
 export * from "./results.js";
 
-// The package's only public API. Operations return contract-shaped results or outcome codes;
-// mapping those to HTTP is the caller's job.
+// The package's only public API. Operations return contract-shaped results, or Outcomes where
+// they can refuse; mapping those to HTTP is the caller's job.
 export interface DataModule {
   createPendingMediaAsset(
     input: PendingMediaAsset,
-  ): Promise<MediaAsset | "unsupported_language">;
-  getMediaAsset(id: number): Promise<MediaAsset | "media_asset_not_found">;
+  ): Promise<Outcome<MediaAsset, "unsupported_language">>;
+  getMediaAsset(
+    id: number,
+  ): Promise<Outcome<MediaAsset, "media_asset_not_found">>;
   // A PENDING asset needs `storedObject`, what Storage found under its object key. A
   // mismatch with the declared metadata fails the asset for good, before any target check.
   completeMediaAsset(
@@ -49,35 +53,37 @@ export interface DataModule {
     input: CompleteMediaAssetRequest,
     storedObject?: StoredObject,
   ): Promise<
-    | CompleteMediaAssetResponse
-    | "media_asset_not_found"
-    | "media_asset_not_pending"
-    | "media_asset_failed"
-    | "invalid_uploaded_media"
-    | "media_asset_rebind_conflict"
-    | "unsupported_language"
-    | "lesson_not_found"
-    | "lesson_archived"
-    | "lesson_text_not_found"
+    Outcome<
+      CompleteMediaAssetResponse,
+      | "media_asset_not_found"
+      | "media_asset_not_pending"
+      | "media_asset_failed"
+      | "invalid_uploaded_media"
+      | "media_asset_rebind_conflict"
+      | "unsupported_language"
+      | "lesson_not_found"
+      | "lesson_archived"
+      | "lesson_text_not_found"
+    >
   >;
   // Copying refuses a Draft as not copyable, and a missing Lesson as not found.
   createLesson(
     input: CreateLessonRequest,
-  ): Promise<LessonDetail | "lesson_not_found" | "lesson_not_copyable">;
+  ): Promise<Outcome<LessonDetail, "lesson_not_found" | "lesson_not_copyable">>;
   listLessons(status?: LessonStatus): Promise<LessonListResponse>;
   // Lessons with a Lesson Text in the Language, in full.
   listLessonsInLanguage(
     languageCode: string,
     status?: LessonStatus,
-  ): Promise<LessonDetailList | "unsupported_language">;
+  ): Promise<Outcome<LessonDetailList, "unsupported_language">>;
   getLesson(
     id: number,
     filters?: LessonReadFilters,
   ): Promise<
-    | LessonDetail
-    | "unsupported_language"
-    | "lesson_not_found"
-    | "lesson_text_not_found"
+    Outcome<
+      LessonDetail,
+      "unsupported_language" | "lesson_not_found" | "lesson_text_not_found"
+    >
   >;
   // A publication refused for missing prerequisites lists them as `missing`. Publishing over
   // the chapter's Published Lesson archives it, when `replacesLessonId` names it.
@@ -85,69 +91,85 @@ export interface DataModule {
     id: number,
     input: PatchLessonRequest,
   ): Promise<
-    | LessonDetail
-    | "lesson_not_found"
-    | "lesson_not_editable"
-    | "lesson_lifecycle_conflict"
-    | "unsupported_language"
-    | "change_kind_required"
-    | "published_lesson_conflict"
-    | "lesson_unchanged"
-    | "lesson_version_conflict"
-    | { missing: NonNullable<ProblemDetails["errors"]> }
+    | Outcome<
+        LessonDetail,
+        | "lesson_not_found"
+        | "lesson_not_editable"
+        | "lesson_lifecycle_conflict"
+        | "unsupported_language"
+        | "change_kind_required"
+        | "published_lesson_conflict"
+        | "lesson_unchanged"
+        | "lesson_version_conflict"
+      >
+    | {
+        ok: false;
+        code: "lesson_publication_incomplete";
+        missing: NonNullable<ProblemDetails["errors"]>;
+      }
   >;
   deleteLesson(
     id: number,
-  ): Promise<DeleteLessonResult | "lesson_not_found" | "lesson_not_editable">;
+  ): Promise<
+    Outcome<DeleteLessonResult, "lesson_not_found" | "lesson_not_editable">
+  >;
   upsertLessonText(
     lessonId: number,
     languageCode: string,
     input: UpsertLessonTextRequest,
   ): Promise<
-    | LessonDetail
-    | "lesson_not_found"
-    | "lesson_not_editable"
-    | "unsupported_language"
+    Outcome<
+      LessonDetail,
+      "lesson_not_found" | "lesson_not_editable" | "unsupported_language"
+    >
   >;
   upsertLessonSource(
     lessonId: number,
     sourceId: number,
     input: UpsertLessonSourceRequest,
   ): Promise<
-    | LessonDetail
-    | "lesson_not_found"
-    | "lesson_not_editable"
-    | "source_not_found"
+    Outcome<
+      LessonDetail,
+      "lesson_not_found" | "lesson_not_editable" | "source_not_found"
+    >
   >;
   deleteLessonSource(
     lessonId: number,
     sourceId: number,
   ): Promise<
-    "lesson_not_found" | "lesson_not_editable" | "source_not_found" | undefined
+    Outcome<
+      undefined,
+      "lesson_not_found" | "lesson_not_editable" | "source_not_found"
+    >
   >;
   getPublishedLesson(
     id: number,
     languageCode: string,
   ): Promise<
-    | PublishedLessonDetail
-    | "unsupported_language"
-    | "lesson_not_found"
-    | "lesson_text_not_found"
+    Outcome<
+      PublishedLessonDetail,
+      "unsupported_language" | "lesson_not_found" | "lesson_text_not_found"
+    >
   >;
   getCurrentLessonAudio(
     lessonId: number,
     languageCode: string,
   ): Promise<
-    CurrentLessonAudioResult | "unsupported_language" | "lesson_not_found"
+    Outcome<
+      CurrentLessonAudioResult,
+      "unsupported_language" | "lesson_not_found"
+    >
   >;
   createSource(
     input: CreateSourceRequest,
-  ): Promise<SourceResponse | "source_url_conflict">;
+  ): Promise<Outcome<SourceResponse, "source_url_conflict">>;
   listSources(): Promise<SourceListResponse>;
   updateSource(
     id: number,
     input: UpdateSourceRequest,
-  ): Promise<SourceResponse | "source_not_found" | "source_url_conflict">;
+  ): Promise<
+    Outcome<SourceResponse, "source_not_found" | "source_url_conflict">
+  >;
   checkReadiness(): Promise<void>;
   close(): Promise<void>;
 }

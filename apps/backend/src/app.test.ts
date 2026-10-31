@@ -227,6 +227,30 @@ test("Backend rejects write bodies above 1 MiB with Problem Details", async () =
   );
 });
 
+test("Backend sets security headers on every response of both APIs", async () => {
+  const app = createBackendApp(async () => undefined, {
+    adminApiToken: "admin-token",
+  });
+
+  for (const [path, status] of [
+    ["/health", 200],
+    ["/api/admin/sources", 401],
+    ["/missing", 404],
+    ["/api/mobile/lessons", 500],
+  ] as const) {
+    const response = await app.request(path);
+
+    assert.equal(response.status, status, path);
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(
+      response.headers.get("strict-transport-security"),
+      "max-age=15552000; includeSubDomains",
+    );
+    assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+    assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
+  }
+});
+
 test("Backend unmatched routes return Problem Details", async () => {
   const app = createBackendApp(async () => undefined);
 

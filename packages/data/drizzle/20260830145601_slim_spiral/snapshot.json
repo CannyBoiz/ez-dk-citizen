@@ -1,75 +1,483 @@
 {
-  "version": "8",
+  "type": "base",
+  "version": "9",
   "dialect": "postgres",
   "id": "5289d76e-e955-45b3-8b57-5375ab10a1a1",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
+  "footprints": [
+    {
+      "statementType": "create_enum",
+      "statementTarget": [
+        "enum",
+        "public",
+        "lesson_status"
+      ],
+      "writes": [
+        "s|enum|public.lesson_status",
+        "n|enum|public.lesson_status",
+        "e|enum|public.lesson_status",
+        "n|type|public.lesson_status"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": [
+        "enum",
+        "public",
+        "media_asset_status"
+      ],
+      "writes": [
+        "s|enum|public.media_asset_status",
+        "n|enum|public.media_asset_status",
+        "e|enum|public.media_asset_status",
+        "n|type|public.media_asset_status"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "language"
+      ],
+      "writes": [
+        "s|tbl|public.language",
+        "n|tbl|public.language",
+        "e|tbl|public.language",
+        "n|rel|public.language",
+        "n|type|public.language",
+        "n|rel|public.language_pkey",
+        "n|rel|public.language_name_key"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson"
+      ],
+      "writes": [
+        "s|tbl|public.lesson",
+        "n|tbl|public.lesson",
+        "e|tbl|public.lesson",
+        "n|rel|public.lesson",
+        "n|type|public.lesson",
+        "n|rel|public.lesson_pkey",
+        "n|rel|public.lesson_chapter_version_unique"
+      ],
+      "reads": [
+        "n|sch|public",
+        "n|enum|public.lesson_status"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson_audio"
+      ],
+      "writes": [
+        "s|tbl|public.lesson_audio",
+        "n|tbl|public.lesson_audio",
+        "e|tbl|public.lesson_audio",
+        "n|rel|public.lesson_audio",
+        "n|type|public.lesson_audio",
+        "n|rel|public.lesson_audio_pkey",
+        "n|rel|public.lesson_audio_version_unique",
+        "n|rel|public.lesson_audio_media_asset_id_key"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson_source"
+      ],
+      "writes": [
+        "s|tbl|public.lesson_source",
+        "n|tbl|public.lesson_source",
+        "e|tbl|public.lesson_source",
+        "n|rel|public.lesson_source",
+        "n|type|public.lesson_source",
+        "n|rel|public.lesson_source_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson_text"
+      ],
+      "writes": [
+        "s|tbl|public.lesson_text",
+        "n|tbl|public.lesson_text",
+        "e|tbl|public.lesson_text",
+        "n|rel|public.lesson_text",
+        "n|type|public.lesson_text",
+        "n|rel|public.lesson_text_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "media_asset"
+      ],
+      "writes": [
+        "s|tbl|public.media_asset",
+        "n|tbl|public.media_asset",
+        "e|tbl|public.media_asset",
+        "n|rel|public.media_asset",
+        "n|type|public.media_asset",
+        "n|rel|public.media_asset_pkey",
+        "n|rel|public.media_asset_storage_object_unique"
+      ],
+      "reads": [
+        "n|sch|public",
+        "n|enum|public.media_asset_status"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "source"
+      ],
+      "writes": [
+        "s|tbl|public.source",
+        "n|tbl|public.source",
+        "e|tbl|public.source",
+        "n|rel|public.source",
+        "n|type|public.source",
+        "n|rel|public.source_pkey",
+        "n|rel|public.source_url_key"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "lesson",
+        "lesson_one_published_per_chapter"
+      ],
+      "writes": [
+        "s|idx|public.lesson_one_published_per_chapter",
+        "n|idx|public.lesson_one_published_per_chapter",
+        "e|idx|public.lesson_one_published_per_chapter",
+        "n|rel|public.lesson_one_published_per_chapter"
+      ],
+      "reads": [
+        "n|tbl|public.lesson",
+        "n|sch|public",
+        "n|col|public.lesson.chapter"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "lesson_audio",
+        "lesson_audio_one_current"
+      ],
+      "writes": [
+        "s|idx|public.lesson_audio_one_current",
+        "n|idx|public.lesson_audio_one_current",
+        "e|idx|public.lesson_audio_one_current",
+        "n|rel|public.lesson_audio_one_current"
+      ],
+      "reads": [
+        "n|tbl|public.lesson_audio",
+        "n|sch|public",
+        "n|col|public.lesson_audio.lesson_id",
+        "n|col|public.lesson_audio.language_code"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson_audio"
+      ],
+      "writes": [
+        "s|fk|public.lesson_audio.lesson_audio_lesson_id_lesson_id_fkey",
+        "n|fk|public.lesson_audio.lesson_audio_lesson_id_lesson_id_fkey",
+        "e|fk|public.lesson_audio.lesson_audio_lesson_id_lesson_id_fkey",
+        "n|con|public.lesson_audio.lesson_audio_lesson_id_lesson_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.lesson_audio",
+        "n|sch|public",
+        "n|tbl|public.lesson",
+        "n|sch|public",
+        "n|col|public.lesson_audio.lesson_id",
+        "n|col|public.lesson.id",
+        "e|uniqueness|public.lesson.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson_audio"
+      ],
+      "writes": [
+        "s|fk|public.lesson_audio.lesson_audio_language_code_language_code_fkey",
+        "n|fk|public.lesson_audio.lesson_audio_language_code_language_code_fkey",
+        "e|fk|public.lesson_audio.lesson_audio_language_code_language_code_fkey",
+        "n|con|public.lesson_audio.lesson_audio_language_code_language_code_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.lesson_audio",
+        "n|sch|public",
+        "n|tbl|public.language",
+        "n|sch|public",
+        "n|col|public.lesson_audio.language_code",
+        "n|col|public.language.code",
+        "e|uniqueness|public.language.code"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson_audio"
+      ],
+      "writes": [
+        "s|fk|public.lesson_audio.lesson_audio_media_asset_id_media_asset_id_fkey",
+        "n|fk|public.lesson_audio.lesson_audio_media_asset_id_media_asset_id_fkey",
+        "e|fk|public.lesson_audio.lesson_audio_media_asset_id_media_asset_id_fkey",
+        "n|con|public.lesson_audio.lesson_audio_media_asset_id_media_asset_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.lesson_audio",
+        "n|sch|public",
+        "n|tbl|public.media_asset",
+        "n|sch|public",
+        "n|col|public.lesson_audio.media_asset_id",
+        "n|col|public.media_asset.id",
+        "e|uniqueness|public.media_asset.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson_audio"
+      ],
+      "writes": [
+        "s|fk|public.lesson_audio.lesson_audio_lesson_text_fk",
+        "n|fk|public.lesson_audio.lesson_audio_lesson_text_fk",
+        "e|fk|public.lesson_audio.lesson_audio_lesson_text_fk",
+        "n|con|public.lesson_audio.lesson_audio_lesson_text_fk"
+      ],
+      "reads": [
+        "n|tbl|public.lesson_audio",
+        "n|sch|public",
+        "n|tbl|public.lesson_text",
+        "n|sch|public",
+        "n|col|public.lesson_audio.lesson_id",
+        "n|col|public.lesson_audio.language_code",
+        "n|col|public.lesson_text.lesson_id",
+        "n|col|public.lesson_text.language_code",
+        "e|uniqueness|public.lesson_text.language_code.lesson_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson_source"
+      ],
+      "writes": [
+        "s|fk|public.lesson_source.lesson_source_lesson_id_lesson_id_fkey",
+        "n|fk|public.lesson_source.lesson_source_lesson_id_lesson_id_fkey",
+        "e|fk|public.lesson_source.lesson_source_lesson_id_lesson_id_fkey",
+        "n|con|public.lesson_source.lesson_source_lesson_id_lesson_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.lesson_source",
+        "n|sch|public",
+        "n|tbl|public.lesson",
+        "n|sch|public",
+        "n|col|public.lesson_source.lesson_id",
+        "n|col|public.lesson.id",
+        "e|uniqueness|public.lesson.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson_source"
+      ],
+      "writes": [
+        "s|fk|public.lesson_source.lesson_source_source_id_source_id_fkey",
+        "n|fk|public.lesson_source.lesson_source_source_id_source_id_fkey",
+        "e|fk|public.lesson_source.lesson_source_source_id_source_id_fkey",
+        "n|con|public.lesson_source.lesson_source_source_id_source_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.lesson_source",
+        "n|sch|public",
+        "n|tbl|public.source",
+        "n|sch|public",
+        "n|col|public.lesson_source.source_id",
+        "n|col|public.source.id",
+        "e|uniqueness|public.source.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson_text"
+      ],
+      "writes": [
+        "s|fk|public.lesson_text.lesson_text_lesson_id_lesson_id_fkey",
+        "n|fk|public.lesson_text.lesson_text_lesson_id_lesson_id_fkey",
+        "e|fk|public.lesson_text.lesson_text_lesson_id_lesson_id_fkey",
+        "n|con|public.lesson_text.lesson_text_lesson_id_lesson_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.lesson_text",
+        "n|sch|public",
+        "n|tbl|public.lesson",
+        "n|sch|public",
+        "n|col|public.lesson_text.lesson_id",
+        "n|col|public.lesson.id",
+        "e|uniqueness|public.lesson.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "lesson_text"
+      ],
+      "writes": [
+        "s|fk|public.lesson_text.lesson_text_language_code_language_code_fkey",
+        "n|fk|public.lesson_text.lesson_text_language_code_language_code_fkey",
+        "e|fk|public.lesson_text.lesson_text_language_code_language_code_fkey",
+        "n|con|public.lesson_text.lesson_text_language_code_language_code_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.lesson_text",
+        "n|sch|public",
+        "n|tbl|public.language",
+        "n|sch|public",
+        "n|col|public.lesson_text.language_code",
+        "n|col|public.language.code",
+        "e|uniqueness|public.language.code"
+      ]
+    }
+  ],
   "ddl": [
     {
+      "schema": "public",
+      "name": "language",
+      "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
+      "name": "lesson",
+      "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
+      "name": "lesson_audio",
+      "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
+      "name": "lesson_source",
+      "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
+      "name": "lesson_text",
+      "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
+      "name": "media_asset",
+      "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
+      "name": "source",
+      "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
+      "name": "lesson_status",
       "values": [
         "DRAFT",
         "PUBLISHED",
         "ARCHIVED"
       ],
-      "name": "lesson_status",
-      "entityType": "enums",
-      "schema": "public"
+      "entityType": "enums"
     },
     {
+      "schema": "public",
+      "name": "media_asset_status",
       "values": [
         "PENDING",
         "READY",
         "FAILED",
         "DELETED"
       ],
-      "name": "media_asset_status",
-      "entityType": "enums",
-      "schema": "public"
+      "entityType": "enums"
     },
     {
-      "isRlsEnabled": false,
-      "name": "language",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "lesson",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "lesson_audio",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "lesson_source",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "lesson_text",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "media_asset",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "source",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
+      "schema": "public",
+      "table": "language",
+      "name": "code",
       "type": "varchar(35)",
       "typeSchema": null,
       "notNull": true,
@@ -77,12 +485,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "code",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "language"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "language",
+      "name": "name",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -90,12 +498,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "language"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson",
+      "name": "id",
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
@@ -112,25 +520,12 @@
         "cache": 1,
         "cycle": false
       },
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson"
+      "entityType": "columns"
     },
     {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "lesson",
       "name": "chapter",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson"
-    },
-    {
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
@@ -138,12 +533,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "version",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson",
+      "name": "version",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "lesson",
+      "name": "status",
       "type": "lesson_status",
       "typeSchema": "public",
       "notNull": true,
@@ -151,25 +559,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "lesson",
       "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson"
-    },
-    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -177,12 +572,25 @@
       "default": "now()",
       "generated": null,
       "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson",
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "id",
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
@@ -199,12 +607,12 @@
         "cache": 1,
         "cycle": false
       },
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "lesson_id",
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
@@ -212,12 +620,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "lesson_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "language_code",
       "type": "varchar(35)",
       "typeSchema": null,
       "notNull": true,
@@ -225,25 +633,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "language_code",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "columns"
     },
     {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "lesson_audio",
       "name": "media_asset_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_audio"
-    },
-    {
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
@@ -251,12 +646,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "audio_version",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "audio_version",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "is_current",
       "type": "boolean",
       "typeSchema": null,
       "notNull": true,
@@ -264,12 +672,12 @@
       "default": "false",
       "generated": null,
       "identity": null,
-      "name": "is_current",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "created_at",
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -277,25 +685,12 @@
       "default": "now()",
       "generated": null,
       "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "columns"
     },
     {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "lesson_source",
       "name": "lesson_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_source"
-    },
-    {
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
@@ -303,25 +698,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "lesson_source",
       "name": "source_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_source"
-    },
-    {
       "type": "integer",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "lesson_source",
       "name": "page_from",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_source"
-    },
-    {
       "type": "integer",
       "typeSchema": null,
       "notNull": false,
@@ -329,12 +724,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "page_to",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_source"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson_source",
+      "name": "page_to",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "lesson_source",
+      "name": "section_reference",
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -342,12 +750,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "section_reference",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_source"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson_text",
+      "name": "lesson_id",
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
@@ -355,12 +763,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "lesson_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_text"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson_text",
+      "name": "language_code",
       "type": "varchar(35)",
       "typeSchema": null,
       "notNull": true,
@@ -368,25 +776,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "language_code",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_text"
+      "entityType": "columns"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "lesson_text",
       "name": "title",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_text"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -394,12 +789,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "content",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "lesson_text"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson_text",
+      "name": "content",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "media_asset",
+      "name": "id",
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
@@ -416,25 +824,12 @@
         "cache": 1,
         "cycle": false
       },
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "media_asset"
+      "entityType": "columns"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "media_asset",
       "name": "storage_provider",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "media_asset"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -442,12 +837,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "media_asset",
       "name": "storage_container",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "media_asset"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -455,12 +850,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "media_asset",
       "name": "object_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "media_asset"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -468,12 +863,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "media_asset",
       "name": "original_filename",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "media_asset"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -481,12 +876,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "content_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "media_asset"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "media_asset",
+      "name": "content_type",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "media_asset",
+      "name": "size_bytes",
       "type": "bigint",
       "typeSchema": null,
       "notNull": true,
@@ -494,12 +902,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "size_bytes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "media_asset"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "media_asset",
+      "name": "duration_ms",
       "type": "bigint",
       "typeSchema": null,
       "notNull": false,
@@ -507,12 +915,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "duration_ms",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "media_asset"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "media_asset",
+      "name": "status",
       "type": "media_asset_status",
       "typeSchema": "public",
       "notNull": true,
@@ -520,12 +928,12 @@
       "default": "'PENDING'",
       "generated": null,
       "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "media_asset"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "media_asset",
+      "name": "created_at",
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -533,12 +941,12 @@
       "default": "now()",
       "generated": null,
       "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "media_asset"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "media_asset",
+      "name": "uploaded_at",
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": false,
@@ -546,12 +954,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "uploaded_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "media_asset"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "source",
+      "name": "id",
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
@@ -568,12 +976,12 @@
         "cache": 1,
         "cycle": false
       },
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "source"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "source",
+      "name": "url",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -581,12 +989,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "url",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "source"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "source",
+      "name": "published_at",
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": false,
@@ -594,12 +1002,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "published_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "source"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "lesson",
+      "name": "lesson_one_published_per_chapter",
       "nameExplicit": true,
       "columns": [
         {
@@ -615,12 +1023,12 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "lesson_one_published_per_chapter",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "lesson"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "lesson_audio_one_current",
       "nameExplicit": true,
       "columns": [
         {
@@ -643,12 +1051,12 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "lesson_audio_one_current",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "lesson_audio_lesson_id_lesson_id_fkey",
       "nameExplicit": false,
       "columns": [
         "lesson_id"
@@ -660,12 +1068,12 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "lesson_audio_lesson_id_lesson_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "lesson_audio_language_code_language_code_fkey",
       "nameExplicit": false,
       "columns": [
         "language_code"
@@ -677,12 +1085,12 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "RESTRICT",
-      "name": "lesson_audio_language_code_language_code_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "lesson_audio_media_asset_id_media_asset_id_fkey",
       "nameExplicit": false,
       "columns": [
         "media_asset_id"
@@ -694,12 +1102,12 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "RESTRICT",
-      "name": "lesson_audio_media_asset_id_media_asset_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "lesson_audio_lesson_text_fk",
       "nameExplicit": true,
       "columns": [
         "lesson_id",
@@ -713,12 +1121,12 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "lesson_audio_lesson_text_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "lesson_source",
+      "name": "lesson_source_lesson_id_lesson_id_fkey",
       "nameExplicit": false,
       "columns": [
         "lesson_id"
@@ -730,12 +1138,12 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "lesson_source_lesson_id_lesson_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "lesson_source"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "lesson_source",
+      "name": "lesson_source_source_id_source_id_fkey",
       "nameExplicit": false,
       "columns": [
         "source_id"
@@ -747,12 +1155,12 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "lesson_source_source_id_source_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "lesson_source"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "lesson_text",
+      "name": "lesson_text_lesson_id_lesson_id_fkey",
       "nameExplicit": false,
       "columns": [
         "lesson_id"
@@ -764,12 +1172,12 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "lesson_text_lesson_id_lesson_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "lesson_text"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "lesson_text",
+      "name": "lesson_text_language_code_language_code_fkey",
       "nameExplicit": false,
       "columns": [
         "language_code"
@@ -781,96 +1189,96 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "RESTRICT",
-      "name": "lesson_text_language_code_language_code_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "lesson_text"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "lesson_source",
+      "name": "lesson_source_pkey",
       "columns": [
         "lesson_id",
         "source_id"
       ],
       "nameExplicit": true,
-      "name": "lesson_source_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "lesson_source"
+      "entityType": "pks"
     },
     {
+      "schema": "public",
+      "table": "lesson_text",
+      "name": "lesson_text_pkey",
       "columns": [
         "lesson_id",
         "language_code"
       ],
       "nameExplicit": true,
-      "name": "lesson_text_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "lesson_text"
+      "entityType": "pks"
     },
     {
+      "schema": "public",
+      "table": "language",
+      "name": "language_pkey",
       "columns": [
         "code"
       ],
       "nameExplicit": false,
-      "name": "language_pkey",
-      "schema": "public",
-      "table": "language",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "lesson_pkey",
       "schema": "public",
       "table": "lesson",
-      "entityType": "pks"
-    },
-    {
+      "name": "lesson_pkey",
       "columns": [
         "id"
       ],
       "nameExplicit": false,
-      "name": "lesson_audio_pkey",
+      "entityType": "pks"
+    },
+    {
       "schema": "public",
       "table": "lesson_audio",
-      "entityType": "pks"
-    },
-    {
+      "name": "lesson_audio_pkey",
       "columns": [
         "id"
       ],
       "nameExplicit": false,
-      "name": "media_asset_pkey",
+      "entityType": "pks"
+    },
+    {
       "schema": "public",
       "table": "media_asset",
-      "entityType": "pks"
-    },
-    {
+      "name": "media_asset_pkey",
       "columns": [
         "id"
       ],
       "nameExplicit": false,
-      "name": "source_pkey",
-      "schema": "public",
-      "table": "source",
       "entityType": "pks"
     },
     {
+      "schema": "public",
+      "table": "source",
+      "name": "source_pkey",
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "entityType": "pks"
+    },
+    {
+      "schema": "public",
+      "table": "lesson",
+      "name": "lesson_chapter_version_unique",
       "nameExplicit": true,
       "columns": [
         "chapter",
         "version"
       ],
       "nullsNotDistinct": false,
-      "name": "lesson_chapter_version_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "lesson"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "lesson_audio_version_unique",
       "nameExplicit": true,
       "columns": [
         "lesson_id",
@@ -878,12 +1286,12 @@
         "audio_version"
       ],
       "nullsNotDistinct": false,
-      "name": "lesson_audio_version_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "lesson_audio"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "media_asset",
+      "name": "media_asset_storage_object_unique",
       "nameExplicit": true,
       "columns": [
         "storage_provider",
@@ -891,121 +1299,117 @@
         "object_key"
       ],
       "nullsNotDistinct": false,
-      "name": "media_asset_storage_object_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "media_asset"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "language",
+      "name": "language_name_key",
       "nameExplicit": false,
       "columns": [
         "name"
       ],
       "nullsNotDistinct": false,
-      "name": "language_name_key",
-      "schema": "public",
-      "table": "language",
       "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "lesson_audio",
+      "name": "lesson_audio_media_asset_id_key",
       "nameExplicit": false,
       "columns": [
         "media_asset_id"
       ],
       "nullsNotDistinct": false,
-      "name": "lesson_audio_media_asset_id_key",
-      "schema": "public",
-      "table": "lesson_audio",
       "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "source",
+      "name": "source_url_key",
       "nameExplicit": false,
       "columns": [
         "url"
       ],
       "nullsNotDistinct": false,
-      "name": "source_url_key",
-      "schema": "public",
-      "table": "source",
       "entityType": "uniques"
     },
     {
-      "value": "\"chapter\" > 0",
+      "schema": "public",
+      "table": "lesson",
       "name": "lesson_chapter_positive",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "lesson"
+      "value": "\"chapter\" > 0",
+      "entityType": "checks"
     },
     {
-      "value": "\"version\" > 0",
+      "schema": "public",
+      "table": "lesson",
       "name": "lesson_version_positive",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "lesson"
+      "value": "\"version\" > 0",
+      "entityType": "checks"
     },
     {
-      "value": "\"audio_version\" > 0",
+      "schema": "public",
+      "table": "lesson_audio",
       "name": "lesson_audio_version_positive",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "lesson_audio"
+      "value": "\"audio_version\" > 0",
+      "entityType": "checks"
     },
     {
-      "value": "\"page_from\" is null or \"page_from\" > 0",
+      "schema": "public",
+      "table": "lesson_source",
       "name": "lesson_source_page_from_positive",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "lesson_source"
+      "value": "\"page_from\" is null or \"page_from\" > 0",
+      "entityType": "checks"
     },
     {
-      "value": "\"page_to\" is null or \"page_to\" > 0",
+      "schema": "public",
+      "table": "lesson_source",
       "name": "lesson_source_page_to_positive",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "lesson_source"
+      "value": "\"page_to\" is null or \"page_to\" > 0",
+      "entityType": "checks"
     },
     {
-      "value": "\"page_from\" is null or \"page_to\" is null or \"page_to\" >= \"page_from\"",
+      "schema": "public",
+      "table": "lesson_source",
       "name": "lesson_source_page_range_ordered",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "lesson_source"
+      "value": "\"page_from\" is null or \"page_to\" is null or \"page_to\" >= \"page_from\"",
+      "entityType": "checks"
     },
     {
-      "value": "length(btrim(\"title\")) > 0",
+      "schema": "public",
+      "table": "lesson_text",
       "name": "lesson_text_title_non_blank",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "lesson_text"
+      "value": "length(btrim(\"title\")) > 0",
+      "entityType": "checks"
     },
     {
-      "value": "length(btrim(\"content\")) > 0",
+      "schema": "public",
+      "table": "lesson_text",
       "name": "lesson_text_content_non_blank",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "lesson_text"
+      "value": "length(btrim(\"content\")) > 0",
+      "entityType": "checks"
     },
     {
-      "value": "\"size_bytes\" > 0",
+      "schema": "public",
+      "table": "media_asset",
       "name": "media_asset_size_bytes_positive",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "media_asset"
+      "value": "\"size_bytes\" > 0",
+      "entityType": "checks"
     },
     {
-      "value": "\"duration_ms\" is null or \"duration_ms\" > 0",
+      "schema": "public",
+      "table": "media_asset",
       "name": "media_asset_duration_ms_positive",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "media_asset"
+      "value": "\"duration_ms\" is null or \"duration_ms\" > 0",
+      "entityType": "checks"
     },
     {
-      "value": "length(btrim(\"content_type\")) > 0",
-      "name": "media_asset_content_type_non_blank",
-      "entityType": "checks",
       "schema": "public",
-      "table": "media_asset"
+      "table": "media_asset",
+      "name": "media_asset_content_type_non_blank",
+      "value": "length(btrim(\"content_type\")) > 0",
+      "entityType": "checks"
     }
-  ],
-  "renames": []
+  ]
 }

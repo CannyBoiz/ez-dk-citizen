@@ -3,6 +3,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 
 import type { DataTransaction } from "../../db/database.js";
 import { lesson } from "../../db/schema.js";
+import { fail, ok } from "../../outcome.js";
 
 export function isAllowedLessonTransition(
   from: LessonStatus,
@@ -42,11 +43,13 @@ export function nextVersion(
   highest: LessonVersion | undefined,
   changeKind: ChangeKind | undefined,
 ) {
-  if (!highest) return { version: 1, versionPatch: 0 };
-  if (changeKind === undefined) return "change_kind_required" as const;
-  return changeKind === "content"
-    ? { version: highest.version + 1, versionPatch: 0 }
-    : { version: highest.version, versionPatch: highest.versionPatch + 1 };
+  if (!highest) return ok({ version: 1, versionPatch: 0 });
+  if (changeKind === undefined) return fail("change_kind_required");
+  return ok(
+    changeKind === "content"
+      ? { version: highest.version + 1, versionPatch: 0 }
+      : { version: highest.version, versionPatch: highest.versionPatch + 1 },
+  );
 }
 
 export function isEditableLesson(status: LessonStatus) {
@@ -62,9 +65,9 @@ export async function lockEditableDraft(
     .from(lesson)
     .where(eq(lesson.id, id))
     .for("update");
-  if (!existing) return "lesson_not_found" as const;
-  if (!isEditableLesson(existing.status)) return "lesson_not_editable" as const;
-  return existing;
+  if (!existing) return fail("lesson_not_found");
+  if (!isEditableLesson(existing.status)) return fail("lesson_not_editable");
+  return ok(existing);
 }
 
 export async function touchLesson(

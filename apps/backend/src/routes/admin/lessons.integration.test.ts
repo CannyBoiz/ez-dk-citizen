@@ -4,7 +4,6 @@ import type {
   LessonDetail,
   ProblemDetails,
 } from "@ez-dk-citizen/api-contracts";
-import { mediaAssetSchema } from "@ez-dk-citizen/data";
 
 import { code, useBackend } from "../../testing/backend.js";
 
@@ -832,7 +831,9 @@ async function pendingUpload(lessonId: number) {
 }
 
 async function mediaAssetStatus(id: number) {
-  return mediaAssetSchema.parse(await data.getMediaAsset(id)).status;
+  const asset = await data.getMediaAsset(id);
+  assert.ok(asset.ok);
+  return asset.value.status;
 }
 
 test("deleting a Draft removes its texts, citations, and audio, and deletes the objects of the Media Assets it used", async () => {

@@ -18,6 +18,7 @@ import {
   mediaAsset,
   source,
 } from "../../db/schema.js";
+import { fail, ok } from "../../outcome.js";
 import {
   isAllowedLessonTransition,
   isEditableLesson,
@@ -33,9 +34,9 @@ export async function createLesson(
   database: DataDatabase,
   input: CreateLessonRequest,
 ) {
-  return database.transaction((transaction) =>
+  return database.transaction(async (transaction) =>
     "chapter" in input
-      ? insertDraft(transaction, input.chapter)
+      ? ok(await insertDraft(transaction, input.chapter))
       : copyLesson(transaction, input.copyFromLessonId),
   );
 }
@@ -58,8 +59,8 @@ async function copyLesson(transaction: DataTransaction, originalId: number) {
     .select({ chapter: lesson.chapter, status: lesson.status })
     .from(lesson)
     .where(eq(lesson.id, originalId));
-  if (!original) return "lesson_not_found" as const;
-  if (original.status === "DRAFT") return "lesson_not_copyable" as const;
+  if (!original) return fail("lesson_not_found");
+  if (original.status === "DRAFT") return fail("lesson_not_copyable");
 
   const id = await insertDraft(transaction, original.chapter);
   const { texts, citations } = await readTextsAndCitations(
@@ -98,7 +99,7 @@ async function copyLesson(transaction: DataTransaction, originalId: number) {
         isCurrent: true,
       })),
     );
-  return id;
+  return ok(id);
 }
 
 // Deletes a Draft with its Lesson Audio, and with its Lesson Texts and Lesson Sources by cascade.
@@ -111,14 +112,14 @@ async function copyLesson(transaction: DataTransaction, originalId: number) {
 export async function deleteLesson(database: DataDatabase, id: number) {
   return database.transaction(async (transaction) => {
     const existing = await lockEditableDraft(transaction, id);
-    if (typeof existing === "string") return existing;
+    if (!existing.ok) return existing;
 
     const deletedAudio = await transaction
       .delete(lessonAudio)
       .where(eq(lessonAudio.lessonId, id))
       .returning({ mediaAssetId: lessonAudio.mediaAssetId });
     await transaction.delete(lesson).where(eq(lesson.id, id));
-    return transaction
+    const deletedAssets = await transaction
       .update(mediaAsset)
       .set({ status: "DELETED" })
       .where(
@@ -136,6 +137,7 @@ export async function deleteLesson(database: DataDatabase, id: number) {
         ),
       )
       .returning({ id: mediaAsset.id, objectKey: mediaAsset.objectKey });
+    return ok(deletedAssets);
   });
 }
 
@@ -154,25 +156,25 @@ export async function patchLesson(
       .from(lesson)
       .where(eq(lesson.id, id))
       .for("update");
-    if (!existing) return "lesson_not_found" as const;
+    if (!existing) return fail("lesson_not_found");
 
     if (
       (input.chapter !== undefined || input.text !== undefined) &&
       !isEditableLesson(existing.status)
     ) {
-      return "lesson_not_editable" as const;
+      return fail("lesson_not_editable");
     }
     if (
       input.status !== undefined &&
       !isAllowedLessonTransition(existing.status, input.status)
     ) {
-      return "lesson_lifecycle_conflict" as const;
+      return fail("lesson_lifecycle_conflict");
     }
     if (
       input.text &&
       !(await isSupportedLanguage(transaction, input.text.languageCode))
     ) {
-      return "unsupported_language" as const;
+      return fail("unsupported_language");
     }
 
     const chapter = input.chapter ?? existing.chapter;
@@ -199,7 +201,7 @@ export async function patchLesson(
       // The admin names the Published Lesson it expects to replace, so a stale page never
       // archives another one.
       if (replaced?.id !== input.replacesLessonId)
-        return "published_lesson_conflict" as const;
+        return fail("published_lesson_conflict");
 
       const [thaiText] = await transaction
         .select({ lessonId: lessonText.lessonId })
@@ -230,20 +232,21 @@ export async function patchLesson(
               },
             ]),
       ];
-      if (missing.length) return { missing };
+      if (missing.length)
+        return { ...fail("lesson_publication_incomplete"), missing };
 
       if (
         replaced &&
         (await isUnchanged(transaction, id, replaced.id, input.text))
       )
-        return "lesson_unchanged" as const;
+        return fail("lesson_unchanged");
 
       const next = nextVersion(
         await selectHighestVersion(transaction, chapter),
         input.changeKind,
       );
-      if (next === "change_kind_required") return next;
-      given = next;
+      if (!next.ok) return next;
+      given = next.value;
     }
 
     // Every refusal comes before this point: a refusal commits, so nothing may be written yet.
@@ -269,7 +272,7 @@ export async function patchLesson(
         updatedAt: nextUpdatedAt(existing.updatedAt),
       })
       .where(eq(lesson.id, id));
-    return id;
+    return ok(id);
   });
 }
 
@@ -333,14 +336,14 @@ export async function upsertLessonText(
 ) {
   return database.transaction(async (transaction) => {
     const existing = await lockEditableDraft(transaction, id);
-    if (typeof existing === "string") return existing;
+    if (!existing.ok) return existing;
 
     if (!(await isSupportedLanguage(transaction, languageCode)))
-      return "unsupported_language" as const;
+      return fail("unsupported_language");
 
     await writeLessonText(transaction, id, languageCode, input);
-    await touchLesson(transaction, id, existing.updatedAt);
-    return id;
+    await touchLesson(transaction, id, existing.value.updatedAt);
+    return ok(id);
   });
 }
 
@@ -378,13 +381,13 @@ export async function upsertLessonSource(
 ) {
   return database.transaction(async (transaction) => {
     const existing = await lockEditableDraft(transaction, lessonId);
-    if (typeof existing === "string") return existing;
+    if (!existing.ok) return existing;
 
     const [existingSource] = await transaction
       .select({ id: source.id })
       .from(source)
       .where(eq(source.id, sourceId));
-    if (!existingSource) return "source_not_found" as const;
+    if (!existingSource) return fail("source_not_found");
 
     const locators = {
       pageFrom: input.pageFrom ?? null,
@@ -398,8 +401,8 @@ export async function upsertLessonSource(
         target: [lessonSource.lessonId, lessonSource.sourceId],
         set: locators,
       });
-    await touchLesson(transaction, lessonId, existing.updatedAt);
-    return lessonId;
+    await touchLesson(transaction, lessonId, existing.value.updatedAt);
+    return ok(lessonId);
   });
 }
 
@@ -410,13 +413,13 @@ export async function deleteLessonSource(
 ) {
   return database.transaction(async (transaction) => {
     const existing = await lockEditableDraft(transaction, lessonId);
-    if (typeof existing === "string") return existing;
+    if (!existing.ok) return existing;
 
     const [existingSource] = await transaction
       .select({ id: source.id })
       .from(source)
       .where(eq(source.id, sourceId));
-    if (!existingSource) return "source_not_found" as const;
+    if (!existingSource) return fail("source_not_found");
 
     const deleted = await transaction
       .delete(lessonSource)
@@ -427,7 +430,8 @@ export async function deleteLessonSource(
         ),
       )
       .returning({ lessonId: lessonSource.lessonId });
-    if (!deleted.length) return;
-    await touchLesson(transaction, lessonId, existing.updatedAt);
+    if (!deleted.length) return ok(undefined);
+    await touchLesson(transaction, lessonId, existing.value.updatedAt);
+    return ok(undefined);
   });
 }

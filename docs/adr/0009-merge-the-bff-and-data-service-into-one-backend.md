@@ -26,8 +26,9 @@ because the workload key already sat in the internet-facing process.
   two listeners are the Backend's.
 - Default tests stay offline. Backend route tests stub the data module and use
   `FakeStorage`; real-PostgreSQL tests drive the Backend's HTTP routes.
-- Data package tests go below the data module interface only to inject faults,
-  a forced rollback or a held lock, through the database handle.
+- Data package tests write rows directly to test the schema, and go below the
+  data module interface otherwise only to inject faults, a forced rollback or a
+  held lock, through the database handle.
 
 ## Considered Options
 

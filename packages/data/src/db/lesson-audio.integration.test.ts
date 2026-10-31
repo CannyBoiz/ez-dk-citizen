@@ -395,8 +395,11 @@ test("current Lesson Audio is served only while its Media Asset is READY", async
       "th",
     );
     const published = await readPublishedLesson(database, audioLesson.id, "th");
-    assert.ok(typeof current !== "string" && typeof published !== "string");
-    return [current.audio?.mediaAssetId, published.currentAudio?.mediaAssetId];
+    assert.ok(current.ok && published.ok);
+    return [
+      current.value.audio?.mediaAssetId,
+      published.value.currentAudio?.mediaAssetId,
+    ];
   };
 
   assert.deepEqual(await served(), [asset.id, asset.id]);

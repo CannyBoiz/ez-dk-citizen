@@ -4,7 +4,7 @@ import {
   lessonDetailSchema,
   problemDetailsSchema,
 } from "@ez-dk-citizen/api-contracts";
-import { publishedLessonDetailSchema } from "@ez-dk-citizen/data";
+import { fail, ok, publishedLessonDetailSchema } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.js";
 import { FakeStorage } from "../../storage.js";
@@ -57,12 +57,12 @@ test("Backend composes localized mobile responses from Lesson aggregates", async
   const data = createTestDataModule({
     async listLessonsInLanguage(languageCode, status) {
       calls.push(`list:${languageCode}:${status}`);
-      if (languageCode === "xx") return "unsupported_language";
-      return { items: [detail, nextLesson, untranslatedLesson] };
+      if (languageCode === "xx") return fail("unsupported_language");
+      return ok({ items: [detail, nextLesson, untranslatedLesson] });
     },
     async getPublishedLesson(id, languageCode) {
       calls.push(`detail:${id}:${languageCode}`);
-      return publishedDetail;
+      return ok(publishedDetail);
     },
   });
   const app = createBackendApp(async () => undefined, { data });
@@ -162,7 +162,7 @@ test("Backend maps Published Lesson refusals to Problem Details", async () => {
       storage: new FakeStorage(),
       data: createTestDataModule({
         async getPublishedLesson() {
-          return outcome;
+          return fail(outcome);
         },
       }),
     });
@@ -212,7 +212,7 @@ test("Backend returns fresh, allow-listed playback authorization for current mob
     storage,
     data: createTestDataModule({
       async getPublishedLesson() {
-        return lesson;
+        return ok(lesson);
       },
     }),
   });
@@ -275,26 +275,30 @@ test("Backend keeps playback-signing failures correlated and storage-safe", asyn
     storage,
     data: createTestDataModule({
       async getPublishedLesson() {
-        return publishedLessonDetailSchema.parse({
-          id: 7,
-          chapter: 2,
-          version: 1,
-          versionPatch: 0,
-          status: "PUBLISHED",
-          createdAt: "2026-01-01T00:00:00.000Z",
-          updatedAt: "2026-01-01T00:01:00.000Z",
-          availableLanguageCodes: ["th"],
-          lessonTexts: [{ languageCode: "th", title: "ไทย", content: "เนื้อหา" }],
-          lessonSources: [],
-          currentAudio: {
-            mediaAssetId: 9,
-            audioVersion: 2,
-            objectKey: key,
-            contentType: "audio/mpeg",
-            sizeBytes: 1,
-            durationMs: null,
-          },
-        });
+        return ok(
+          publishedLessonDetailSchema.parse({
+            id: 7,
+            chapter: 2,
+            version: 1,
+            versionPatch: 0,
+            status: "PUBLISHED",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:01:00.000Z",
+            availableLanguageCodes: ["th"],
+            lessonTexts: [
+              { languageCode: "th", title: "ไทย", content: "เนื้อหา" },
+            ],
+            lessonSources: [],
+            currentAudio: {
+              mediaAssetId: 9,
+              audioVersion: 2,
+              objectKey: key,
+              contentType: "audio/mpeg",
+              sizeBytes: 1,
+              durationMs: null,
+            },
+          }),
+        );
       },
     }),
   });

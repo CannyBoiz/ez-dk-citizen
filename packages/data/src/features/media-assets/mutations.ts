@@ -12,6 +12,7 @@ import {
   lessonText,
   mediaAsset,
 } from "../../db/schema.js";
+import { fail, ok } from "../../outcome.js";
 import { touchLesson } from "../lessons/lifecycle.js";
 
 // What the Backend records for an Upload Intent before the object is uploaded.
@@ -28,9 +29,7 @@ export async function createPendingMediaAsset(
     .select({ code: language.code })
     .from(language)
     .where(eq(language.code, input.languageCode));
-  if (!supported) {
-    return "unsupported_language" as const;
-  }
+  if (!supported) return fail("unsupported_language");
 
   const [created] = await database
     .insert(mediaAsset)
@@ -47,7 +46,7 @@ export async function createPendingMediaAsset(
     })
     .returning();
   if (!created) throw new Error("Media Asset insert returned no row.");
-  return created;
+  return ok(created);
 }
 
 // What Storage found under a Media Asset's object key.
@@ -65,7 +64,7 @@ export async function completeMediaAsset(
       .from(mediaAsset)
       .where(eq(mediaAsset.id, mediaAssetId))
       .for("update");
-    if (!asset) return "media_asset_not_found" as const;
+    if (!asset) return fail("media_asset_not_found");
     // A retry answers the Lesson Audio the asset already backs in the requested Lesson and
     // Language. A new version may share the asset (ADR-0008), but completion never adds one.
     if (asset.status === "READY") {
@@ -81,11 +80,11 @@ export async function completeMediaAsset(
         )
         .for("update");
       return audio
-        ? { readyAsset: asset, audio }
-        : ("media_asset_rebind_conflict" as const);
+        ? ok({ readyAsset: asset, audio })
+        : fail("media_asset_rebind_conflict");
     }
-    if (asset.status === "FAILED") return "media_asset_failed" as const;
-    if (asset.status !== "PENDING") return "media_asset_not_pending" as const;
+    if (asset.status === "FAILED") return fail("media_asset_failed");
+    if (asset.status !== "PENDING") return fail("media_asset_not_pending");
 
     // A mismatched upload fails for good, even when its target is also refused.
     if (!storedObject) {
@@ -101,22 +100,22 @@ export async function completeMediaAsset(
         .update(mediaAsset)
         .set({ status: "FAILED" })
         .where(eq(mediaAsset.id, asset.id));
-      return "invalid_uploaded_media" as const;
+      return fail("invalid_uploaded_media");
     }
 
     const [supported] = await transaction
       .select({ code: language.code })
       .from(language)
       .where(eq(language.code, input.languageCode));
-    if (!supported) return "unsupported_language" as const;
+    if (!supported) return fail("unsupported_language");
 
     const [target] = await transaction
       .select({ status: lesson.status, updatedAt: lesson.updatedAt })
       .from(lesson)
       .where(eq(lesson.id, input.lessonId))
       .for("update");
-    if (!target) return "lesson_not_found" as const;
-    if (target.status === "ARCHIVED") return "lesson_archived" as const;
+    if (!target) return fail("lesson_not_found");
+    if (target.status === "ARCHIVED") return fail("lesson_archived");
 
     const [text] = await transaction
       .select({ lessonId: lessonText.lessonId })
@@ -127,7 +126,7 @@ export async function completeMediaAsset(
           eq(lessonText.languageCode, input.languageCode),
         ),
       );
-    if (!text) return "lesson_text_not_found" as const;
+    if (!text) return fail("lesson_text_not_found");
 
     const now = new Date();
     const [latestAudio] = await transaction
@@ -169,6 +168,6 @@ export async function completeMediaAsset(
       .returning();
     if (!audio) throw new Error("Lesson Audio insert returned no row.");
     await touchLesson(transaction, input.lessonId, target.updatedAt);
-    return { readyAsset, audio };
+    return ok({ readyAsset, audio });
   });
 }

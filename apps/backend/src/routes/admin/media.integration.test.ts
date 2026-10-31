@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mediaAssetSchema } from "@ez-dk-citizen/data";
 
 import { code, useBackend } from "../../testing/backend.js";
 
@@ -16,8 +15,11 @@ const {
   upload,
 } = useBackend();
 // No Admin API route answers a Media Asset's status.
-const mediaAsset = async (id: number) =>
-  mediaAssetSchema.parse(await data.getMediaAsset(id));
+const mediaAsset = async (id: number) => {
+  const asset = await data.getMediaAsset(id);
+  assert.ok(asset.ok);
+  return asset.value;
+};
 const lessonWithTexts = async (chapter: number, languageCodes = ["th"]) => {
   const lesson = await createLesson(chapter);
   for (const languageCode of languageCodes) {

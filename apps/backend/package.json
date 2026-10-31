@@ -16,19 +16,19 @@
     "test:compiled": "node --test --test-concurrency=1 \"dist/**/*.integration.test.js\""
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1132.0",
-    "@aws-sdk/client-sts": "^3.1132.0",
-    "@aws-sdk/s3-request-presigner": "^3.1132.0",
+    "@aws-sdk/client-s3": "^3.1156.0",
+    "@aws-sdk/client-sts": "^3.1156.0",
+    "@aws-sdk/s3-request-presigner": "^3.1156.0",
     "@ez-dk-citizen/api-contracts": "workspace:*",
     "@ez-dk-citizen/data": "workspace:*",
-    "@hono/node-server": "^2.1.1",
-    "@hono/standard-validator": "^0.4.0",
-    "hono": "4.13.4",
-    "zod": "4.1.12"
+    "@hono/node-server": "^2.1.5",
+    "@hono/standard-validator": "^0.4.1",
+    "hono": "4.13.14",
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^26.3.0",
-    "tsx": "^4.23.12",
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
