@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { currentLessonAudioResultSchema, fail, ok } from "@ez-dk-citizen/data";
 
-import { createBackendApp } from "../../app.js";
-import { FakeStorage } from "../../storage.js";
-import { createTestDataModule } from "../../testing/data-module.js";
+import { createBackendApp } from "../../app.ts";
+import { FakeStorage } from "../../storage.ts";
+import { createTestDataModule } from "../../testing/data-module.ts";
 
 const key = "audio/123e4567-e89b-12d3-a456-426614174000.mp3";
 const current = currentLessonAudioResultSchema.parse({

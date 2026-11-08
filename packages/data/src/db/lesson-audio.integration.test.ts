@@ -6,15 +6,15 @@ import { eq, sql } from "drizzle-orm";
 import {
   readCurrentLessonAudio,
   readPublishedLesson,
-} from "../features/lessons/queries.js";
-import { completeMediaAsset } from "../features/media-assets/mutations.js";
+} from "../features/lessons/queries.ts";
+import { completeMediaAsset } from "../features/media-assets/mutations.ts";
 import {
   expectPostgresError,
   mediaAssetFixture,
   postgresErrorCode,
   useIntegrationDatabase,
-} from "./integration-test-database.js";
-import { lesson, lessonAudio, lessonText, mediaAsset } from "./schema.js";
+} from "./integration-test-database.ts";
+import { lesson, lessonAudio, lessonText, mediaAsset } from "./schema.ts";
 
 const database = useIntegrationDatabase();
 

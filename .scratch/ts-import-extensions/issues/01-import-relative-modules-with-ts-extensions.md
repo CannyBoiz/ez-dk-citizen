@@ -1,6 +1,6 @@
 # 01: Import relative modules with `.ts` extensions
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Blocked by:** None
 
@@ -56,12 +56,12 @@ imports than the source (119 against 151) because `verbatimModuleSyntax` drops
 
 **Acceptance criteria:**
 
-- [ ] No relative import in `apps/backend`, `packages/data` or
+- [x] No relative import in `apps/backend`, `packages/data` or
       `packages/api-contracts` ends in `.js`.
-- [ ] The emitted `dist/` files, `.d.ts` included, import `.js`, never `.ts`.
-- [ ] `pnpm db:generate` still loads the Drizzle schema and generates no
+- [x] The emitted `dist/` files, `.d.ts` included, import `.js`, never `.ts`.
+- [x] `pnpm db:generate` still loads the Drizzle schema and generates no
       migration.
-- [ ] `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`,
+- [x] `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`,
       `pnpm test:integration`, and `pnpm test:e2e` pass.
 
 **Out of scope:**

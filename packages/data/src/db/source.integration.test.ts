@@ -7,8 +7,8 @@ import {
   expectPostgresError,
   postgresErrorCode,
   useIntegrationDatabase,
-} from "./integration-test-database.js";
-import { lesson, lessonSource, source } from "./schema.js";
+} from "./integration-test-database.ts";
+import { lesson, lessonSource, source } from "./schema.ts";
 
 const database = useIntegrationDatabase();
 

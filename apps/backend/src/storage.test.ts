@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { createS3Storage } from "./storage.js";
+import { createS3Storage } from "./storage.ts";
 
 test("playback retains its full hour after a cached credential ages", async (context) => {
   context.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2030, 0, 1) });

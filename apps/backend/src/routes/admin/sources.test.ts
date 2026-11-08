@@ -6,8 +6,8 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 import { fail, ok } from "@ez-dk-citizen/data";
 
-import { createBackendApp } from "../../app.js";
-import { createTestDataModule } from "../../testing/data-module.js";
+import { createBackendApp } from "../../app.ts";
+import { createTestDataModule } from "../../testing/data-module.ts";
 
 test("Backend creates and lists canonical Sources through the data module", async () => {
   const source = sourceResponseSchema.parse({

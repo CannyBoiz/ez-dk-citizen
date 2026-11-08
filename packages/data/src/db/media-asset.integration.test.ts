@@ -8,8 +8,8 @@ import {
   mediaAssetFixture,
   postgresErrorCode,
   useIntegrationDatabase,
-} from "./integration-test-database.js";
-import { mediaAsset } from "./schema.js";
+} from "./integration-test-database.ts";
+import { mediaAsset } from "./schema.ts";
 
 const database = useIntegrationDatabase();
 

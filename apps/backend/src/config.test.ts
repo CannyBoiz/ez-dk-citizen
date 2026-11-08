@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { readBackendConfig } from "./config.js";
+import { readBackendConfig } from "./config.ts";
 
 const baseEnvironment = {
   DATABASE_URL: "postgresql://backend:password@postgres:5432/ez_dk_citizen",

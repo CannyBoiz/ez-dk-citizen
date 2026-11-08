@@ -3,9 +3,9 @@ import { test } from "node:test";
 import { problemDetailsSchema } from "@ez-dk-citizen/api-contracts";
 import { fail, mediaAssetSchema, ok } from "@ez-dk-citizen/data";
 
-import { createBackendApp } from "../../app.js";
-import { FakeStorage } from "../../storage.js";
-import { createTestDataModule } from "../../testing/data-module.js";
+import { createBackendApp } from "../../app.ts";
+import { FakeStorage } from "../../storage.ts";
+import { createTestDataModule } from "../../testing/data-module.ts";
 
 test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", async () => {
   const storage = new FakeStorage();

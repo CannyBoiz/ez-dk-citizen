@@ -8,7 +8,7 @@ import {
   mediaAssetFixture,
   postgresErrorCode,
   useIntegrationDatabase,
-} from "./integration-test-database.js";
+} from "./integration-test-database.ts";
 import {
   language,
   lesson,
@@ -17,7 +17,7 @@ import {
   lessonText,
   mediaAsset,
   source,
-} from "./schema.js";
+} from "./schema.ts";
 
 const database = useIntegrationDatabase();
 
