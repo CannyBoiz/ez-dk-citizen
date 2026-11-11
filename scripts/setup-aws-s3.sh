@@ -22,7 +22,7 @@ resolve_path() {
 AWS_ROLES_ANYWHERE_CONFIG_FILE=$(resolve_path "${AWS_ROLES_ANYWHERE_CONFIG_FILE:-runtime/aws/config}")
 AWS_ROLES_ANYWHERE_CERTIFICATE_FILE=$(resolve_path "${AWS_ROLES_ANYWHERE_CERTIFICATE_FILE:-runtime/aws/workload.crt}")
 AWS_ROLES_ANYWHERE_PRIVATE_KEY_FILE=$(resolve_path "${AWS_ROLES_ANYWHERE_PRIVATE_KEY_FILE:-runtime/aws/workload.key}")
-AWS_ROLES_ANYWHERE_CA_CERTIFICATE_FILE=$(resolve_path "${AWS_ROLES_ANYWHERE_CA_CERTIFICATE_FILE:-../cannyboiz-devops-hub/terraform/ez-dk-citizen/certs/ca.crt}")
+AWS_ROLES_ANYWHERE_CA_CERTIFICATE_FILE=$(resolve_path "${AWS_ROLES_ANYWHERE_CA_CERTIFICATE_FILE:-../cannyboiz-devops-hub/ez-dk-citizen/terraform/certs/ca.crt}")
 export AWS_ROLES_ANYWHERE_CONFIG_FILE AWS_ROLES_ANYWHERE_CERTIFICATE_FILE AWS_ROLES_ANYWHERE_PRIVATE_KEY_FILE
 
 assert_runtime_file_ignored() {

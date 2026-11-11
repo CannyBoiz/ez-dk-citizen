@@ -810,7 +810,7 @@ build. Backend startup rejects legacy `AWS_ACCESS_KEY_ID` or
 Roles Anywhere profile.
 
 The infrastructure repository commits only the public CA certificate at
-`terraform/ez-dk-citizen/certs/ca.crt`. The workload certificate and private
+`ez-dk-citizen/terraform/certs/ca.crt`. The workload certificate and private
 key and shared AWS profile are provisioned on the host and bind-mounted
 read-only at stable paths only into the Backend. The workload private key has mode
 `0600` and is readable by the non-root Backend process. No CA private key, workload
@@ -1398,7 +1398,7 @@ If the workload private key is compromised, replacing only the mounted
 certificate and key is insufficient because the old certificate remains valid.
 The operator immediately disables the Roles Anywhere profile and issues a key
 and certificate with a new CN. Update the canonical
-`terraform/ez-dk-citizen/roles-anywhere.tf` trust policy's
+`ez-dk-citizen/terraform/roles-anywhere.tf` trust policy's
 `aws:PrincipalTag/x509Subject/CN` condition to that exact CN through a reviewed
 Terraform plan while the profile is disabled. Run the operator `--preflight`
 against the staged files with
