@@ -86,7 +86,7 @@ manually created server rather than an unreviewed Terraform apply.
 5. As the application operator, I want the BFF image to use a glibc-compatible Node base, so that the official helper can execute reliably.
 6. As the Data Service maintainer, I want the Data Service to remain on Alpine, so that a service with no AWS responsibility does not change images unnecessarily.
 7. As a security reviewer, I want only the BFF to receive the workload identity, so that the Data Service, PostgreSQL, and frontend clients cannot access it.
-8. As a security reviewer, I want the dedicated Trust Anchor and exact `aws-iam-app` certificate CN restriction preserved during cutover, so that the working trust boundary does not widen.
+8. As a security reviewer, I want the dedicated Trust Anchor and exact `aws-iam` certificate CN restriction preserved during cutover, so that the working trust boundary does not widen.
 9. As a security reviewer, I want the role trust policy restricted to the exact Trust Anchor and certificate identity, so that unrelated certificates cannot assume the role.
 10. As a security reviewer, I want the role limited to object reads, writes, and deletes under `audio/` and `smoke/`, so that the BFF has only the permissions its current behavior needs.
 11. As a security reviewer, I want no bucket-list permission on the role, so that the workload cannot enumerate unrelated objects.
@@ -136,7 +136,7 @@ manually created server rather than an unreviewed Terraform apply.
 
 - The migration spans the application repository and its sibling infrastructure repository. It is not complete until the BFF no longer depends on permanent IAM-user credentials and the legacy IAM user has been retired after verification.
 - Stage A is complete and is the infrastructure baseline. The existing Trust Anchor, IAM role, Roles Anywhere profile, and legacy inline role policy are imported. The least-privilege managed policy is attached to both the role and the legacy IAM user. Terraform converges without changes, and live IAM inspection confirms coexistence.
-- The private CA is dedicated exclusively to the `ez-dk-citizen` workload. Preserve the current Trust Anchor and the exact `x509Subject/CN = aws-iam-app` condition during normal cutover.
+- The private CA is dedicated exclusively to the `ez-dk-citizen` workload. Preserve the current Trust Anchor and the exact `x509Subject/CN = aws-iam` condition during normal cutover.
 - The Roles Anywhere role remains `ez-dk-citizen-role-anywhere-s3`, and the Roles Anywhere profile remains `ez-dk-citizen-prod`. Its one-hour maximum session duration remains unchanged.
 - The effective S3 permission boundary is `GetObject`, `PutObject`, and `DeleteObject` on only the `audio/` and `smoke/` prefixes. `ListBucket`, wildcard S3 actions, and bucket-wide object access are not required.
 - The imported broad inline role policy is temporary migration state. Remove it through a separate reviewed Terraform plan after confirming the managed attachment and before Stage C acceptance, so the live proof exercises only the prefix-scoped policy.
@@ -190,7 +190,7 @@ manually created server rather than an unreviewed Terraform apply.
 - Deploying the migration to the existing Hetzner VPS, creating a production Compose override, or building a repository-driven deployment workflow. Those remain Stage 6 work.
 - Applying the existing Hetzner Terraform before reconciling it with the manually created server.
 - Introducing a remote Terraform backend, Terraform modules, Terraform workspaces, or separate development and staging Roles Anywhere environments.
-- Reissuing the working certificate merely to rename `aws-iam-app` during normal cutover.
+- Reissuing the working certificate merely to rename `aws-iam` during normal cutover.
 - Terraform management or generation of CA keys, workload private keys, workload certificates, or P12/PFX bundles containing private keys.
 - A credential sidecar, signing-helper serve mode, custom temporary-credential refresh, direct CreateSession code, or persisting temporary credentials to disk.
 - CRL infrastructure. Emergency invalidation uses a new certificate identity and trust-policy update, with dedicated-CA rotation as fallback.

@@ -789,7 +789,7 @@ policy requires `If-None-Match` for object writes.
 
 The Backend obtains temporary STS credentials through AWS IAM Roles Anywhere. A
 private CA dedicated to this workload issues the application certificate,
-whose subject CN remains `aws-iam-app` for the PoC cutover. The role trust
+whose subject CN remains `aws-iam` for the PoC cutover. The role trust
 policy is restricted by both the exact Trust Anchor ARN and that certificate
 CN.
 
@@ -1389,7 +1389,7 @@ control. The dedicated CA private key remains external and is never deployed.
 
 Routine workload-certificate rotation is a manual operator procedure scheduled
 at least 30 days before the current certificate expires. Stage the replacement
-certificate and key at alternate host paths, retain CN `aws-iam-app` and the
+certificate and key at alternate host paths, retain CN `aws-iam` and the
 current Trust Anchor, Roles Anywhere profile, role, and trust-policy identity,
 then run the full operator check before switching active files. Keep the current
 identity available until the replacement passes.
