@@ -6,9 +6,9 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 import { type DataModule, fail, ok } from "@ez-dk-citizen/data";
 
-import { createBackendApp } from "../../app.js";
-import { FakeStorage } from "../../storage.js";
-import { createTestDataModule } from "../../testing/data-module.js";
+import { createBackendApp } from "../../app.ts";
+import { FakeStorage } from "../../storage.ts";
+import { createTestDataModule } from "../../testing/data-module.ts";
 
 test("admin Lesson routes authenticate and use the data module", async () => {
   const detail = lessonDetailSchema.parse({

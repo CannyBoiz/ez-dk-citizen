@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { schemaRelations } from "./schema.js";
+import { schemaRelations } from "./schema.ts";
 
 export function requireDatabaseUrl(environment = process.env): string {
   const databaseUrl = environment.DATABASE_URL;

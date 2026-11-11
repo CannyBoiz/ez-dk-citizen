@@ -4,7 +4,7 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
-import type { RequestIdEnvironment } from "../middleware/request-id.js";
+import type { RequestIdEnvironment } from "../middleware/request-id.ts";
 
 export function createHealthRoutes(checkReadiness: () => Promise<void>) {
   return new Hono<RequestIdEnvironment>()

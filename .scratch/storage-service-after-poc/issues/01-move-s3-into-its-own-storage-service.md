@@ -4,7 +4,7 @@
 
 The Storage Service takes over:
 
-- the Roles Anywhere identity: the workload certificate and private key, the shared AWS profile, the signing helper and its glibc image, and the role's S3 permissions. The certificate CN `aws-iam-app`, Trust Anchor, role, profile, and trust policy stay unchanged (ADR-0006 as amended);
+- the Roles Anywhere identity: the workload certificate and private key, the shared AWS profile, the signing helper and its glibc image, and the role's S3 permissions. The certificate CN `aws-iam`, Trust Anchor, role, profile, and trust policy stay unchanged (ADR-0006 as amended);
 - the four `Storage` operations in `apps/bff/src/storage.ts` today: upload authorization, object inspection, playback authorization, and deletion.
 
 The Backend calls it over the internal network with a bearer token of its own, `X-Request-ID`, and Problem Details, through a client implementing the existing `Storage` interface, so tests keep `FakeStorage`. The Backend keeps generating object keys and passes them in; the Storage Service has no database access. It is never published and has no client-facing routes.

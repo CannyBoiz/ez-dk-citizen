@@ -3,23 +3,23 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
 
-import type { BackendConfig } from "./config.js";
-import { installProblemDetails, problem } from "./errors/problem-details.js";
-import { adminAuth } from "./middleware/admin-auth.js";
-import { adminCors } from "./middleware/cors.js";
-import { logging } from "./middleware/logging.js";
+import type { BackendConfig } from "./config.ts";
+import { installProblemDetails, problem } from "./errors/problem-details.ts";
+import { adminAuth } from "./middleware/admin-auth.ts";
+import { adminCors } from "./middleware/cors.ts";
+import { logging } from "./middleware/logging.ts";
 import {
   type RequestIdEnvironment,
   requestId,
-} from "./middleware/request-id.js";
-import { createAdminLessonAudioRoutes } from "./routes/admin/lesson-audio.js";
-import { createAdminLessonSourceRoutes } from "./routes/admin/lesson-sources.js";
-import { createAdminLessonRoutes } from "./routes/admin/lessons.js";
-import { createAdminMediaRoutes } from "./routes/admin/media.js";
-import { createAdminSourceRoutes } from "./routes/admin/sources.js";
-import { createHealthRoutes } from "./routes/health.js";
-import { createMobileLessonRoutes } from "./routes/mobile/lessons.js";
-import { createS3Storage, type Storage } from "./storage.js";
+} from "./middleware/request-id.ts";
+import { createAdminLessonAudioRoutes } from "./routes/admin/lesson-audio.ts";
+import { createAdminLessonSourceRoutes } from "./routes/admin/lesson-sources.ts";
+import { createAdminLessonRoutes } from "./routes/admin/lessons.ts";
+import { createAdminMediaRoutes } from "./routes/admin/media.ts";
+import { createAdminSourceRoutes } from "./routes/admin/sources.ts";
+import { createHealthRoutes } from "./routes/health.ts";
+import { createMobileLessonRoutes } from "./routes/mobile/lessons.ts";
+import { createS3Storage, type Storage } from "./storage.ts";
 
 export interface BackendAppOptions {
   adminApiToken?: string;

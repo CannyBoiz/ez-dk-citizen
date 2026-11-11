@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
 
-import type { RequestIdEnvironment } from "./request-id.js";
+import type { RequestIdEnvironment } from "./request-id.ts";
 
 export async function logging(
   c: Context<RequestIdEnvironment>,

@@ -1,9 +1,9 @@
 import type { Context } from "hono";
 
-import { problem } from "./errors/problem-details.js";
-import { logStorageFailure, storageFailureProblem } from "./errors/storage.js";
-import type { RequestIdEnvironment } from "./middleware/request-id.js";
-import type { Storage } from "./storage.js";
+import { problem } from "./errors/problem-details.ts";
+import { logStorageFailure, storageFailureProblem } from "./errors/storage.ts";
+import type { RequestIdEnvironment } from "./middleware/request-id.ts";
+import type { Storage } from "./storage.ts";
 
 // Signs a fresh Playback URL for current Lesson Audio. On failure it logs without secrets
 // and returns the storage problem response for the route to send.

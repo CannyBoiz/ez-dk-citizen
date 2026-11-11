@@ -1,6 +1,6 @@
 # 02: Version the audio bucket
 
-**What to build:** Apply ADR-0010 in `../cannyboiz-devops-hub/terraform/ez-dk-citizen/s3.tf`: switch `aws_s3_bucket_versioning` from `Suspended` to `Enabled`, and add a lifecycle rule that expires noncurrent versions and expired delete markers after 30 days. The role keeps no `s3:DeleteObjectVersion`.
+**What to build:** Apply ADR-0010 in `../cannyboiz-devops-hub/ez-dk-citizen/terraform/s3.tf`: switch `aws_s3_bucket_versioning` from `Suspended` to `Enabled`, and add a lifecycle rule that expires noncurrent versions and expired delete markers after 30 days. The role keeps no `s3:DeleteObjectVersion`.
 
 **Blocked by:** none
 

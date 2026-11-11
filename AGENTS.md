@@ -18,4 +18,4 @@ Server-side TypeScript (`apps/backend`, `packages/*`) follows the `kanku-typescr
 
 ## Infrastructure repo
 
-This project's infrastructure lives in the sibling repo `../cannyboiz-devops-hub`: Terraform for this project under `terraform/ez-dk-citizen/`, plus the Caddy reverse proxy (`Caddyfile`, `docker-compose.yml`) on the VPS. Check it before changing deployment, hosting, or domain/TLS-related code here.
+This project's infrastructure lives in the sibling repo `../cannyboiz-devops-hub`: Terraform for this project under `ez-dk-citizen/terraform/`, plus the Caddy reverse proxy (`Caddyfile`, `docker-compose.yml`) on the VPS. Check it before changing deployment, hosting, or domain/TLS-related code here.

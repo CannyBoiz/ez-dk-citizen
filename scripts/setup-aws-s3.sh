@@ -22,7 +22,7 @@ resolve_path() {
 AWS_ROLES_ANYWHERE_CONFIG_FILE=$(resolve_path "${AWS_ROLES_ANYWHERE_CONFIG_FILE:-runtime/aws/config}")
 AWS_ROLES_ANYWHERE_CERTIFICATE_FILE=$(resolve_path "${AWS_ROLES_ANYWHERE_CERTIFICATE_FILE:-runtime/aws/workload.crt}")
 AWS_ROLES_ANYWHERE_PRIVATE_KEY_FILE=$(resolve_path "${AWS_ROLES_ANYWHERE_PRIVATE_KEY_FILE:-runtime/aws/workload.key}")
-AWS_ROLES_ANYWHERE_CA_CERTIFICATE_FILE=$(resolve_path "${AWS_ROLES_ANYWHERE_CA_CERTIFICATE_FILE:-../cannyboiz-devops-hub/terraform/ez-dk-citizen/certs/ca.crt}")
+AWS_ROLES_ANYWHERE_CA_CERTIFICATE_FILE=$(resolve_path "${AWS_ROLES_ANYWHERE_CA_CERTIFICATE_FILE:-../cannyboiz-devops-hub/ez-dk-citizen/terraform/certs/ca.crt}")
 export AWS_ROLES_ANYWHERE_CONFIG_FILE AWS_ROLES_ANYWHERE_CERTIFICATE_FILE AWS_ROLES_ANYWHERE_PRIVATE_KEY_FILE
 
 assert_runtime_file_ignored() {
@@ -48,7 +48,7 @@ key_mode=$(stat -c '%a' -- "$AWS_ROLES_ANYWHERE_PRIVATE_KEY_FILE" 2>/dev/null ||
 
 subject=$(openssl x509 -in "$AWS_ROLES_ANYWHERE_CERTIFICATE_FILE" -noout -subject -nameopt RFC2253) || fail "Could not read the workload certificate: $AWS_ROLES_ANYWHERE_CERTIFICATE_FILE"
 subject=${subject#subject=}
-expected_cn=${AWS_ROLES_ANYWHERE_EXPECTED_CERTIFICATE_CN:-aws-iam-app}
+expected_cn=${AWS_ROLES_ANYWHERE_EXPECTED_CERTIFICATE_CN:-aws-iam}
 [[ "$expected_cn" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || fail "Expected certificate CN contains unsupported characters."
 [[ "$subject" =~ (^|,)CN=([^,]+)(,|$) ]] || fail "Workload certificate subject has no CN: $subject"
 [[ "${BASH_REMATCH[2]}" == "$expected_cn" ]] || fail "Workload certificate CN must be $expected_cn; found $subject"

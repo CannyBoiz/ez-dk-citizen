@@ -4,7 +4,7 @@ import { test } from "node:test";
 import {
   currentLessonAudioResultSchema,
   publishedLessonDetailSchema,
-} from "./results.js";
+} from "./results.ts";
 
 const audio = {
   mediaAssetId: 2,

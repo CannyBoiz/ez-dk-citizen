@@ -4,16 +4,16 @@ import type {
 } from "@ez-dk-citizen/api-contracts";
 import { and, desc, eq } from "drizzle-orm";
 
-import type { DataDatabase } from "../../db/database.js";
+import type { DataDatabase } from "../../db/database.ts";
 import {
   language,
   lesson,
   lessonAudio,
   lessonText,
   mediaAsset,
-} from "../../db/schema.js";
-import { fail, ok } from "../../outcome.js";
-import { touchLesson } from "../lessons/lifecycle.js";
+} from "../../db/schema.ts";
+import { fail, ok } from "../../outcome.ts";
+import { touchLesson } from "../lessons/lifecycle.ts";
 
 // What the Backend records for an Upload Intent before the object is uploaded.
 export type PendingMediaAsset = Pick<

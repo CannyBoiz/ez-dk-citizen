@@ -1,4 +1,4 @@
-import { problem } from "./problem-details.js";
+import { problem } from "./problem-details.ts";
 
 export function storageFailureProblem(
   c: Parameters<typeof problem>[0],

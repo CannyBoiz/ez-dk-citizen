@@ -5,11 +5,11 @@ import {
 import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
-import type { BackendAppOptions } from "../../app.js";
-import { refuse } from "../../errors/problem-details.js";
-import type { RequestIdEnvironment } from "../../middleware/request-id.js";
-import { validateRequest } from "../../middleware/validation.js";
-import { authorizePlayback } from "../../playback.js";
+import type { BackendAppOptions } from "../../app.ts";
+import { refuse } from "../../errors/problem-details.ts";
+import type { RequestIdEnvironment } from "../../middleware/request-id.ts";
+import { validateRequest } from "../../middleware/validation.ts";
+import { authorizePlayback } from "../../playback.ts";
 
 // The current Lesson Audio for any Lesson status, with a fresh Playback URL. Unlike the
 // mobile route, it serves Draft and Archived Lessons too.

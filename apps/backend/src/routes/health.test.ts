@@ -5,7 +5,7 @@ import {
   readinessResponseSchema,
 } from "@ez-dk-citizen/api-contracts";
 
-import { createBackendApp } from "../app.js";
+import { createBackendApp } from "../app.ts";
 
 test("Backend health is independent of PostgreSQL", async () => {
   let checks = 0;

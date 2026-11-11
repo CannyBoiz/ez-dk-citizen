@@ -17,7 +17,7 @@ cat > "$test_root/bin/node" <<'EOF'
 EOF
 chmod +x "$test_root/bin/node"
 
-for name in aws-iam-app aws-iam-app-replacement; do
+for name in aws-iam aws-iam-replacement; do
   openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
     -subj "/CN=$name" -keyout "$test_root/$name.key" \
     -out "$test_root/$name.crt" >/dev/null 2>&1
@@ -40,30 +40,30 @@ run_setup() {
     bash "$test_root/repo/scripts/setup-aws-s3.sh" --preflight
 }
 
-run_setup aws-iam-app > "$test_root/output" 2>&1 || { cat "$test_root/output"; exit 1; }
+run_setup aws-iam > "$test_root/output" 2>&1 || { cat "$test_root/output"; exit 1; }
 grep -q -- '--session-duration 7200$' "$test_root/repo/runtime/aws/config"
 sed -i 's/ --session-duration 7200$//' "$test_root/repo/runtime/aws/config"
-if run_setup aws-iam-app > "$test_root/output" 2>&1; then
+if run_setup aws-iam > "$test_root/output" 2>&1; then
   printf 'Legacy one-hour credential profile unexpectedly passed.\n' >&2
   exit 1
 fi
 [[ "$(<"$test_root/output")" == *"--session-duration 7200"* ]] || { cat "$test_root/output"; exit 1; }
 sed -i '/^credential_process =/s/$/ --session-duration 7200/' "$test_root/repo/runtime/aws/config"
-run_setup aws-iam-app > "$test_root/output" 2>&1 || { cat "$test_root/output"; exit 1; }
-if run_setup aws-iam-app-replacement > "$test_root/output" 2>&1; then
+run_setup aws-iam > "$test_root/output" 2>&1 || { cat "$test_root/output"; exit 1; }
+if run_setup aws-iam-replacement > "$test_root/output" 2>&1; then
   printf 'Replacement CN unexpectedly passed the routine check.\n' >&2
   exit 1
 fi
-[[ "$(<"$test_root/output")" == *"Workload certificate CN must be aws-iam-app;"* ]] || {
+[[ "$(<"$test_root/output")" == *"Workload certificate CN must be aws-iam;"* ]] || {
   cat "$test_root/output"
   exit 1
 }
-run_setup aws-iam-app-replacement aws-iam-app-replacement > "$test_root/output" 2>&1 || { cat "$test_root/output"; exit 1; }
-if run_setup aws-iam-app aws-iam-app-replacement > "$test_root/output" 2>&1; then
+run_setup aws-iam-replacement aws-iam-replacement > "$test_root/output" 2>&1 || { cat "$test_root/output"; exit 1; }
+if run_setup aws-iam aws-iam-replacement > "$test_root/output" 2>&1; then
   printf 'Current CN unexpectedly passed the replacement check.\n' >&2
   exit 1
 fi
-[[ "$(<"$test_root/output")" == *"Workload certificate CN must be aws-iam-app-replacement;"* ]] || {
+[[ "$(<"$test_root/output")" == *"Workload certificate CN must be aws-iam-replacement;"* ]] || {
   cat "$test_root/output"
   exit 1
 }
