@@ -6,15 +6,15 @@ import {
 import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
-import type { BackendAppOptions } from "../../app.js";
-import { refuse } from "../../errors/problem-details.js";
-import type { RequestIdEnvironment } from "../../middleware/request-id.js";
-import { validateRequest } from "../../middleware/validation.js";
+import type { BackendAppOptions } from "../../app.ts";
+import { refuse } from "../../errors/problem-details.ts";
+import type { RequestIdEnvironment } from "../../middleware/request-id.ts";
+import { validateRequest } from "../../middleware/validation.ts";
 import {
   composeMobileLessonDetail,
   composeMobileLessonList,
-} from "../../mobile/compose.js";
-import { authorizePlayback } from "../../playback.js";
+} from "../../mobile/compose.ts";
+import { authorizePlayback } from "../../playback.ts";
 
 export function createMobileLessonRoutes(
   data: DataModule,

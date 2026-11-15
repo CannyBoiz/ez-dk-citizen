@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 
-import type { DataDatabase } from "../../db/database.js";
-import { mediaAsset } from "../../db/schema.js";
+import type { DataDatabase } from "../../db/database.ts";
+import { mediaAsset } from "../../db/schema.ts";
 
 export async function findMediaAsset(
   database: DataDatabase,

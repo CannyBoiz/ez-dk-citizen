@@ -4,8 +4,8 @@ import type {
 } from "@ez-dk-citizen/api-contracts";
 import { asc, eq } from "drizzle-orm";
 
-import type { DataDatabase } from "../../db/database.js";
-import { source } from "../../db/schema.js";
+import type { DataDatabase } from "../../db/database.ts";
+import { source } from "../../db/schema.ts";
 
 export async function createSource(
   database: DataDatabase,

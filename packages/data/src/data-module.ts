@@ -16,26 +16,26 @@ import type {
 } from "@ez-dk-citizen/api-contracts";
 import { sql } from "drizzle-orm";
 
-import { createDataOperations } from "./data-operations.js";
-import { createDataDatabase } from "./db/database.js";
-import { databaseTimeoutMessage } from "./db/errors.js";
-import type { LessonReadFilters } from "./features/lessons/queries.js";
+import { createDataOperations } from "./data-operations.ts";
+import { createDataDatabase } from "./db/database.ts";
+import { databaseTimeoutMessage } from "./db/errors.ts";
+import type { LessonReadFilters } from "./features/lessons/queries.ts";
 import type {
   PendingMediaAsset,
   StoredObject,
-} from "./features/media-assets/mutations.js";
-import type { Outcome } from "./outcome.js";
+} from "./features/media-assets/mutations.ts";
+import type { Outcome } from "./outcome.ts";
 import type {
   CurrentLessonAudioResult,
   DeleteLessonResult,
   LessonDetailList,
   MediaAsset,
   PublishedLessonDetail,
-} from "./results.js";
+} from "./results.ts";
 
-export { isDatabaseUnavailable } from "./db/errors.js";
-export { fail, type Outcome, ok } from "./outcome.js";
-export * from "./results.js";
+export { isDatabaseUnavailable } from "./db/errors.ts";
+export { fail, type Outcome, ok } from "./outcome.ts";
+export * from "./results.ts";
 
 // The package's only public API. Operations return contract-shaped results, or Outcomes where
 // they can refuse; mapping those to HTTP is the caller's job.

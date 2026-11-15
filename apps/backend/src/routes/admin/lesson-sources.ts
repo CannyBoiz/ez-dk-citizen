@@ -5,9 +5,9 @@ import {
 import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
-import { refuse } from "../../errors/problem-details.js";
-import type { RequestIdEnvironment } from "../../middleware/request-id.js";
-import { validateJson, validateRequest } from "../../middleware/validation.js";
+import { refuse } from "../../errors/problem-details.ts";
+import type { RequestIdEnvironment } from "../../middleware/request-id.ts";
+import { validateJson, validateRequest } from "../../middleware/validation.ts";
 
 export function createAdminLessonSourceRoutes(data: DataModule) {
   return new Hono<RequestIdEnvironment>()

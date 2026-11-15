@@ -5,21 +5,21 @@ import { test } from "node:test";
 
 import { eq, sql } from "drizzle-orm";
 
-import { createDataOperations } from "../data-operations.js";
-import { patchLesson } from "../features/lessons/mutations.js";
-import { fail, ok } from "../outcome.js";
+import { createDataOperations } from "../data-operations.ts";
+import { patchLesson } from "../features/lessons/mutations.ts";
+import { fail, ok } from "../outcome.ts";
 import {
   expectPostgresError,
   postgresErrorCode,
   useIntegrationDatabase,
-} from "./integration-test-database.js";
+} from "./integration-test-database.ts";
 import {
   language,
   lesson,
   lessonSource,
   lessonText,
   source,
-} from "./schema.js";
+} from "./schema.ts";
 
 const database = useIntegrationDatabase();
 

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { createDataDatabase, requireDatabaseUrl } from "./database.js";
+import { createDataDatabase, requireDatabaseUrl } from "./database.ts";
 
 const { database, pool } = createDataDatabase(requireDatabaseUrl());
 const migrationsFolder = path.resolve(

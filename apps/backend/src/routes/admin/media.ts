@@ -9,15 +9,15 @@ import {
 import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
-import type { BackendAppOptions } from "../../app.js";
-import { problem, refuse, refuseWith } from "../../errors/problem-details.js";
+import type { BackendAppOptions } from "../../app.ts";
+import { problem, refuse, refuseWith } from "../../errors/problem-details.ts";
 import {
   logStorageFailure,
   storageFailureProblem,
-} from "../../errors/storage.js";
-import type { RequestIdEnvironment } from "../../middleware/request-id.js";
-import { validateJson, validateRequest } from "../../middleware/validation.js";
-import type { StoredObject, UploadAuthorization } from "../../storage.js";
+} from "../../errors/storage.ts";
+import type { RequestIdEnvironment } from "../../middleware/request-id.ts";
+import { validateJson, validateRequest } from "../../middleware/validation.ts";
+import type { StoredObject, UploadAuthorization } from "../../storage.ts";
 
 // Completion answers a missing Lesson Text with 409 (Stage 3 spec, ADR-0001), where the
 // Mobile API answers 404.

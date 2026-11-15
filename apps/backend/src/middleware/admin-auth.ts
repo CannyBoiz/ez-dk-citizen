@@ -1,8 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Context, Next } from "hono";
 
-import { problem } from "../errors/problem-details.js";
-import type { RequestIdEnvironment } from "./request-id.js";
+import { problem } from "../errors/problem-details.ts";
+import type { RequestIdEnvironment } from "./request-id.ts";
 
 export function adminAuth(token: string | undefined) {
   return async (c: Context<RequestIdEnvironment>, next: Next) => {

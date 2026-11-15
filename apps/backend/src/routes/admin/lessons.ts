@@ -8,11 +8,11 @@ import {
 import type { DataModule } from "@ez-dk-citizen/data";
 import { Hono } from "hono";
 
-import type { BackendAppOptions } from "../../app.js";
-import { problem, refuse, refuseWith } from "../../errors/problem-details.js";
-import { logStorageFailure } from "../../errors/storage.js";
-import type { RequestIdEnvironment } from "../../middleware/request-id.js";
-import { validateJson, validateRequest } from "../../middleware/validation.js";
+import type { BackendAppOptions } from "../../app.ts";
+import { problem, refuse, refuseWith } from "../../errors/problem-details.ts";
+import { logStorageFailure } from "../../errors/storage.ts";
+import type { RequestIdEnvironment } from "../../middleware/request-id.ts";
+import { validateJson, validateRequest } from "../../middleware/validation.ts";
 
 // Draft deletion says "deleted" where every other Lesson edit says "edited" (Stage 4b spec).
 const refuseDeletion = refuseWith({

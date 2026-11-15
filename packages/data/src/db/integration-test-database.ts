@@ -3,7 +3,7 @@ import { after, beforeEach } from "node:test";
 
 import { sql } from "drizzle-orm";
 
-import { createDataDatabase, requireDatabaseUrl } from "./database.js";
+import { createDataDatabase, requireDatabaseUrl } from "./database.ts";
 
 const { database, pool } = createDataDatabase(requireDatabaseUrl());
 

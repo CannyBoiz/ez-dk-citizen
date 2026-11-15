@@ -1,9 +1,9 @@
 import type { ChangeKind, LessonStatus } from "@ez-dk-citizen/api-contracts";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
-import type { DataTransaction } from "../../db/database.js";
-import { lesson } from "../../db/schema.js";
-import { fail, ok } from "../../outcome.js";
+import type { DataTransaction } from "../../db/database.ts";
+import { lesson } from "../../db/schema.ts";
+import { fail, ok } from "../../outcome.ts";
 
 export function isAllowedLessonTransition(
   from: LessonStatus,

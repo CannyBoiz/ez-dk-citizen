@@ -2,8 +2,8 @@ import { sValidator } from "@hono/standard-validator";
 import type { Context } from "hono";
 import type { ZodType } from "zod";
 
-import { problem } from "../errors/problem-details.js";
-import type { RequestIdEnvironment } from "./request-id.js";
+import { problem } from "../errors/problem-details.ts";
+import type { RequestIdEnvironment } from "./request-id.ts";
 
 export function validateRequest<
   Target extends "json" | "param" | "query",

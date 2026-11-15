@@ -20,7 +20,7 @@ because the workload key already sat in the internet-facing process.
   the schema, migrations, and `migrate` command and exports only its module
   API, and pnpm's strict `node_modules` keeps the Backend from importing Drizzle.
 - ADR-0006 holds with the BFF workload renamed to the Backend: the same
-  certificate CN `aws-iam-app`, Trust Anchor, role, profile, trust policy,
+  certificate CN `aws-iam`, Trust Anchor, role, profile, trust policy,
   glibc image, and signing helper.
 - The BFF named in ADR-0005 through ADR-0008 is now the Backend, and ADR-0007's
   two listeners are the Backend's.

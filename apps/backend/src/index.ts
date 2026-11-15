@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 
-import { createApp } from "./app.js";
-import { readBackendConfig } from "./config.js";
+import { createApp } from "./app.ts";
+import { readBackendConfig } from "./config.ts";
 
 const { app, data } = createApp({ config: readBackendConfig() });
 

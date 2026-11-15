@@ -28,11 +28,11 @@ credentials, origins, or ports locally. Real `.env` files are ignored by Git.
 
 Provision the workload certificate and private key at `runtime/aws/workload.crt`
 and `runtime/aws/workload.key`. The dedicated CA's public certificate is read
-from `../cannyboiz-devops-hub/terraform/ez-dk-citizen/certs/ca.crt`. Keep the
+from `../cannyboiz-devops-hub/ez-dk-citizen/terraform/certs/ca.crt`. Keep the
 private key host-only, owned so container UID `1000` can read it, and mode
 `0600`; the setup command checks these conditions without displaying its
 contents. For normal operation, the certificate must have subject CN
-`aws-iam-app` and chain to that public CA certificate.
+`aws-iam` and chain to that public CA certificate.
 
 Run:
 
@@ -73,20 +73,20 @@ the STS exchange. Re-enable the profile only after that succeeds, then rerun the
 command without `--preflight` to prove the identity.
 
 Schedule routine certificate rotation at least 30 days before expiry. Issue a
-replacement with the same `aws-iam-app` identity, stage it at alternate paths,
+replacement with the same `aws-iam` identity, stage it at alternate paths,
 and run the full setup check before switching the active host files. Keep the
 Trust Anchor, profile, role, and trust-policy identity unchanged.
 
 For a private-key compromise, disable the Roles Anywhere profile immediately.
 Issue a new key and certificate with a **new CN**. In the infrastructure repo,
-update `terraform/ez-dk-citizen/roles-anywhere.tf` so the role trust policy's
+update `ez-dk-citizen/terraform/roles-anywhere.tf` so the role trust policy's
 `aws:PrincipalTag/x509Subject/CN` condition names that exact CN; review and
 apply the Terraform plan while the profile remains disabled. Stage the new
 files at alternate host paths, then set
 `AWS_ROLES_ANYWHERE_EXPECTED_CERTIFICATE_CN` to the new CN when running the
 setup command with `--preflight`. Use the same setting for the full setup
 command after re-enabling the profile, and keep setting it for later checks
-while that CN is active. Without it, commands still require CN `aws-iam-app`.
+while that CN is active. Without it, commands still require CN `aws-iam`.
 Before re-enabling, independently inspect the live AWS role trust policy and
 confirm its exact Trust Anchor and new CN conditions; preflight verifies the
 certificate CN and CA chain but cannot inspect live IAM policy. Re-enable the

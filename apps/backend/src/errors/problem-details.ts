@@ -3,7 +3,7 @@ import { type DataModule, isDatabaseUnavailable } from "@ez-dk-citizen/data";
 import type { Context, Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 
-import type { RequestIdEnvironment } from "../middleware/request-id.js";
+import type { RequestIdEnvironment } from "../middleware/request-id.ts";
 
 const problemTitles = {
   400: "Bad Request",

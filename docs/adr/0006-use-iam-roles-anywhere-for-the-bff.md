@@ -5,7 +5,7 @@ Anchor, role, and trust policy below are unchanged.
 
 The BFF, intended for deployment on Hetzner, authenticates to S3 through IAM
 Roles Anywhere instead of a permanent IAM-user access key. A dedicated private
-CA, the exact Trust Anchor, and workload certificate CN `aws-iam-app` constrain
+CA, the exact Trust Anchor, and workload certificate CN `aws-iam` constrain
 the role; the official signing helper runs as `credential_process` inside a
 glibc-compatible BFF image while the AWS SDK refreshes temporary credentials
 through its normal provider chain. A credential sidecar and custom refresh code

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { code, useBackend } from "../../testing/backend.js";
+import { code, useBackend } from "../../testing/backend.ts";
 
 const {
   data,

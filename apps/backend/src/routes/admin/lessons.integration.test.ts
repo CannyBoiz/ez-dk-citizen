@@ -5,7 +5,7 @@ import type {
   ProblemDetails,
 } from "@ez-dk-citizen/api-contracts";
 
-import { code, useBackend } from "../../testing/backend.js";
+import { code, useBackend } from "../../testing/backend.ts";
 
 const {
   app,

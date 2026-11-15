@@ -5,9 +5,9 @@ import { type TestContext, test } from "node:test";
 import { problemDetailsSchema } from "@ez-dk-citizen/api-contracts";
 import { createDataModule } from "@ez-dk-citizen/data";
 
-import { createApp, createBackendApp } from "./app.js";
-import { readBackendConfig } from "./config.js";
-import { createTestDataModule } from "./testing/data-module.js";
+import { createApp, createBackendApp } from "./app.ts";
+import { readBackendConfig } from "./config.ts";
+import { createTestDataModule } from "./testing/data-module.ts";
 
 test("Backend composition root uses runtime configuration and checks readiness against the configured database", async (context) => {
   const config = readBackendConfig({

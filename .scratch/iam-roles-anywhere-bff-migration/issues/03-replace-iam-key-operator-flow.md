@@ -11,7 +11,7 @@ contents.
 
 - [x] Remove wizard instructions and prompts for creating, rotating, entering, or storing IAM-user access keys.
 - [x] Verify that the workload certificate, private key, and shared AWS profile exist at the expected host locations without printing their contents.
-- [x] Verify that the workload certificate has the expected `aws-iam-app` subject identity and chains to the dedicated CA's public certificate.
+- [x] Verify that the workload certificate has the expected `aws-iam` subject identity and chains to the dedicated CA's public certificate.
 - [x] Verify that the workload private key has restrictive mode `0600` and is readable by the non-root BFF process through the configured read-only mount.
 - [x] Prepare or validate the shared profile's Trust Anchor, Roles Anywhere profile, role, certificate, and private-key references without persisting temporary credentials.
 - [x] Build or inspect the production-like BFF image and verify the pinned signing helper before attempting an identity exchange.

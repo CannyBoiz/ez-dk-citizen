@@ -4,7 +4,7 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 import { Hono } from "hono";
 
-import { validateJson } from "./validation.js";
+import { validateJson } from "./validation.ts";
 
 // Checked by `tsc --noEmit`, not by a test runner: a wrong type fails to compile.
 type Equal<A, B> =

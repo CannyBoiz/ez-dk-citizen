@@ -1,7 +1,7 @@
 import type { LessonStatus } from "@ez-dk-citizen/api-contracts";
 import { and, asc, desc, eq } from "drizzle-orm";
 
-import type { DataDatabase } from "../../db/database.js";
+import type { DataDatabase } from "../../db/database.ts";
 import {
   language,
   lesson,
@@ -10,8 +10,8 @@ import {
   lessonText,
   mediaAsset,
   source,
-} from "../../db/schema.js";
-import { fail, ok } from "../../outcome.js";
+} from "../../db/schema.ts";
+import { fail, ok } from "../../outcome.ts";
 
 export type LessonReadFilters = { language?: string; status?: LessonStatus };
 

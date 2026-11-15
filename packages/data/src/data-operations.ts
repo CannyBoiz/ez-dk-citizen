@@ -6,9 +6,9 @@ import {
   sourceResponseSchema,
 } from "@ez-dk-citizen/api-contracts";
 
-import type { DataModule } from "./data-module.js";
-import type { DataDatabase } from "./db/database.js";
-import { isPostgresError } from "./db/errors.js";
+import type { DataModule } from "./data-module.ts";
+import type { DataDatabase } from "./db/database.ts";
+import { isPostgresError } from "./db/errors.ts";
 import {
   createLesson,
   deleteLesson,
@@ -16,7 +16,7 @@ import {
   patchLesson,
   upsertLessonSource,
   upsertLessonText,
-} from "./features/lessons/mutations.js";
+} from "./features/lessons/mutations.ts";
 import {
   listLessons,
   listLessonsInLanguage,
@@ -24,30 +24,30 @@ import {
   readCurrentLessonAudio,
   readLesson,
   readPublishedLesson,
-} from "./features/lessons/queries.js";
+} from "./features/lessons/queries.ts";
 import {
   completeMediaAsset,
   createPendingMediaAsset,
-} from "./features/media-assets/mutations.js";
-import { findMediaAsset } from "./features/media-assets/queries.js";
+} from "./features/media-assets/mutations.ts";
+import { findMediaAsset } from "./features/media-assets/queries.ts";
 import {
   toCompletedMediaAsset,
   toLessonAudio,
   toMediaAsset,
-} from "./features/media-assets/serializers.js";
+} from "./features/media-assets/serializers.ts";
 import {
   createSource,
   listSources,
   updateSource,
-} from "./features/sources/operations.js";
-import { fail, ok } from "./outcome.js";
+} from "./features/sources/operations.ts";
+import { fail, ok } from "./outcome.ts";
 import {
   currentLessonAudioResultSchema,
   deleteLessonResultSchema,
   lessonDetailListSchema,
   mediaAssetSchema,
   publishedLessonDetailSchema,
-} from "./results.js";
+} from "./results.ts";
 
 export type DataOperations = Omit<DataModule, "checkReadiness" | "close">;
 

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 
 import { asc } from "drizzle-orm";
 
-import { createDataDatabase, requireDatabaseUrl } from "./database.js";
-import { language } from "./schema.js";
+import { createDataDatabase, requireDatabaseUrl } from "./database.ts";
+import { language } from "./schema.ts";
 
 const canonicalLanguages = [
   { code: "da", name: "Danish" },

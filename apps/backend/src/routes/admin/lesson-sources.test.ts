@@ -6,8 +6,8 @@ import {
 } from "@ez-dk-citizen/api-contracts";
 import { fail, ok } from "@ez-dk-citizen/data";
 
-import { createBackendApp } from "../../app.js";
-import { createTestDataModule } from "../../testing/data-module.js";
+import { createBackendApp } from "../../app.ts";
+import { createTestDataModule } from "../../testing/data-module.ts";
 
 test("Backend replaces and detaches Draft Lesson Sources through the data module", async (context) => {
   const log = context.mock.method(console, "log", () => undefined);

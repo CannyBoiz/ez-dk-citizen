@@ -8,7 +8,7 @@ import type {
 
 import { and, eq, inArray, ne, notExists } from "drizzle-orm";
 
-import type { DataDatabase, DataTransaction } from "../../db/database.js";
+import type { DataDatabase, DataTransaction } from "../../db/database.ts";
 import {
   language,
   lesson,
@@ -17,8 +17,8 @@ import {
   lessonText,
   mediaAsset,
   source,
-} from "../../db/schema.js";
-import { fail, ok } from "../../outcome.js";
+} from "../../db/schema.ts";
+import { fail, ok } from "../../outcome.ts";
 import {
   isAllowedLessonTransition,
   isEditableLesson,
@@ -28,7 +28,7 @@ import {
   nextVersion,
   selectHighestVersion,
   touchLesson,
-} from "./lifecycle.js";
+} from "./lifecycle.ts";
 
 export async function createLesson(
   database: DataDatabase,
