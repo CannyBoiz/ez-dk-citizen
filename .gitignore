@@ -24,6 +24,9 @@ dist/
 # Roles Anywhere runtime identity and profile
 runtime/
 
+# user-only files
+.local/
+
 # claude skill: ui-ux-pro-max
 .claude/skills/banner-design
 .claude/skills/brand
