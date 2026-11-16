@@ -14,7 +14,7 @@ Domain docs use the single-context layout. See `docs/agents/domain.md`.
 
 ### TypeScript style
 
-Server-side TypeScript (`apps/backend`, `packages/*`) follows the `kanku-typescript-style` skill.
+Server-side TypeScript (`apps/backend`, `packages/*`) follows the `cannyboiz-typescript-style` skill.
 
 ## Infrastructure repo
 
