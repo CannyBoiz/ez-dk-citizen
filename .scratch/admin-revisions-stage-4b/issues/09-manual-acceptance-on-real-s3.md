@@ -8,7 +8,7 @@ See the spec section "Testing Decisions" (manual acceptance) and user story 42.
 
 **Blocked by:** 01 — Show every confirmation in the page; 02 — Give versions at publication; 03 — Edit canonical Sources; 04 — Delete Drafts instead of archiving them; 05 — One Save per Language tab; 06 — Replace a Published version in one step; 07 — Create Drafts through a form; 08 — Create new versions with shared audio
 
-**Status:** ready-for-human
+**Status:** resolved
 
 - [x] The live S3 tracer passes against the current stack
 - [x] Create a Draft through the form, then save the chapter and the Thai Lesson Text with one Save, and add a second Language

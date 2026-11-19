@@ -176,13 +176,13 @@ accepted risk.
 ## Out of Scope
 
 - Moving the AWS identity out of the Backend (rejected in ADR-0009).
-- Bucket versioning and upload checksums (`.scratch/s3-hardening/`).
+- Bucket versioning and upload checksums (#13, #14).
 - The key-misuse alert (Stage 6 item 9).
 - The public and admin listener split (Stage 6 step 0, ADR-0007).
 - Stage 6 deployment: production Compose, Caddy, GHCR, CI, and the host.
 - Any database schema or migration change.
 - Any Admin API or Mobile API contract change beyond outage handling.
-- The deferred STRIDE items (`.scratch/security-at-scale/issues/01`).
+- The deferred STRIDE items (#15).
 - Stage 4b tickets 06 to 08 themselves, which build on the Backend afterwards.
 
 ## Further Notes

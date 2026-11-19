@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues are tracked as local Markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+Issues are tracked as GitHub issues in `CannyBoiz/ez-dk-citizen`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
