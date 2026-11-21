@@ -306,6 +306,25 @@ await withTeardown(
       smokeKeys.forEach(assertSmokeKey);
       assert.equal(smokeKeys.length, 1, "Tracer did not create one smoke key.");
 
+      // S3 checks the bytes whoever sends them, and only Node can read the refusal past CORS.
+      const { "Content-Length": _contentLength, ...uploadHeaders } =
+        intent.body.uploadHeaders;
+      const otherBytes = await fetch(intent.body.uploadUrl, {
+        method: "PUT",
+        headers: uploadHeaders,
+        body: bytes.map((byte) => byte ^ 1),
+      });
+      // Never print the body: other S3 refusals echo the signed request.
+      assert.equal(
+        otherBytes.status,
+        400,
+        "S3 did not refuse different bytes of the declared size with 400.",
+      );
+      assert.ok(
+        (await otherBytes.text()).includes("<Code>BadDigest</Code>"),
+        "S3 refused different bytes of the declared size, but not as BadDigest.",
+      );
+
       await expectBrowserResult(
         browser,
         browserProfile,
@@ -321,7 +340,6 @@ await withTeardown(
       for (const mode of [
         "wrong-content-type",
         "wrong-length",
-        "wrong-bytes",
         "missing-condition",
       ]) {
         await expectBrowserResult(
@@ -941,7 +959,6 @@ const headers = {"Content-Type":"audio/mpeg","If-None-Match":"*","x-amz-checksum
 if (query.get("mode") === "unapproved") headers["X-Unapproved"] = "1";
 if (query.get("mode") === "wrong-content-type") headers["Content-Type"] = "audio/wav";
 if (query.get("mode") === "wrong-length") bytes = new Uint8Array([...bytes, 0]);
-if (query.get("mode") === "wrong-bytes") bytes = bytes.map((byte) => byte ^ 1);
 if (query.get("mode") === "missing-condition") delete headers["If-None-Match"];
 fetch("/tracer-upload", {cache:"no-store"}).then((settings) => {
   if (!settings.ok) throw new Error();
