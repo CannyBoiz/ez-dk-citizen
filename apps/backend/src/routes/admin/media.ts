@@ -67,6 +67,7 @@ export function createAdminMediaRoutes(
             key: objectKey,
             contentType: input.contentType,
             sizeBytes: input.sizeBytes,
+            checksumSha256: input.checksumSha256,
           });
         } catch (error) {
           logStorageFailure(

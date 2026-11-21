@@ -229,6 +229,7 @@ export const mobileLessonListResponseSchema = z.strictObject({
 });
 
 const uploadSizeBytes = safePositiveInteger.max(maxUploadSizeBytes);
+const checksumSha256 = z.hash("sha256", { enc: "base64" });
 
 export const createUploadIntentRequestSchema = z.strictObject({
   lessonId: safePositiveInteger,
@@ -236,6 +237,8 @@ export const createUploadIntentRequestSchema = z.strictObject({
   originalFilename: mp3Filename,
   contentType: z.literal("audio/mpeg"),
   sizeBytes: uploadSizeBytes,
+  // Signed into the upload URL, so storage accepts only the file the admin chose.
+  checksumSha256,
 });
 
 export const completeMediaAssetRequestSchema = z.strictObject({
@@ -250,6 +253,7 @@ export const uploadIntentResponseSchema = z.strictObject({
     "Content-Type": z.literal("audio/mpeg"),
     "Content-Length": z.string().regex(/^[1-9]\d*$/),
     "If-None-Match": z.literal("*"),
+    "x-amz-checksum-sha256": checksumSha256,
   }),
   expiresAt: timestamp,
 });

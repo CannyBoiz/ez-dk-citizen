@@ -6,6 +6,9 @@ import { test } from "node:test";
 
 import { createS3Storage } from "./storage.ts";
 
+// The SHA-256 of the one byte "x".
+const checksumSha256 = "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=";
+
 test("playback retains its full hour after a cached credential ages", async (context) => {
   context.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2030, 0, 1) });
   await withProcessCredentials(async (issueCredentials) => {
@@ -42,6 +45,7 @@ test("upload retains all fifteen minutes after a cached credential ages", async 
       key: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
       contentType: "audio/mpeg" as const,
       sizeBytes: 1,
+      checksumSha256,
     };
     await storage.createUploadAuthorization(input);
     context.mock.timers.tick(110 * 60_000);
@@ -74,6 +78,7 @@ test("signing refuses temporary credentials that cannot cover the promised expir
         key,
         contentType: "audio/mpeg",
         sizeBytes: 1,
+        checksumSha256,
       }),
       { name: "CredentialLifetimeError" },
     );
@@ -152,24 +157,30 @@ test("S3 upload authorization uses the standard credential chain", async () => {
       key: "audio/123e4567-e89b-12d3-a456-426614174000.mp3",
       contentType: "audio/mpeg",
       sizeBytes: 1,
+      checksumSha256,
     });
 
-    assert.match(
-      new URL(authorization.uploadUrl).searchParams.get("X-Amz-Credential") ??
-        "",
-      /^test-access-key-id\//,
-    );
+    const query = new URL(authorization.uploadUrl).searchParams;
+    assert.match(query.get("X-Amz-Credential") ?? "", /^test-access-key-id\//);
+    assert.deepEqual(query.get("X-Amz-SignedHeaders")?.split(";").sort(), [
+      "content-length",
+      "content-type",
+      "host",
+      "if-none-match",
+      "x-amz-checksum-sha256",
+    ]);
+    // S3 ignores a checksum in the query, so none may stand in for the signed header.
     assert.deepEqual(
-      new URL(authorization.uploadUrl).searchParams
-        .get("X-Amz-SignedHeaders")
-        ?.split(";")
-        .sort(),
-      ["content-length", "content-type", "host", "if-none-match"],
+      [...query.keys()].filter((name) =>
+        /^x-amz-(checksum-|sdk-checksum-algorithm)/i.test(name),
+      ),
+      [],
     );
     assert.deepEqual(authorization.uploadHeaders, {
       "Content-Type": "audio/mpeg",
       "Content-Length": "1",
       "If-None-Match": "*",
+      "x-amz-checksum-sha256": checksumSha256,
     });
     assert.ok(
       Date.parse(authorization.expiresAt) > Date.now() + 14 * 60 * 1_000,

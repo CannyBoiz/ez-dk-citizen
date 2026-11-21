@@ -52,6 +52,7 @@ test("an Upload Intent validates the Language and leaves an unbound pending Medi
       originalFilename: "lesson.mp3",
       contentType: "audio/mpeg",
       sizeBytes: 50 * 1024 * 1024,
+      checksumSha256: "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=",
     });
 
   const unsupported = await intent("zz");

@@ -64,8 +64,16 @@ test("Upload Intent contracts accept only one safe declared MP3", () => {
     originalFilename: "lesson.mp3",
     contentType: "audio/mpeg",
     sizeBytes: 50 * 1024 * 1024,
+    checksumSha256: "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=",
   };
   assert.deepEqual(createUploadIntentRequestSchema.parse(input), input);
+  const { checksumSha256: _checksum, ...withoutChecksum } = input;
+  for (const invalid of [
+    withoutChecksum,
+    { ...input, checksumSha256: "a".repeat(64) },
+    { ...input, checksumSha256: input.checksumSha256.slice(0, -1) },
+  ])
+    assert.throws(() => createUploadIntentRequestSchema.parse(invalid));
   assert.throws(() =>
     createUploadIntentRequestSchema.parse({ ...input, sizeBytes: 0 }),
   );
@@ -93,6 +101,7 @@ test("Upload Intent contracts accept only one safe declared MP3", () => {
         "Content-Type": "audio/mpeg",
         "Content-Length": "1",
         "If-None-Match": "*",
+        "x-amz-checksum-sha256": "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=",
       },
       expiresAt: "2026-01-01T00:15:00.000Z",
     }).mediaAssetId,

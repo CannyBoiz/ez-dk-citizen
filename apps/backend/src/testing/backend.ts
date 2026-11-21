@@ -58,6 +58,8 @@ export function useBackend() {
       originalFilename,
       contentType: "audio/mpeg",
       sizeBytes: 1,
+      // The SHA-256 of the one byte "x".
+      checksumSha256: "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=",
     });
     assert.equal(response.status, 201);
     const intent = uploadIntentResponseSchema.parse(await response.json());
