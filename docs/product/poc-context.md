@@ -16,7 +16,7 @@
 
 The application helps a Thai-speaking learner prepare for the Danish citizenship exam.
 
-The primary learner is comfortable with a smartphone but not with desktop-style software, and prefers listening while working. Product priorities are therefore:
+The primary learner uses an Android phone and is comfortable with it, but not with desktop-style software, and prefers listening while working. Product priorities are therefore:
 
 - simple mobile UX,
 - Thai explanations,
@@ -129,6 +129,14 @@ Contains:
 title
 content
 ```
+
+The **title** is plain text. The **content** is the lesson body the learner
+reads, written in Markdown. Content the learner cannot be shown as formatting
+is shown as plain text, never as raw markup or HTML.
+
+The **narration script** is the content's plain-text form: the text the learner
+sees, in reading order, without struck-through text. It is what is narrated into
+the Lesson Audio in that Language. There is no separate narration text.
 
 ## Language
 
@@ -1633,7 +1641,8 @@ not a major Stage 4 workflow.
 Admin controls use English. Lesson Text editing supports `da`, `en`, and `th`,
 with Thai selected initially. Titles use plain-text inputs and content uses
 plain-text textareas; the admin prepares text externally and pastes it into
-the editor. Rich-text, Markdown, and WYSIWYG editing are out of scope.
+the editor. Rich-text and WYSIWYG editing are out of scope. Stage 4c makes
+content Markdown, still typed or pasted into the plain textarea.
 
 Local browser acceptance against the containerized backend and real AWS S3 is
 sufficient. The Backend listener split, the private admin site (ADR-0007), and
@@ -1779,11 +1788,73 @@ Data Service into the Backend (`.scratch/one-backend/`); build tickets 06 to 08
 on the Backend; then ticket 09 accepts Stage 4b and the merged Backend's AWS
 identity together on real S3. Stage 6 then deploys the final shape once.
 
+## Stage 4c — Lesson Text formatting
+
+Design confirmed through the 2026-11-22 interview. The requirements describe
+agreed scope, not completed functionality. It replaces Stage 4's plain-text
+Lesson Text content with Markdown (see Lesson Text in section 4, and
+ADR-0011). The shared package and the Admin changes come before Stage 5, which
+renders Lesson Text with the same package.
+
+- Lesson Text content is Markdown in the existing `content` column. There is no
+  schema change and no migration: existing plain-text content is already valid.
+  The Admin still edits it in a plain textarea.
+- One shared TypeScript package in `packages/` parses content and defines the
+  supported set. The Admin preview and the mobile app both render from it, so
+  the preview shows what the learner sees. The Mobile API still returns
+  `content` as a string.
+- Supported:
+  - headings, with the Title always largest: Title > `##` > `###` > body. A `#`
+    in content looks like `##`; `####` and deeper look like `###`.
+  - paragraphs separated by blank lines; a single newline is a line break.
+  - bullet and numbered lists, nested; task-list items show as plain bullets.
+  - bold, italic, strikethrough, and `---` as a divider.
+  - notes: GitHub alerts `> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`,
+    `> [!WARNING]` and `> [!CAUTION]`, each with its own colour and a label in
+    the Lesson Text's Language. A plain `>` quote is an unlabelled note. An
+    unknown kind such as `> [!EXAM]` is an unlabelled note that keeps its
+    marker visible, so the preview shows the mistake.
+- Everything else is shown as plain text: links (their text), images (their
+  alt text), inline code and code blocks, footnotes, and tables (cell after
+  cell, row by row). Raw HTML is never rendered. The renderer flattens; the
+  Backend does not validate Markdown.
+
+Note labels:
+
+| Kind      | `th`        | `da`      | `en`      |
+| --------- | ----------- | --------- | --------- |
+| NOTE      | หมายเหตุ     | Bemærk    | Note      |
+| TIP       | เคล็ดลับ      | Tip       | Tip       |
+| IMPORTANT | สำคัญ        | Vigtigt   | Important |
+| WARNING   | คำเตือน      | Advarsel  | Warning   |
+| CAUTION   | ข้อควรระวัง    | Forsigtig | Caution   |
+
+Admin:
+
+- **Load .md file** beside Content reads a file in the browser and replaces the
+  form's text: a leading `# heading` line becomes the Title and the rest the
+  Content; a file without one replaces Content only. Nothing is uploaded. The
+  Language's Save stores it as usual, and the unsaved-changes rules apply.
+- A read-only preview under the textarea renders the current, unsaved content.
+- **Copy as plain text** copies the narration script (section 4) of the current
+  content, for pasting into ElevenLabs. Headings are their words, bullet
+  markers drop, numbered items keep their numbers, notes read as
+  "label: text", `---` becomes a blank line, struck-through text is skipped,
+  and blocks are separated by blank lines.
+
+Mobile: lesson text follows Android's system font size, with no in-app
+text-size control, and uses line spacing generous enough for Thai vowel and
+tone marks.
+
 ## Stage 5 — Mobile
+
+The PoC builds and tests for Android only, because the learner uses an Android
+phone. Expo keeps iOS possible later; no iOS build, Apple developer account, or
+iOS device testing is part of the PoC.
 
 1. Lesson list.
 2. Lesson detail.
-3. Thai text.
+3. Thai text, rendered with the Stage 4c package.
 4. audio player.
 5. background playback.
 6. local resume position.
@@ -1969,6 +2040,7 @@ Accepted:
 0008 - Share Media Assets between Lesson versions
 0009 - Merge the BFF and Data Service into one Backend
 0010 - Version the audio bucket
+0011 - Store Lesson Text content as Markdown, defined by one shared package
 ```
 
 Consider additional ADRs when these decisions become final and retain useful
