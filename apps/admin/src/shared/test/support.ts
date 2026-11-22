@@ -380,7 +380,8 @@ export function fakeBackend(
     }
     if (request.path === "/api/admin/media/upload-intents") {
       const mediaAssetId = 100 + intents.size;
-      intents.set(mediaAssetId, request.body as CreateUploadIntentRequest);
+      const intent = request.body as CreateUploadIntentRequest;
+      intents.set(mediaAssetId, intent);
       return {
         status: 201,
         body: {
@@ -388,10 +389,9 @@ export function fakeBackend(
           uploadUrl: `https://s3.invalid/audio/${mediaAssetId}.mp3?signature=upload`,
           uploadHeaders: {
             "Content-Type": "audio/mpeg",
-            "Content-Length": String(
-              (request.body as CreateUploadIntentRequest).sizeBytes,
-            ),
+            "Content-Length": String(intent.sizeBytes),
             "If-None-Match": "*",
+            "x-amz-checksum-sha256": intent.checksumSha256,
           },
           expiresAt: "2026-10-04T12:15:00.000Z",
         },

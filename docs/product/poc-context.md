@@ -206,7 +206,8 @@ creating another version.
 Short-lived authorization that lets the admin browser upload one specific object directly to object storage.
 
 For the PoC it accepts one `.mp3` file declared as `audio/mpeg`, from 1 byte
-through 50 MiB, and expires after 15 minutes.
+through 50 MiB, whose bytes match the SHA-256 the admin browser declared, and
+expires after 15 minutes.
 
 ## Playback URL
 
@@ -718,7 +719,8 @@ metadata, and the data module checks it for the expected content type and exact
 declared size. Neither downloads or inspects MP3 bytes. The signed upload requires `If-None-Match: *`, and the bucket
 policy enforces conditional writes so a generated object key can be written
 only once. The signature also binds the declared exact `Content-Length` and
-`Content-Type`. The browser tracer must prove those signed headers work before
+`Content-Type`, and the file's SHA-256 (`x-amz-checksum-sha256`), so S3 rejects
+any other bytes with `400 BadDigest`. The browser tracer must prove those signed headers work before
 Stage 3 is complete. Stage 3 left S3 bucket versioning off; ADR-0010 turns it
 on with 30-day expiry of old versions.
 
@@ -968,12 +970,13 @@ MP3 bytes should bypass the Backend.
 
 ```text
 1. Admin chooses MP3.
-2. Admin web sends metadata to the Backend.
+2. Admin web hashes the MP3 and sends its metadata and SHA-256 to the Backend.
 3. Backend validates the admin request.
 4. Backend generates an opaque `audio/{random UUID}.mp3` object key.
 5. Backend creates a PENDING Media Asset through the data module.
 6. Backend generates short-lived upload authorization binding the declared exact
-   `Content-Length`, `Content-Type: audio/mpeg`, and `If-None-Match: *`.
+   `Content-Length`, `Content-Type: audio/mpeg`, `If-None-Match: *`, and the
+   file's SHA-256 as `x-amz-checksum-sha256`.
 7. Browser PUTs directly to object storage.
 8. Browser notifies the Backend of completion.
 9. Backend reads the object's content length and content type from S3 object
@@ -998,7 +1001,8 @@ Example request:
   "languageCode": "th",
   "originalFilename": "lesson-12-th-v2.mp3",
   "contentType": "audio/mpeg",
-  "sizeBytes": 2450000
+  "sizeBytes": 2450000,
+  "checksumSha256": "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE="
 }
 ```
 
@@ -1222,8 +1226,8 @@ POST   /api/admin/media/:mediaAssetId/complete
 ```
 
 Upload Intent accepts `lessonId`, `languageCode`, `originalFilename`,
-`contentType`, and `sizeBytes`. It returns `mediaAssetId`, `uploadUrl`, required
-upload headers, and `expiresAt`.
+`contentType`, `sizeBytes`, and `checksumSha256` (base64 of the file's SHA-256).
+It returns `mediaAssetId`, `uploadUrl`, required upload headers, and `expiresAt`.
 
 Completion accepts `lessonId` and `languageCode`. Both the first successful
 completion and idempotent retries return `200` with the `READY` Media Asset and

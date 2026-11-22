@@ -7,6 +7,9 @@ import { createBackendApp } from "../../app.ts";
 import { FakeStorage } from "../../storage.ts";
 import { createTestDataModule } from "../../testing/data-module.ts";
 
+// The SHA-256 of the one byte "x".
+const checksumSha256 = "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=";
+
 test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", async () => {
   const storage = new FakeStorage();
   const calls: string[] = [];
@@ -54,6 +57,7 @@ test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", 
       originalFilename: "lesson.mp3",
       contentType: "audio/mpeg",
       sizeBytes: 50 * 1024 * 1024,
+      checksumSha256,
     }),
   });
 
@@ -71,6 +75,7 @@ test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", 
     "Content-Type": "audio/mpeg",
     "Content-Length": String(50 * 1024 * 1024),
     "If-None-Match": "*",
+    "x-amz-checksum-sha256": checksumSha256,
   });
   assert.match(intent.uploadUrl, /^https:\/\/storage\.invalid\/audio\//);
   assert.ok(Date.parse(intent.expiresAt) > Date.now() + 14 * 60 * 1_000);
@@ -105,6 +110,34 @@ test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", 
     problemDetailsSchema.parse(await invalid.json()).code,
     "validation_failed",
   );
+  for (const badChecksum of [
+    {},
+    { checksumSha256: "" },
+    { checksumSha256: "a".repeat(64) },
+    { checksumSha256: checksumSha256.slice(0, -1) },
+  ]) {
+    const refused = await app.request("/api/admin/media/upload-intents", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        lessonId: 7,
+        languageCode: "th",
+        originalFilename: "lesson.mp3",
+        contentType: "audio/mpeg",
+        sizeBytes: 1,
+        ...badChecksum,
+      }),
+    });
+    assert.equal(refused.status, 422);
+    assert.equal(
+      problemDetailsSchema.parse(await refused.json()).code,
+      "validation_failed",
+    );
+  }
+  assert.equal(storage.uploads.length, 1);
 });
 
 test("Backend accepts a test-only Upload Intent object-key generator", async () => {
@@ -147,6 +180,7 @@ test("Backend accepts a test-only Upload Intent object-key generator", async () 
       originalFilename: "lesson.mp3",
       contentType: "audio/mpeg",
       sizeBytes: 1,
+      checksumSha256,
     }),
   });
 
@@ -156,6 +190,7 @@ test("Backend accepts a test-only Upload Intent object-key generator", async () 
       key: "smoke/123e4567-e89b-12d3-a456-426614174000.mp3",
       contentType: "audio/mpeg",
       sizeBytes: 1,
+      checksumSha256,
     },
   ]);
 });
@@ -184,6 +219,7 @@ test("Backend does not sign when pending Media Asset persistence fails", async (
       originalFilename: "lesson.mp3",
       contentType: "audio/mpeg",
       sizeBytes: 1,
+      checksumSha256,
     }),
   });
 
@@ -243,6 +279,7 @@ test("Backend leaves a pending Media Asset and logs safely when storage signing 
       originalFilename: "lesson.mp3",
       contentType: "audio/mpeg",
       sizeBytes: 1,
+      checksumSha256,
     }),
   });
 

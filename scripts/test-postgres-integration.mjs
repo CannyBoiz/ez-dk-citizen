@@ -172,6 +172,8 @@ import { FakeStorage } from './dist/storage.js';
 
 const requestId = 'stage-3-completion-tracer';
 const headers = { Authorization: 'Bearer integration-only-admin-token', 'Content-Type': 'application/json', 'X-Request-ID': requestId };
+// The SHA-256 of the one byte "x"; the fake storage never checks it.
+const checksumSha256 = 'LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=';
 const storage = new FakeStorage();
 const data = createDataModule(process.env.DATABASE_URL, 2000);
 const app = createBackendApp(async () => undefined, {
@@ -191,7 +193,7 @@ if (refused.response.status !== 409 || refused.body.code !== 'lesson_publication
 if ((await call('/api/admin/lessons/' + lesson.body.id, 'GET')).body.status !== 'DRAFT') throw new Error('Refused publication changed the Lesson status.');
 const text = await call('/api/admin/lessons/' + lesson.body.id + '/texts/th', 'PUT', { title: 'ไทย', content: 'เนื้อหา' });
 if (text.response.status !== 200) throw new Error('Completion tracer localization failed.');
-const intent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'lesson.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const intent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'lesson.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
 if (intent.response.status !== 201 || storage.uploads.length !== 1) throw new Error('Completion tracer Upload Intent failed.');
 storage.putObject(storage.uploads[0].key, { contentType: 'audio/mpeg', sizeBytes: 1 });
 const completed = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
@@ -210,7 +212,7 @@ const source = await call('/api/admin/sources', 'POST', { url: 'https://example.
 await call('/api/admin/lessons/' + lesson.body.id + '/sources/' + source.body.id, 'PUT', {});
 const published = await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'PUBLISHED' });
 if (published.response.status !== 200 || published.body.status !== 'PUBLISHED') throw new Error('Complete publication was not accepted.');
-const correctionIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'correction.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const correctionIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'correction.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
 storage.putObject(storage.uploads.at(-1).key, { contentType: 'audio/mpeg', sizeBytes: 1 });
 const corrected = await call('/api/admin/media/' + correctionIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (corrected.response.status !== 200 || corrected.body.lessonAudio.audioVersion !== 2 || !corrected.body.lessonAudio.isCurrent) throw new Error('Corrected audio was not promoted.');
@@ -226,21 +228,21 @@ if (playback.response.status !== 200 || playback.response.headers.get('cache-con
 const freshPlayback = await call('/api/mobile/lessons/' + lesson.body.id, 'GET');
 if (freshPlayback.response.status !== 200 || storage.playbackAuthorizations.length !== playbackStart + 2 || storage.playbackAuthorizations.slice(-2).some((key) => key !== storage.uploads[1].key)) throw new Error('Playback authorization was not freshly scoped to current audio.');
 const uploadStart = storage.uploads.length;
-const concurrentIntents = await Promise.all(['concurrent-a.mp3', 'concurrent-b.mp3'].map((originalFilename) => call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename, contentType: 'audio/mpeg', sizeBytes: 1 })));
+const concurrentIntents = await Promise.all(['concurrent-a.mp3', 'concurrent-b.mp3'].map((originalFilename) => call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename, contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 })));
 for (const upload of storage.uploads.slice(uploadStart)) storage.putObject(upload.key, { contentType: 'audio/mpeg', sizeBytes: 1 });
 const concurrent = await Promise.all(concurrentIntents.map((intent) => call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' })));
 if (concurrent.some(({ response }) => response.status !== 200) || concurrent.map(({ body }) => body.lessonAudio.audioVersion).sort().join(',') !== '3,4' || !concurrent.some(({ body }) => body.lessonAudio.audioVersion === 4 && body.lessonAudio.isCurrent)) throw new Error('Concurrent corrections were not serialized.');
-const missingIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'missing.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const missingIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'missing.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
 const missing = await call('/api/admin/media/' + missingIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (missing.response.status !== 409 || missing.body.code !== 'upload_incomplete' || (await data.getMediaAsset(missingIntent.body.mediaAssetId)).value?.status !== 'PENDING') throw new Error('Missing upload was not left retryable.');
 const inspectObject = storage.inspectObject.bind(storage);
-const transientIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'transient.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const transientIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'transient.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
 const transientKey = storage.uploads.at(-1).key;
 storage.inspectObject = async (key) => key === transientKey ? Promise.reject(Object.assign(new Error('temporary storage failure'), { name: 'SlowDown' })) : inspectObject(key);
 const transient = await call('/api/admin/media/' + transientIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (transient.response.status !== 503 || transient.body.code !== 'storage_unavailable' || (await data.getMediaAsset(transientIntent.body.mediaAssetId)).value?.status !== 'PENDING') throw new Error('Transient upload failure was not left retryable.');
 storage.inspectObject = inspectObject;
-const invalidIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'invalid.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const invalidIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'invalid.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
 const invalidKey = storage.uploads.at(-1).key;
 storage.putObject(invalidKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
 const invalid = await call('/api/admin/media/' + invalidIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
@@ -248,12 +250,12 @@ if (invalid.response.status !== 422 || invalid.body.code !== 'invalid_uploaded_m
 try { await storage.inspectObject(invalidKey); throw new Error('Invalid object was not deleted.'); } catch (error) { if (error.message !== 'S3 object was not found.') throw error; }
 const failedRetry = await call('/api/admin/media/' + invalidIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (failedRetry.response.status !== 409 || failedRetry.body.code !== 'media_asset_failed') throw new Error('Failed upload was not terminal.');
-const typeIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'wrong-type.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const typeIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'wrong-type.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
 storage.putObject(storage.uploads.at(-1).key, { contentType: 'audio/ogg', sizeBytes: 1 });
 const wrongType = await call('/api/admin/media/' + typeIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (wrongType.response.status !== 422 || (await data.getMediaAsset(typeIntent.body.mediaAssetId)).value?.status !== 'FAILED') throw new Error('Wrong content type was not failed.');
 const deleteObject = storage.deleteObject.bind(storage);
-const cleanupIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'cleanup.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const cleanupIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'cleanup.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
 const cleanupKey = storage.uploads.at(-1).key;
 storage.putObject(cleanupKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
 storage.deleteObject = async (key) => key === cleanupKey ? Promise.reject(Object.assign(new Error('cleanup failed'), { name: 'AccessDenied' })) : deleteObject(key);
@@ -274,7 +276,7 @@ const fixedMobile = await call('/api/mobile/lessons/' + fix.body.id, 'GET');
 if (fixedMobile.body.version !== 1 || fixedMobile.body.versionPatch !== 1) throw new Error('Mobile detail did not carry the fixed version.');
 const discarded = await call('/api/admin/lessons', 'POST', { chapter: 2 });
 await call('/api/admin/lessons/' + discarded.body.id + '/texts/th', 'PUT', { title: 'ไทย', content: 'ทิ้ง' });
-const discardedIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: discarded.body.id, languageCode: 'th', originalFilename: 'discarded.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const discardedIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: discarded.body.id, languageCode: 'th', originalFilename: 'discarded.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
 const discardedKey = storage.uploads.at(-1).key;
 storage.putObject(discardedKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
 await call('/api/admin/media/' + discardedIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: discarded.body.id, languageCode: 'th' });
@@ -284,7 +286,7 @@ try { await storage.inspectObject(discardedKey); throw new Error('Deleted Draft 
 await storage.inspectObject(storage.uploads[1].key);
 const refusedDelete = await call('/api/admin/lessons/' + fix.body.id, 'DELETE');
 if (refusedDelete.response.status !== 409 || refusedDelete.body.code !== 'lesson_not_editable' || (await call('/api/admin/lessons/' + fix.body.id, 'GET')).body.status !== 'PUBLISHED') throw new Error('A Published Lesson was deleted.');
-const sharedIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: fix.body.id, languageCode: 'th', originalFilename: 'shared.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const sharedIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: fix.body.id, languageCode: 'th', originalFilename: 'shared.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
 const sharedKey = storage.uploads.at(-1).key;
 storage.putObject(sharedKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
 if ((await call('/api/admin/media/' + sharedIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: fix.body.id, languageCode: 'th' })).response.status !== 200) throw new Error('Audio upload to a Published Lesson failed.');
@@ -308,7 +310,7 @@ const replacedDetail = await call('/api/mobile/lessons/' + newVersion.body.id, '
 if (replacedDetail.response.status !== 200 || replacedDetail.body.content !== 'ฉบับใหม่' || replacedDetail.body.audio?.mediaAssetId !== sharedIntent.body.mediaAssetId || storage.playbackAuthorizations.at(-1) !== sharedKey || storage.uploads.length !== uploadsBeforeCopy) throw new Error('The mobile detail did not play the shared audio in the replacing version.');
 const mixed = await call('/api/admin/lessons', 'POST', { copyFromLessonId: newVersion.body.id });
 await call('/api/admin/lessons/' + mixed.body.id, 'PATCH', { text: { languageCode: 'da', title: 'Dansk', content: 'Indhold' } });
-const ownIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: mixed.body.id, languageCode: 'da', originalFilename: 'own.mp3', contentType: 'audio/mpeg', sizeBytes: 1 });
+const ownIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: mixed.body.id, languageCode: 'da', originalFilename: 'own.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
 const ownKey = storage.uploads.at(-1).key;
 storage.putObject(ownKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
 await call('/api/admin/media/' + ownIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: mixed.body.id, languageCode: 'da' });

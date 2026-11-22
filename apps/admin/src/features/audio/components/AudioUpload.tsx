@@ -76,6 +76,15 @@ const isTransient = (error: unknown) =>
   error.status < 400 ||
   error.status >= 500;
 
+// Base64 of the file's SHA-256, which the upload URL signs so storage accepts only these bytes.
+async function sha256(file: File) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    await file.arrayBuffer(),
+  );
+  return btoa(String.fromCharCode(...new Uint8Array(digest)));
+}
+
 function fileProblem(file: File) {
   if (!file.name.endsWith(".mp3")) return "Choose an .mp3 file.";
   if (file.size === 0) return "The file is empty.";
@@ -136,6 +145,16 @@ export function AudioUpload({
   async function upload(chosen: File) {
     const attempt: Attempt = { target, filename: chosen.name };
     step({ step: "preparing", ...attempt });
+    let checksumSha256: string;
+    try {
+      checksumSha256 = await sha256(chosen);
+    } catch {
+      // Such as a file moved or changed since it was chosen; choosing it again re-reads it.
+      step({ step: "idle" });
+      clearFile();
+      setFileError("The file could not be read. Choose it again.");
+      return;
+    }
     let intent: UploadIntentResponse;
     try {
       intent = await call(
@@ -148,6 +167,7 @@ export function AudioUpload({
             // Always audio/mpeg for a .mp3, whatever type the operating system reports.
             contentType: "audio/mpeg",
             sizeBytes: chosen.size,
+            checksumSha256,
           } satisfies CreateUploadIntentRequest,
         },
         uploadIntentResponseSchema,

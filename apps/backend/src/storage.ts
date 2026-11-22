@@ -6,29 +6,26 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { UploadIntentResponse } from "@ez-dk-citizen/api-contracts";
 
 const uploadExpirySeconds = 15 * 60;
 const playbackExpirySeconds = 60 * 60;
 
-export type UploadAuthorization = {
-  uploadUrl: string;
-  uploadHeaders: {
-    "Content-Type": "audio/mpeg";
-    "Content-Length": string;
-    "If-None-Match": "*";
-  };
-  expiresAt: string;
+export type UploadAuthorization = Omit<UploadIntentResponse, "mediaAssetId">;
+
+export type UploadInput = {
+  key: string;
+  contentType: "audio/mpeg";
+  sizeBytes: number;
+  // Base64 of the file's SHA-256, so S3 accepts only those exact bytes.
+  checksumSha256: string;
 };
 
 // What S3 reports for an object; a field it omits stays undefined.
 export type StoredObject = { contentType?: string; sizeBytes?: number };
 
 export interface Storage {
-  createUploadAuthorization(input: {
-    key: string;
-    contentType: "audio/mpeg";
-    sizeBytes: number;
-  }): Promise<UploadAuthorization>;
+  createUploadAuthorization(input: UploadInput): Promise<UploadAuthorization>;
   inspectObject(key: string): Promise<StoredObject>;
   createPlaybackAuthorization(key: string): Promise<{
     playbackUrl: string;
@@ -72,7 +69,10 @@ export function createS3Storage(input: {
             "content-length",
             "content-type",
             "if-none-match",
+            "x-amz-checksum-sha256",
           ]),
+          // S3 ignores a checksum sent in the query, so it must stay a signed header.
+          unhoistableHeaders: new Set(["x-amz-checksum-sha256"]),
         }),
         expiresAt: expiresAt.toISOString(),
       };
@@ -81,20 +81,21 @@ export function createS3Storage(input: {
     }
   }
   return {
-    async createUploadAuthorization({ key, contentType, sizeBytes }) {
+    async createUploadAuthorization(upload) {
       const authorization = await authorize(
         new PutObjectCommand({
           Bucket: input.bucket,
-          Key: key,
-          ContentType: contentType,
-          ContentLength: sizeBytes,
+          Key: upload.key,
+          ContentType: upload.contentType,
+          ContentLength: upload.sizeBytes,
           IfNoneMatch: "*",
+          ChecksumSHA256: upload.checksumSha256,
         }),
         uploadExpirySeconds,
       );
       return {
         uploadUrl: authorization.url,
-        uploadHeaders: uploadHeaders(contentType, sizeBytes),
+        uploadHeaders: uploadHeaders(upload),
         expiresAt: authorization.expiresAt,
       };
     },
@@ -126,23 +127,17 @@ export function createS3Storage(input: {
 }
 
 export class FakeStorage implements Storage {
-  readonly uploads: Array<{
-    key: string;
-    contentType: "audio/mpeg";
-    sizeBytes: number;
-  }> = [];
+  readonly uploads: UploadInput[] = [];
   readonly playbackAuthorizations: string[] = [];
   private readonly objects = new Map<string, StoredObject>();
 
-  async createUploadAuthorization(input: {
-    key: string;
-    contentType: "audio/mpeg";
-    sizeBytes: number;
-  }): Promise<UploadAuthorization> {
+  async createUploadAuthorization(
+    input: UploadInput,
+  ): Promise<UploadAuthorization> {
     this.uploads.push(input);
     return {
       uploadUrl: `https://storage.invalid/${input.key}`,
-      uploadHeaders: uploadHeaders(input.contentType, input.sizeBytes),
+      uploadHeaders: uploadHeaders(input),
       expiresAt: expiry(uploadExpirySeconds),
     };
   }
@@ -173,11 +168,12 @@ export class FakeStorage implements Storage {
   }
 }
 
-function uploadHeaders(contentType: "audio/mpeg", sizeBytes: number) {
+function uploadHeaders(upload: UploadInput) {
   return {
-    "Content-Type": contentType,
-    "Content-Length": String(sizeBytes),
+    "Content-Type": upload.contentType,
+    "Content-Length": String(upload.sizeBytes),
     "If-None-Match": "*" as const,
+    "x-amz-checksum-sha256": upload.checksumSha256,
   };
 }
 

@@ -140,6 +140,8 @@ test("an upload goes Uploading with progress, then Finalizing, then Complete, st
       originalFilename: "chapter-1.mp3",
       contentType: "audio/mpeg",
       sizeBytes: 2048,
+      // The SHA-256 of the file's one byte "x", which S3 checks on the PUT.
+      checksumSha256: "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=",
     },
   });
   const [upload] = backend.uploads;
@@ -147,6 +149,7 @@ test("an upload goes Uploading with progress, then Finalizing, then Complete, st
   expect(upload!.headers).toEqual({
     "Content-Type": "audio/mpeg",
     "If-None-Match": "*",
+    "x-amz-checksum-sha256": "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=",
   });
   expect(upload!.file).toBe(file);
   expect(
@@ -200,6 +203,28 @@ test("an upload goes Uploading with progress, then Finalizing, then Complete, st
   await within(
     screen.getByRole("region", { name: "Current audio" }),
   ).findByText("Audio version 1 · chapter-1.mp3 · 2.0 KiB");
+});
+
+test("a file that cannot be read is reported, and no Upload Intent is requested", async () => {
+  const backend = fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]);
+  await open(backend);
+  const file = mp3File();
+  Object.defineProperty(file, "arrayBuffer", {
+    value: () =>
+      Promise.reject(new DOMException("File changed.", "NotReadableError")),
+  });
+
+  chooseFile(file);
+  fireEvent.click(uploadButton());
+  expect((await within(uploadPanel()).findByRole("alert")).textContent).toBe(
+    "The file could not be read. Choose it again.",
+  );
+  expect(uploadButton()).toHaveProperty("disabled", true);
+  expect(tab("da")).toHaveProperty("disabled", false);
+  expect(backend.requests.some((request) => request.path === intentPath)).toBe(
+    false,
+  );
+  expect(backend.uploads).toEqual([]);
 });
 
 test("the Lesson and Language stay locked, and no second upload starts, until the upload settles", async () => {

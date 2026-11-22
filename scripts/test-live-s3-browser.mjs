@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -128,6 +129,7 @@ const entrypointFile = path.join(
   "scripts/test-live-s3-backend-entrypoint.mjs",
 );
 const bytes = new Uint8Array([73, 68, 51, 4, 0, 0, 0, 0]);
+const checksumSha256 = createHash("sha256").update(bytes).digest("base64");
 const languageCode = process.env.LIVE_S3_TRACER_LANGUAGE_CODE ?? "th";
 const sensitiveValues = [
   { name: "admin bearer token", value: process.env.ADMIN_API_TOKEN },
@@ -270,6 +272,7 @@ await withTeardown(
         originalFilename: "smoke.mp3",
         contentType: "audio/mpeg",
         sizeBytes: bytes.byteLength,
+        checksumSha256,
       };
       const intent = await requestBackend(
         backendServer,
@@ -292,6 +295,7 @@ await withTeardown(
         "Content-Length": String(bytes.byteLength),
         "Content-Type": "audio/mpeg",
         "If-None-Match": "*",
+        "x-amz-checksum-sha256": checksumSha256,
       });
       sensitiveValues.push({
         name: "complete upload URL",
@@ -301,6 +305,25 @@ await withTeardown(
       const smokeKeys = await readSmokeKeys();
       smokeKeys.forEach(assertSmokeKey);
       assert.equal(smokeKeys.length, 1, "Tracer did not create one smoke key.");
+
+      // S3 checks the bytes whoever sends them, and only Node can read the refusal past CORS.
+      const { "Content-Length": _contentLength, ...uploadHeaders } =
+        intent.body.uploadHeaders;
+      const otherBytes = await fetch(intent.body.uploadUrl, {
+        method: "PUT",
+        headers: uploadHeaders,
+        body: bytes.map((byte) => byte ^ 1),
+      });
+      // Never print the body: other S3 refusals echo the signed request.
+      assert.equal(
+        otherBytes.status,
+        400,
+        "S3 did not refuse different bytes of the declared size with 400.",
+      );
+      assert.ok(
+        (await otherBytes.text()).includes("<Code>BadDigest</Code>"),
+        "S3 refused different bytes of the declared size, but not as BadDigest.",
+      );
 
       await expectBrowserResult(
         browser,
@@ -932,7 +955,7 @@ function page() {
   return `<!doctype html><body data-result="running"><script>
 const query = new URLSearchParams(location.search);
 let bytes = new Uint8Array(${JSON.stringify([...bytes])});
-const headers = {"Content-Type":"audio/mpeg","If-None-Match":"*"};
+const headers = {"Content-Type":"audio/mpeg","If-None-Match":"*","x-amz-checksum-sha256":${JSON.stringify(checksumSha256)}};
 if (query.get("mode") === "unapproved") headers["X-Unapproved"] = "1";
 if (query.get("mode") === "wrong-content-type") headers["Content-Type"] = "audio/wav";
 if (query.get("mode") === "wrong-length") bytes = new Uint8Array([...bytes, 0]);
