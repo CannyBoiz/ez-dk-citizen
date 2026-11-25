@@ -6,6 +6,9 @@ import { code, useBackend } from "../../testing/backend.ts";
 const {
   data,
   storage,
+  bucket,
+  createUploadAuthorization,
+  createPlaybackAuthorization,
   request,
   read,
   inStorage,
@@ -58,7 +61,7 @@ test("an Upload Intent validates the Language and leaves an unbound pending Medi
   const unsupported = await intent("zz");
   assert.equal(unsupported.status, 422);
   assert.equal(await code(unsupported), "unsupported_language");
-  assert.equal(storage.uploads.length, 0);
+  assert.equal(createUploadAuthorization.mock.callCount(), 0);
 
   const created = await intent("th");
   assert.equal(created.status, 201);
@@ -75,7 +78,7 @@ test("an Upload Intent validates the Language and leaves an unbound pending Medi
     },
     {
       storageContainer: "citizenship-audio",
-      objectKey: storage.uploads[0]?.key,
+      objectKey: createUploadAuthorization.mock.calls[0]?.arguments[0].key,
       status: "PENDING",
       sizeBytes: 50 * 1024 * 1024,
       durationMs: null,
@@ -97,7 +100,7 @@ test("completion waits for the stored object, then makes the first Lesson Audio 
   assert.equal(await code(missing), "upload_incomplete");
   assert.equal((await mediaAsset(id)).status, "PENDING");
 
-  storage.putObject(objectKey, { contentType: "audio/mpeg", sizeBytes: 1 });
+  bucket.put(objectKey, { contentType: "audio/mpeg", sizeBytes: 1 });
   const outage = context.mock.method(storage, "inspectObject", async () => {
     throw Object.assign(new Error("temporary storage failure"), {
       name: "SlowDown",
@@ -151,7 +154,7 @@ test("a size or content-type mismatch fails the Media Asset for good and deletes
     {},
   ]) {
     const { id, objectKey } = await requestUpload(lesson.id, "th");
-    storage.putObject(objectKey, object);
+    bucket.put(objectKey, object);
 
     const invalid = await complete(id, lesson.id, "th");
     assert.equal(invalid.status, 422);
@@ -160,7 +163,7 @@ test("a size or content-type mismatch fails the Media Asset for good and deletes
     assert.equal(await inStorage(objectKey), false);
 
     // Even a matching object cannot revive it.
-    storage.putObject(objectKey, { contentType: "audio/mpeg", sizeBytes: 1 });
+    bucket.put(objectKey, { contentType: "audio/mpeg", sizeBytes: 1 });
     const retry = await complete(id, lesson.id, "th");
     assert.equal(retry.status, 409);
     assert.equal(await code(retry), "media_asset_failed");
@@ -168,7 +171,7 @@ test("a size or content-type mismatch fails the Media Asset for good and deletes
 
   // The mismatch is decided before the target, so a refused target cannot keep it PENDING.
   const { id, objectKey } = await requestUpload(lesson.id, "th");
-  storage.putObject(objectKey, { contentType: "audio/mpeg", sizeBytes: 2 });
+  bucket.put(objectKey, { contentType: "audio/mpeg", sizeBytes: 2 });
   const refusedTarget = await complete(id, 987654, "th");
   assert.equal(refusedTarget.status, 422);
   assert.equal(await code(refusedTarget), "invalid_uploaded_media");
@@ -224,7 +227,7 @@ test("completion promotes corrections, answers retries with the original result,
   });
   assert.equal(archive.status, 200);
   const late = await requestUpload(archived.id, "th");
-  storage.putObject(late.objectKey, {
+  bucket.put(late.objectKey, {
     contentType: "audio/mpeg",
     sizeBytes: 1,
   });
@@ -240,7 +243,7 @@ test("concurrent completions for one Lesson Text get consecutive versions and on
     await requestUpload(lesson.id, "th"),
   ];
   for (const { objectKey } of assets) {
-    storage.putObject(objectKey, { contentType: "audio/mpeg", sizeBytes: 1 });
+    bucket.put(objectKey, { contentType: "audio/mpeg", sizeBytes: 1 });
   }
 
   const completions = await Promise.all(
@@ -270,7 +273,7 @@ test("current Lesson Audio serves the current rendition with a fresh Playback UR
   const readAudio = (languageCode: string, id = lesson.id) =>
     request(`/lessons/${id}/audio/${languageCode}`);
   const expectAudio = async (expected: object) => {
-    const signed = storage.playbackAuthorizations.length;
+    const signed = createPlaybackAuthorization.mock.callCount();
     const response = await readAudio("th");
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("cache-control"), "no-store");
@@ -278,7 +281,7 @@ test("current Lesson Audio serves the current rendition with a fresh Playback UR
     const { playbackExpiresAt, ...rest } = audio;
     assert.deepEqual(rest, expected);
     assert.ok(Date.parse(playbackExpiresAt) > Date.now());
-    assert.equal(storage.playbackAuthorizations.length, signed + 1);
+    assert.equal(createPlaybackAuthorization.mock.callCount(), signed + 1);
   };
 
   const none = await readAudio("th");

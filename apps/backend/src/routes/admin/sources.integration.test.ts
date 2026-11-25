@@ -5,7 +5,7 @@ import { createDataModule } from "@ez-dk-citizen/data";
 import { resetDatabaseBetweenTests } from "@ez-dk-citizen/data/testing";
 
 import { createBackendApp } from "../../app.ts";
-import { FakeStorage } from "../../storage.ts";
+import { createFakeStorage } from "../../testing/storage.ts";
 
 resetDatabaseBetweenTests();
 const data = createDataModule(String(process.env.DATABASE_URL), 2_000);
@@ -13,7 +13,7 @@ after(() => data.close());
 const app = createBackendApp(async () => undefined, {
   adminApiToken: "admin-token",
   data,
-  storage: new FakeStorage(),
+  storage: createFakeStorage(),
 });
 const headers = {
   Authorization: "Bearer admin-token",

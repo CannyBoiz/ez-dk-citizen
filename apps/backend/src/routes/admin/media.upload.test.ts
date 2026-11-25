@@ -1,27 +1,28 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { problemDetailsSchema } from "@ez-dk-citizen/api-contracts";
 import { fail, mediaAssetSchema, ok } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.ts";
-import { FakeStorage } from "../../storage.ts";
+import type { UploadInput } from "../../storage.ts";
 import { createTestDataModule } from "../../testing/data-module.ts";
+import {
+  createFakeStorage,
+  fakeUploadAuthorization,
+} from "../../testing/storage.ts";
 
 // The SHA-256 of the one byte "x".
 const checksumSha256 = "LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=";
 
 test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", async () => {
-  const storage = new FakeStorage();
   const calls: string[] = [];
-  const createUploadAuthorization =
-    storage.createUploadAuthorization.bind(storage);
-  storage.createUploadAuthorization = async (input) => {
+  const createUploadAuthorization = mock.fn(async (input: UploadInput) => {
     calls.push("sign");
-    return createUploadAuthorization(input);
-  };
+    return fakeUploadAuthorization(input);
+  });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
-    storage,
+    storage: createFakeStorage({ createUploadAuthorization }),
     storageBucket: "citizenship-audio",
     data: createTestDataModule({
       async createPendingMediaAsset(input) {
@@ -81,7 +82,7 @@ test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", 
   assert.ok(Date.parse(intent.expiresAt) > Date.now() + 14 * 60 * 1_000);
   assert.ok(Date.parse(intent.expiresAt) <= Date.now() + 15 * 60 * 1_000);
   assert.deepEqual(calls, ["persist", "sign"]);
-  assert.equal(storage.uploads.length, 1);
+  assert.equal(createUploadAuthorization.mock.callCount(), 1);
 
   const unauthorized = await app.request("/api/admin/media/upload-intents", {
     method: "POST",
@@ -137,14 +138,14 @@ test("Backend creates a pending Media Asset before a signed MP3 Upload Intent", 
       "validation_failed",
     );
   }
-  assert.equal(storage.uploads.length, 1);
+  assert.equal(createUploadAuthorization.mock.callCount(), 1);
 });
 
 test("Backend accepts a test-only Upload Intent object-key generator", async () => {
-  const storage = new FakeStorage();
+  const createUploadAuthorization = mock.fn(fakeUploadAuthorization);
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
-    storage,
+    storage: createFakeStorage({ createUploadAuthorization }),
     storageBucket: "citizenship-audio",
     objectKeyGenerator: () => "smoke/123e4567-e89b-12d3-a456-426614174000.mp3",
     data: createTestDataModule({
@@ -185,21 +186,24 @@ test("Backend accepts a test-only Upload Intent object-key generator", async () 
   });
 
   assert.equal(response.status, 201);
-  assert.deepEqual(storage.uploads, [
-    {
-      key: "smoke/123e4567-e89b-12d3-a456-426614174000.mp3",
-      contentType: "audio/mpeg",
-      sizeBytes: 1,
-      checksumSha256,
-    },
-  ]);
+  assert.deepEqual(
+    createUploadAuthorization.mock.calls.map((call) => call.arguments[0]),
+    [
+      {
+        key: "smoke/123e4567-e89b-12d3-a456-426614174000.mp3",
+        contentType: "audio/mpeg",
+        sizeBytes: 1,
+        checksumSha256,
+      },
+    ],
+  );
 });
 
 test("Backend does not sign when pending Media Asset persistence fails", async () => {
-  const storage = new FakeStorage();
+  const createUploadAuthorization = mock.fn(fakeUploadAuthorization);
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
-    storage,
+    storage: createFakeStorage({ createUploadAuthorization }),
     storageBucket: "citizenship-audio",
     data: createTestDataModule({
       async createPendingMediaAsset() {
@@ -227,21 +231,22 @@ test("Backend does not sign when pending Media Asset persistence fails", async (
   const refusal = await response.json();
   assert.equal(refusal.code, "unsupported_language");
   assert.equal(refusal.detail, "Language is not supported.");
-  assert.equal(storage.uploads.length, 0);
+  assert.equal(createUploadAuthorization.mock.callCount(), 0);
 });
 
 test("Backend leaves a pending Media Asset and logs safely when storage signing fails", async (context) => {
   const log = context.mock.method(console, "log", () => undefined);
-  const storage = new FakeStorage();
-  storage.createUploadAuthorization = async () => {
-    throw Object.assign(
-      new Error("secret-token https://s3.invalid/?X-Amz-Signature=secret"),
-      {
-        name: "CredentialsProviderError",
-        $metadata: { requestId: "aws-signing-request" },
-      },
-    );
-  };
+  const storage = createFakeStorage({
+    async createUploadAuthorization() {
+      throw Object.assign(
+        new Error("secret-token https://s3.invalid/?X-Amz-Signature=secret"),
+        {
+          name: "CredentialsProviderError",
+          $metadata: { requestId: "aws-signing-request" },
+        },
+      );
+    },
+  });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,

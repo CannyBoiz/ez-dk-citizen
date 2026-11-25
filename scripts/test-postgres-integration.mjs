@@ -168,13 +168,20 @@ function completionTracer() {
   return `
 import { createDataModule } from '@ez-dk-citizen/data';
 import { createBackendApp } from './dist/app.js';
-import { FakeStorage } from './dist/storage.js';
+import { mock } from 'node:test';
+import { createFakeBucket, createFakeStorage, fakePlaybackAuthorization, fakeUploadAuthorization } from './dist/testing/storage.js';
 
 const requestId = 'stage-3-completion-tracer';
 const headers = { Authorization: 'Bearer integration-only-admin-token', 'Content-Type': 'application/json', 'X-Request-ID': requestId };
 // The SHA-256 of the one byte "x"; the fake storage never checks it.
 const checksumSha256 = 'LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE=';
-const storage = new FakeStorage();
+const bucket = createFakeBucket();
+const createUploadAuthorization = mock.fn(fakeUploadAuthorization);
+const createPlaybackAuthorization = mock.fn(fakePlaybackAuthorization);
+const storage = createFakeStorage({ createUploadAuthorization, createPlaybackAuthorization, inspectObject: bucket.inspectObject, deleteObject: bucket.deleteObject });
+// The keys the Backend asked storage to sign, oldest first.
+const uploadKeys = () => createUploadAuthorization.mock.calls.map((call) => call.arguments[0].key);
+const playbackKeys = () => createPlaybackAuthorization.mock.calls.map((call) => call.arguments[0]);
 const data = createDataModule(process.env.DATABASE_URL, 2000);
 const app = createBackendApp(async () => undefined, {
   adminApiToken: 'integration-only-admin-token',
@@ -194,8 +201,8 @@ if ((await call('/api/admin/lessons/' + lesson.body.id, 'GET')).body.status !== 
 const text = await call('/api/admin/lessons/' + lesson.body.id + '/texts/th', 'PUT', { title: 'ไทย', content: 'เนื้อหา' });
 if (text.response.status !== 200) throw new Error('Completion tracer localization failed.');
 const intent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'lesson.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
-if (intent.response.status !== 201 || storage.uploads.length !== 1) throw new Error('Completion tracer Upload Intent failed.');
-storage.putObject(storage.uploads[0].key, { contentType: 'audio/mpeg', sizeBytes: 1 });
+if (intent.response.status !== 201 || uploadKeys().length !== 1) throw new Error('Completion tracer Upload Intent failed.');
+bucket.put(uploadKeys()[0], { contentType: 'audio/mpeg', sizeBytes: 1 });
 const completed = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (completed.response.status !== 200 || completed.body.mediaAsset.status !== 'READY' || completed.body.lessonAudio.audioVersion !== 1 || completed.body.lessonAudio.isCurrent !== true || 'objectKey' in completed.body.mediaAsset) throw new Error('Completion tracer did not promote safe current audio.');
 const retry = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
@@ -203,7 +210,7 @@ if (retry.response.status !== 200 || JSON.stringify(retry.body) !== JSON.stringi
 const adminAudioKeys = 'audioVersion,contentType,durationMs,mediaAssetId,originalFilename,playbackExpiresAt,playbackUrl,sizeBytes';
 const readAdminAudio = () => call('/api/admin/lessons/' + lesson.body.id + '/audio/th', 'GET');
 const draftAudio = await readAdminAudio();
-if (draftAudio.response.status !== 200 || draftAudio.response.headers.get('cache-control') !== 'no-store' || draftAudio.body.audio?.audioVersion !== 1 || draftAudio.body.audio?.originalFilename !== 'lesson.mp3' || Object.keys(draftAudio.body.audio ?? {}).sort().join(',') !== adminAudioKeys || storage.playbackAuthorizations.at(-1) !== storage.uploads[0].key) throw new Error('Admin audio read failed on a Draft.');
+if (draftAudio.response.status !== 200 || draftAudio.response.headers.get('cache-control') !== 'no-store' || draftAudio.body.audio?.audioVersion !== 1 || draftAudio.body.audio?.originalFilename !== 'lesson.mp3' || Object.keys(draftAudio.body.audio ?? {}).sort().join(',') !== adminAudioKeys || playbackKeys().at(-1) !== uploadKeys()[0]) throw new Error('Admin audio read failed on a Draft.');
 if (JSON.stringify((await call('/api/admin/lessons/' + lesson.body.id + '/audio/da', 'GET')).body) !== JSON.stringify({ audio: null })) throw new Error('Admin audio read returned audio for a Language without any.');
 await call('/api/admin/lessons/' + lesson.body.id + '/texts/da', 'PUT', { title: 'Dansk', content: 'Indhold' });
 const rebind = await call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'da' });
@@ -213,7 +220,7 @@ await call('/api/admin/lessons/' + lesson.body.id + '/sources/' + source.body.id
 const published = await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'PUBLISHED' });
 if (published.response.status !== 200 || published.body.status !== 'PUBLISHED') throw new Error('Complete publication was not accepted.');
 const correctionIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'correction.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
-storage.putObject(storage.uploads.at(-1).key, { contentType: 'audio/mpeg', sizeBytes: 1 });
+bucket.put(uploadKeys().at(-1), { contentType: 'audio/mpeg', sizeBytes: 1 });
 const corrected = await call('/api/admin/media/' + correctionIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (corrected.response.status !== 200 || corrected.body.lessonAudio.audioVersion !== 2 || !corrected.body.lessonAudio.isCurrent) throw new Error('Corrected audio was not promoted.');
 const correctedRetry = await call('/api/admin/media/' + correctionIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
@@ -222,43 +229,41 @@ const supersededRetry = await call('/api/admin/media/' + intent.body.mediaAssetI
 if (supersededRetry.response.status !== 200 || supersededRetry.body.mediaAsset.id !== intent.body.mediaAssetId || supersededRetry.body.lessonAudio.audioVersion !== 1 || supersededRetry.body.lessonAudio.isCurrent !== false) throw new Error('Superseded audio retry did not report its original version as not current.');
 const supersedingAudio = await readAdminAudio();
 if (supersedingAudio.body.audio?.audioVersion !== 2 || supersedingAudio.body.audio?.originalFilename !== 'correction.mp3') throw new Error('Admin audio read did not follow the superseding upload.');
-const playbackStart = storage.playbackAuthorizations.length;
+const playbackStart = playbackKeys().length;
 const playback = await call('/api/mobile/lessons/' + lesson.body.id, 'GET');
 if (playback.response.status !== 200 || playback.response.headers.get('cache-control') !== 'no-store' || playback.body.audio?.audioVersion !== 2 || playback.body.audio?.mediaAssetId !== correctionIntent.body.mediaAssetId || Object.keys(playback.body.audio ?? {}).sort().join(',') !== 'audioVersion,contentType,durationMs,mediaAssetId,playbackExpiresAt,playbackUrl,sizeBytes') throw new Error('Mobile playback projection failed.');
 const freshPlayback = await call('/api/mobile/lessons/' + lesson.body.id, 'GET');
-if (freshPlayback.response.status !== 200 || storage.playbackAuthorizations.length !== playbackStart + 2 || storage.playbackAuthorizations.slice(-2).some((key) => key !== storage.uploads[1].key)) throw new Error('Playback authorization was not freshly scoped to current audio.');
-const uploadStart = storage.uploads.length;
+if (freshPlayback.response.status !== 200 || playbackKeys().length !== playbackStart + 2 || playbackKeys().slice(-2).some((key) => key !== uploadKeys()[1])) throw new Error('Playback authorization was not freshly scoped to current audio.');
+const uploadStart = uploadKeys().length;
 const concurrentIntents = await Promise.all(['concurrent-a.mp3', 'concurrent-b.mp3'].map((originalFilename) => call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename, contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 })));
-for (const upload of storage.uploads.slice(uploadStart)) storage.putObject(upload.key, { contentType: 'audio/mpeg', sizeBytes: 1 });
+for (const key of uploadKeys().slice(uploadStart)) bucket.put(key, { contentType: 'audio/mpeg', sizeBytes: 1 });
 const concurrent = await Promise.all(concurrentIntents.map((intent) => call('/api/admin/media/' + intent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' })));
 if (concurrent.some(({ response }) => response.status !== 200) || concurrent.map(({ body }) => body.lessonAudio.audioVersion).sort().join(',') !== '3,4' || !concurrent.some(({ body }) => body.lessonAudio.audioVersion === 4 && body.lessonAudio.isCurrent)) throw new Error('Concurrent corrections were not serialized.');
 const missingIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'missing.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
 const missing = await call('/api/admin/media/' + missingIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (missing.response.status !== 409 || missing.body.code !== 'upload_incomplete' || (await data.getMediaAsset(missingIntent.body.mediaAssetId)).value?.status !== 'PENDING') throw new Error('Missing upload was not left retryable.');
-const inspectObject = storage.inspectObject.bind(storage);
 const transientIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'transient.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
-const transientKey = storage.uploads.at(-1).key;
-storage.inspectObject = async (key) => key === transientKey ? Promise.reject(Object.assign(new Error('temporary storage failure'), { name: 'SlowDown' })) : inspectObject(key);
+const transientKey = uploadKeys().at(-1);
+const outage = mock.method(storage, 'inspectObject', async (key) => key === transientKey ? Promise.reject(Object.assign(new Error('temporary storage failure'), { name: 'SlowDown' })) : bucket.inspectObject(key));
 const transient = await call('/api/admin/media/' + transientIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (transient.response.status !== 503 || transient.body.code !== 'storage_unavailable' || (await data.getMediaAsset(transientIntent.body.mediaAssetId)).value?.status !== 'PENDING') throw new Error('Transient upload failure was not left retryable.');
-storage.inspectObject = inspectObject;
+outage.mock.restore();
 const invalidIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'invalid.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
-const invalidKey = storage.uploads.at(-1).key;
-storage.putObject(invalidKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
+const invalidKey = uploadKeys().at(-1);
+bucket.put(invalidKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
 const invalid = await call('/api/admin/media/' + invalidIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (invalid.response.status !== 422 || invalid.body.code !== 'invalid_uploaded_media' || (await data.getMediaAsset(invalidIntent.body.mediaAssetId)).value?.status !== 'FAILED') throw new Error('Invalid upload was not failed.');
-try { await storage.inspectObject(invalidKey); throw new Error('Invalid object was not deleted.'); } catch (error) { if (error.message !== 'S3 object was not found.') throw error; }
+if (bucket.has(invalidKey)) throw new Error('Invalid object was not deleted.');
 const failedRetry = await call('/api/admin/media/' + invalidIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (failedRetry.response.status !== 409 || failedRetry.body.code !== 'media_asset_failed') throw new Error('Failed upload was not terminal.');
 const typeIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'wrong-type.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
-storage.putObject(storage.uploads.at(-1).key, { contentType: 'audio/ogg', sizeBytes: 1 });
+bucket.put(uploadKeys().at(-1), { contentType: 'audio/ogg', sizeBytes: 1 });
 const wrongType = await call('/api/admin/media/' + typeIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (wrongType.response.status !== 422 || (await data.getMediaAsset(typeIntent.body.mediaAssetId)).value?.status !== 'FAILED') throw new Error('Wrong content type was not failed.');
-const deleteObject = storage.deleteObject.bind(storage);
 const cleanupIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: lesson.body.id, languageCode: 'th', originalFilename: 'cleanup.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
-const cleanupKey = storage.uploads.at(-1).key;
-storage.putObject(cleanupKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
-storage.deleteObject = async (key) => key === cleanupKey ? Promise.reject(Object.assign(new Error('cleanup failed'), { name: 'AccessDenied' })) : deleteObject(key);
+const cleanupKey = uploadKeys().at(-1);
+bucket.put(cleanupKey, { contentType: 'audio/mpeg', sizeBytes: 2 });
+mock.method(storage, 'deleteObject', async (key) => key === cleanupKey ? Promise.reject(Object.assign(new Error('cleanup failed'), { name: 'AccessDenied' })) : bucket.deleteObject(key));
 const cleanup = await call('/api/admin/media/' + cleanupIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: lesson.body.id, languageCode: 'th' });
 if (cleanup.response.status !== 422 || (await data.getMediaAsset(cleanupIntent.body.mediaAssetId)).value?.status !== 'FAILED') throw new Error('Cleanup failure restored invalid media.');
 const archived = await call('/api/admin/lessons/' + lesson.body.id, 'PATCH', { status: 'ARCHIVED' });
@@ -277,24 +282,24 @@ if (fixedMobile.body.version !== 1 || fixedMobile.body.versionPatch !== 1) throw
 const discarded = await call('/api/admin/lessons', 'POST', { chapter: 2 });
 await call('/api/admin/lessons/' + discarded.body.id + '/texts/th', 'PUT', { title: 'ไทย', content: 'ทิ้ง' });
 const discardedIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: discarded.body.id, languageCode: 'th', originalFilename: 'discarded.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
-const discardedKey = storage.uploads.at(-1).key;
-storage.putObject(discardedKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
+const discardedKey = uploadKeys().at(-1);
+bucket.put(discardedKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
 await call('/api/admin/media/' + discardedIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: discarded.body.id, languageCode: 'th' });
 const deletedDraft = await call('/api/admin/lessons/' + discarded.body.id, 'DELETE');
 if (deletedDraft.response.status !== 204 || deletedDraft.body !== undefined || (await call('/api/admin/lessons/' + discarded.body.id, 'GET')).response.status !== 404 || (await data.getMediaAsset(discardedIntent.body.mediaAssetId)).value?.status !== 'DELETED') throw new Error('Draft deletion failed.');
-try { await storage.inspectObject(discardedKey); throw new Error('Deleted Draft audio stayed in storage.'); } catch (error) { if (error.message !== 'S3 object was not found.') throw error; }
-await storage.inspectObject(storage.uploads[1].key);
+if (bucket.has(discardedKey)) throw new Error('Deleted Draft audio stayed in storage.');
+if (!bucket.has(uploadKeys()[1])) throw new Error('Deleting the Draft deleted the current audio of another Lesson.');
 const refusedDelete = await call('/api/admin/lessons/' + fix.body.id, 'DELETE');
 if (refusedDelete.response.status !== 409 || refusedDelete.body.code !== 'lesson_not_editable' || (await call('/api/admin/lessons/' + fix.body.id, 'GET')).body.status !== 'PUBLISHED') throw new Error('A Published Lesson was deleted.');
 const sharedIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: fix.body.id, languageCode: 'th', originalFilename: 'shared.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
-const sharedKey = storage.uploads.at(-1).key;
-storage.putObject(sharedKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
+const sharedKey = uploadKeys().at(-1);
+bucket.put(sharedKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
 if ((await call('/api/admin/media/' + sharedIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: fix.body.id, languageCode: 'th' })).response.status !== 200) throw new Error('Audio upload to a Published Lesson failed.');
-const uploadsBeforeCopy = storage.uploads.length;
+const uploadsBeforeCopy = uploadKeys().length;
 const newVersion = await call('/api/admin/lessons', 'POST', { copyFromLessonId: fix.body.id });
 if (newVersion.response.status !== 201 || newVersion.body.status !== 'DRAFT' || newVersion.body.chapter !== 2 || newVersion.body.version !== null || JSON.stringify(newVersion.body.lessonTexts) !== JSON.stringify(fixed.body.lessonTexts) || JSON.stringify(newVersion.body.lessonSources) !== JSON.stringify(fixed.body.lessonSources)) throw new Error('A Published Lesson was not copied into a new version.');
 const copiedAudio = await call('/api/admin/lessons/' + newVersion.body.id + '/audio/th', 'GET');
-if (copiedAudio.response.status !== 200 || copiedAudio.body.audio?.mediaAssetId !== sharedIntent.body.mediaAssetId || copiedAudio.body.audio?.audioVersion !== 1 || storage.playbackAuthorizations.at(-1) !== sharedKey || storage.uploads.length !== uploadsBeforeCopy) throw new Error('The new version did not play the shared audio without an upload.');
+if (copiedAudio.response.status !== 200 || copiedAudio.body.audio?.mediaAssetId !== sharedIntent.body.mediaAssetId || copiedAudio.body.audio?.audioVersion !== 1 || playbackKeys().at(-1) !== sharedKey || uploadKeys().length !== uploadsBeforeCopy) throw new Error('The new version did not play the shared audio without an upload.');
 const notCopyable = await call('/api/admin/lessons', 'POST', { copyFromLessonId: newVersion.body.id });
 if (notCopyable.response.status !== 409 || notCopyable.body.code !== 'lesson_not_copyable') throw new Error('A Draft was copied.');
 const unchangedReplacement = await call('/api/admin/lessons/' + newVersion.body.id, 'PATCH', { status: 'PUBLISHED', changeKind: 'content', replacesLessonId: fix.body.id });
@@ -307,18 +312,18 @@ if (replacement.response.status !== 200 || replacement.body.status !== 'PUBLISHE
 const replacedList = (await call('/api/mobile/lessons', 'GET')).body.items.filter((item) => item.chapter === 2);
 if (replacedList.length !== 1 || replacedList[0].id !== newVersion.body.id || replacedList[0].version !== 2 || replacedList[0].versionPatch !== 0 || replacedList[0].title !== 'ไทย') throw new Error('The mobile list did not show the replacing version.');
 const replacedDetail = await call('/api/mobile/lessons/' + newVersion.body.id, 'GET');
-if (replacedDetail.response.status !== 200 || replacedDetail.body.content !== 'ฉบับใหม่' || replacedDetail.body.audio?.mediaAssetId !== sharedIntent.body.mediaAssetId || storage.playbackAuthorizations.at(-1) !== sharedKey || storage.uploads.length !== uploadsBeforeCopy) throw new Error('The mobile detail did not play the shared audio in the replacing version.');
+if (replacedDetail.response.status !== 200 || replacedDetail.body.content !== 'ฉบับใหม่' || replacedDetail.body.audio?.mediaAssetId !== sharedIntent.body.mediaAssetId || playbackKeys().at(-1) !== sharedKey || uploadKeys().length !== uploadsBeforeCopy) throw new Error('The mobile detail did not play the shared audio in the replacing version.');
 const mixed = await call('/api/admin/lessons', 'POST', { copyFromLessonId: newVersion.body.id });
 await call('/api/admin/lessons/' + mixed.body.id, 'PATCH', { text: { languageCode: 'da', title: 'Dansk', content: 'Indhold' } });
 const ownIntent = await call('/api/admin/media/upload-intents', 'POST', { lessonId: mixed.body.id, languageCode: 'da', originalFilename: 'own.mp3', contentType: 'audio/mpeg', sizeBytes: 1, checksumSha256 });
-const ownKey = storage.uploads.at(-1).key;
-storage.putObject(ownKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
+const ownKey = uploadKeys().at(-1);
+bucket.put(ownKey, { contentType: 'audio/mpeg', sizeBytes: 1 });
 await call('/api/admin/media/' + ownIntent.body.mediaAssetId + '/complete', 'POST', { lessonId: mixed.body.id, languageCode: 'da' });
 if ((await call('/api/admin/lessons/' + mixed.body.id + '/audio/th', 'GET')).body.audio?.mediaAssetId !== sharedIntent.body.mediaAssetId || (await call('/api/admin/lessons/' + mixed.body.id + '/audio/da', 'GET')).body.audio?.mediaAssetId !== ownIntent.body.mediaAssetId) throw new Error('The Draft did not hold both the shared audio and its own.');
 const deletedMixed = await call('/api/admin/lessons/' + mixed.body.id, 'DELETE');
 if (deletedMixed.response.status !== 204 || (await data.getMediaAsset(ownIntent.body.mediaAssetId)).value?.status !== 'DELETED' || (await data.getMediaAsset(sharedIntent.body.mediaAssetId)).value?.status !== 'READY') throw new Error('Deleting the Draft did not delete only its own Media Asset.');
-try { await storage.inspectObject(ownKey); throw new Error('The deleted Draft audio stayed in storage.'); } catch (error) { if (error.message !== 'S3 object was not found.') throw error; }
-await storage.inspectObject(sharedKey);
+if (bucket.has(ownKey)) throw new Error('The deleted Draft audio stayed in storage.');
+if (!bucket.has(sharedKey)) throw new Error('Deleting the Draft deleted the shared audio.');
 if ((await call('/api/mobile/lessons/' + newVersion.body.id, 'GET')).body.audio?.mediaAssetId !== sharedIntent.body.mediaAssetId) throw new Error('Deleting the Draft took the shared audio from the Published Lesson.');
 await data.close();
 `;

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after } from "node:test";
+import { after, mock } from "node:test";
 import {
   type CompleteMediaAssetResponse,
   type LessonDetail,
@@ -10,15 +10,29 @@ import { createDataModule } from "@ez-dk-citizen/data";
 import { resetDatabaseBetweenTests } from "@ez-dk-citizen/data/testing";
 
 import { createBackendApp } from "../app.ts";
-import { FakeStorage } from "../storage.ts";
+import {
+  createFakeBucket,
+  createFakeStorage,
+  fakePlaybackAuthorization,
+  fakeUploadAuthorization,
+} from "./storage.ts";
 
-// The Backend on the real data module and FakeStorage, for integration tests against
-// PostgreSQL. Each test starts from an empty database.
+// The Backend on the real data module and a fake bucket, for integration tests against
+// PostgreSQL. Each test starts from an empty database; signing is spied on, since a
+// client can't see which key or checksum was signed.
 export function useBackend() {
   resetDatabaseBetweenTests();
   const data = createDataModule(String(process.env.DATABASE_URL), 2_000);
   after(() => data.close());
-  const storage = new FakeStorage();
+  const bucket = createFakeBucket();
+  const createUploadAuthorization = mock.fn(fakeUploadAuthorization);
+  const createPlaybackAuthorization = mock.fn(fakePlaybackAuthorization);
+  const storage = createFakeStorage({
+    createUploadAuthorization,
+    createPlaybackAuthorization,
+    inspectObject: bucket.inspectObject,
+    deleteObject: bucket.deleteObject,
+  });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     data,
@@ -36,11 +50,7 @@ export function useBackend() {
     });
   const read = async (id: number): Promise<LessonDetail> =>
     (await request(`/lessons/${id}`)).json();
-  const inStorage = (objectKey: string) =>
-    storage.inspectObject(objectKey).then(
-      () => true,
-      () => false,
-    );
+  const inStorage = bucket.has;
   const createLesson = async (chapter: number): Promise<LessonDetail> => {
     const response = await request("/lessons", "POST", { chapter });
     assert.equal(response.status, 201);
@@ -63,9 +73,9 @@ export function useBackend() {
     });
     assert.equal(response.status, 201);
     const intent = uploadIntentResponseSchema.parse(await response.json());
-    const upload = storage.uploads.at(-1);
+    const upload = createUploadAuthorization.mock.calls.at(-1);
     assert.ok(upload);
-    return { id: intent.mediaAssetId, objectKey: upload.key };
+    return { id: intent.mediaAssetId, objectKey: upload.arguments[0].key };
   };
   const complete = (id: number, lessonId: number, languageCode: string) =>
     request(`/media/${id}/complete`, "POST", { lessonId, languageCode });
@@ -76,7 +86,7 @@ export function useBackend() {
     originalFilename?: string,
   ) => {
     const asset = await requestUpload(lessonId, languageCode, originalFilename);
-    storage.putObject(asset.objectKey, {
+    bucket.put(asset.objectKey, {
       contentType: "audio/mpeg",
       sizeBytes: 1,
     });
@@ -90,6 +100,9 @@ export function useBackend() {
     app,
     data,
     storage,
+    bucket,
+    createUploadAuthorization,
+    createPlaybackAuthorization,
     request,
     read,
     inStorage,

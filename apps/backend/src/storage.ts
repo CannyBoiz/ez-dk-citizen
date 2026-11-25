@@ -126,48 +126,6 @@ export function createS3Storage(input: {
   };
 }
 
-export class FakeStorage implements Storage {
-  readonly uploads: UploadInput[] = [];
-  readonly playbackAuthorizations: string[] = [];
-  private readonly objects = new Map<string, StoredObject>();
-
-  async createUploadAuthorization(
-    input: UploadInput,
-  ): Promise<UploadAuthorization> {
-    this.uploads.push(input);
-    return {
-      uploadUrl: `https://storage.invalid/${input.key}`,
-      uploadHeaders: uploadHeaders(input),
-      expiresAt: expiry(uploadExpirySeconds),
-    };
-  }
-
-  putObject(key: string, object: StoredObject) {
-    this.objects.set(key, object);
-  }
-
-  async inspectObject(key: string): Promise<StoredObject> {
-    const object = this.objects.get(key);
-    if (!object)
-      throw Object.assign(new Error("S3 object was not found."), {
-        name: "NotFound",
-      });
-    return object;
-  }
-
-  async createPlaybackAuthorization(key: string) {
-    this.playbackAuthorizations.push(key);
-    return {
-      playbackUrl: `https://storage.invalid/${key}?playback=1`,
-      expiresAt: expiry(playbackExpirySeconds),
-    };
-  }
-
-  async deleteObject(key: string) {
-    this.objects.delete(key);
-  }
-}
-
 function uploadHeaders(upload: UploadInput) {
   return {
     "Content-Type": upload.contentType,
@@ -175,8 +133,4 @@ function uploadHeaders(upload: UploadInput) {
     "If-None-Match": "*" as const,
     "x-amz-checksum-sha256": upload.checksumSha256,
   };
-}
-
-function expiry(seconds: number) {
-  return new Date(Date.now() + seconds * 1_000).toISOString();
 }

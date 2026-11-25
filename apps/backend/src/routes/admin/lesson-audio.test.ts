@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { currentLessonAudioResultSchema, fail, ok } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.ts";
-import { FakeStorage } from "../../storage.ts";
+import type { Storage } from "../../storage.ts";
 import { createTestDataModule } from "../../testing/data-module.ts";
+import { createFakeStorage } from "../../testing/storage.ts";
 
 const key = "audio/123e4567-e89b-12d3-a456-426614174000.mp3";
 const current = currentLessonAudioResultSchema.parse({
@@ -26,7 +27,7 @@ const headers = {
 test("admin current audio requires the admin token", async () => {
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
-    storage: new FakeStorage(),
+    storage: createFakeStorage(),
     data: createTestDataModule({
       async getCurrentLessonAudio() {
         throw new Error("Unauthenticated requests must not read Lesson Audio");
@@ -40,19 +41,17 @@ test("admin current audio requires the admin token", async () => {
 });
 
 test("admin current audio signs one fresh Playback URL and hides storage identity", async () => {
-  const storage = new FakeStorage();
-  const keys: string[] = [];
   const reads: string[] = [];
-  storage.inspectObject = async () => {
-    throw new Error("Playback must not inspect object metadata");
-  };
-  storage.createPlaybackAuthorization = async (objectKey) => {
-    keys.push(objectKey);
-    return {
-      playbackUrl: `https://storage.invalid/playback-${keys.length}`,
-      expiresAt: "2026-01-01T01:00:00.000Z",
-    };
-  };
+  // Numbers each URL, so the test can tell a fresh signature from a reused one.
+  let signed = 0;
+  const createPlaybackAuthorization = mock.fn<
+    Storage["createPlaybackAuthorization"]
+  >(async () => ({
+    playbackUrl: `https://storage.invalid/playback-${++signed}`,
+    expiresAt: "2026-01-01T01:00:00.000Z",
+  }));
+  // Only signing is supplied, so inspecting object metadata would fail the read.
+  const storage = createFakeStorage({ createPlaybackAuthorization });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
@@ -83,7 +82,10 @@ test("admin current audio signs one fresh Playback URL and hides storage identit
     },
   });
   assert.equal(body.includes(key), false);
-  assert.deepEqual(keys, [key]);
+  assert.deepEqual(
+    createPlaybackAuthorization.mock.calls.map((call) => call.arguments[0]),
+    [key],
+  );
 
   const again = await app.request("/api/admin/lessons/7/audio/th", {
     headers,
@@ -97,7 +99,7 @@ test("admin current audio signs one fresh Playback URL and hides storage identit
   assert.equal(none.status, 200);
   assert.equal(none.headers.get("cache-control"), "no-store");
   assert.deepEqual(await none.json(), { audio: null });
-  assert.equal(keys.length, 2);
+  assert.equal(createPlaybackAuthorization.mock.callCount(), 2);
   assert.deepEqual(reads, ["7:th", "7:th", "7:da"]);
 });
 
@@ -108,7 +110,7 @@ test("admin current audio maps data module refusals to Problem Details", async (
   ] as const) {
     const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
-      storage: new FakeStorage(),
+      storage: createFakeStorage(),
       data: createTestDataModule({
         async getCurrentLessonAudio() {
           return fail(outcome);
@@ -132,15 +134,16 @@ test("admin current audio maps signing failures to storage problems and logs the
     ["TimeoutError", 504, "storage_timeout"],
     ["NotFound", 503, "storage_unavailable"],
   ] as const) {
-    const storage = new FakeStorage();
-    storage.createPlaybackAuthorization = async () => {
-      throw Object.assign(
-        new Error(
-          `Bearer admin-token ${key} https://storage.invalid/leak?signature=secret`,
-        ),
-        { name, $metadata: { requestId: "aws-request" } },
-      );
-    };
+    const storage = createFakeStorage({
+      async createPlaybackAuthorization() {
+        throw Object.assign(
+          new Error(
+            `Bearer admin-token ${key} https://storage.invalid/leak?signature=secret`,
+          ),
+          { name, $metadata: { requestId: "aws-request" } },
+        );
+      },
+    });
     const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
