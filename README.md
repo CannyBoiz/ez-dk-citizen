@@ -138,8 +138,9 @@ migration execution, and verification consume container-injected configuration.
 ## Workspace scripts
 
 The root package coordinates the Backend (`apps/backend`), Admin (`apps/admin`),
-data (`packages/data`), and shared contracts (`packages/api-contracts`)
-workspaces. The Backend container listens on configurable `PORT=3000`.
+data (`packages/data`), shared contracts (`packages/api-contracts`), and Lesson
+Text Markdown (`packages/lesson-text`) workspaces. The Backend container listens
+on configurable `PORT=3000`.
 
 | Command                    | Purpose                                                                          |
 | -------------------------- | -------------------------------------------------------------------------------- |

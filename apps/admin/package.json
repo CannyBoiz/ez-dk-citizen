@@ -8,10 +8,11 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "vite build",
-    "test": "pnpm --filter @ez-dk-citizen/api-contracts build && vitest run"
+    "test": "pnpm --filter @ez-dk-citizen/api-contracts --filter @ez-dk-citizen/lesson-text build && vitest run"
   },
   "dependencies": {
     "@ez-dk-citizen/api-contracts": "workspace:*",
+    "@ez-dk-citizen/lesson-text": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
