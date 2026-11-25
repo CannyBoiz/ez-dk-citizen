@@ -1,6 +1,6 @@
 // Lesson Text content as Markdown: the supported elements as a plain-data tree, which the Admin
-// preview and the mobile app each draw with their own components. Any other element comes out
-// as its plain text.
+// preview and the mobile app each draw with their own components, and the narration script read
+// from it. Any other element comes out as its plain text.
 import MarkdownIt, { type Token } from "markdown-it";
 
 export type Inline = { type: "text"; value: string } | { type: "break" };
@@ -29,6 +29,18 @@ export function parse(content: string): Block[] {
     const level = Number(opening.tag.slice(1)) <= 2 ? 2 : 3;
     return [{ type: "heading", level, children }];
   });
+}
+
+// The narration script: the text the learner sees, in reading order, with a blank line between
+// blocks, so that ElevenLabs pauses between them.
+export function narrationScript(content: string): string {
+  return parse(content)
+    .map(({ children }) =>
+      children
+        .map((inline) => (inline.type === "break" ? "\n" : inline.value))
+        .join(""),
+    )
+    .join("\n\n");
 }
 
 // Keeps the text and line breaks, and drops the markup tokens around them.

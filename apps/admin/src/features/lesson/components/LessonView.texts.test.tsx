@@ -8,9 +8,10 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { App } from "../../../app/App";
+import type { TextClipboard } from "../../../shared/lib/clipboard";
 import {
   answer,
   chapterForm,
@@ -18,6 +19,7 @@ import {
   fakeBackend,
   fieldError,
   lessonDetail,
+  noClipboard,
   openLesson,
   problem,
   settle,
@@ -39,6 +41,7 @@ test("the editor shows da, en, and th tabs with Thai selected and each Language'
       network={
         fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]).network
       }
+      clipboard={noClipboard}
     />,
   );
   await connect(validToken);
@@ -74,7 +77,7 @@ test("a tab's Save sends the chapter changed on another tab with its own Lesson 
   const { network, requests } = fakeBackend([
     lessonDetail(1, { lessonTexts: [thaiText] }),
   ]);
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
 
@@ -134,7 +137,7 @@ test("a tab's Save sends the chapter changed on another tab with its own Lesson 
 
 test("a tab with no Lesson Text and blank fields saves only the chapter", async () => {
   const { network, requests } = fakeBackend([lessonDetail(1)]);
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
 
@@ -160,7 +163,7 @@ test("a cleared Lesson Text is refused in the page, so the chapter change is not
   const { network, requests } = fakeBackend([
     lessonDetail(1, { lessonTexts: [thaiText] }),
   ]);
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
   const sent = requests.length;
@@ -202,7 +205,7 @@ test("a Save checks the chapter and the tab's fields in the page, and backend er
           }
         : undefined,
   });
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
   const sent = requests.length;
@@ -252,7 +255,7 @@ test("a failed Save keeps the chapter and the pasted text, saves neither, and ca
           )
         : undefined,
   });
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
 
@@ -304,6 +307,7 @@ test.each(["PUBLISHED", "ARCHIVED"] as const)(
           fakeBackend([lessonDetail(1, { status, lessonTexts: [thaiText] })])
             .network
         }
+        clipboard={noClipboard}
       />,
     );
     await connect(validToken);
@@ -337,6 +341,7 @@ test("the preview under Content renders the unsaved Title and content as heading
       network={
         fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]).network
       }
+      clipboard={noClipboard}
     />,
   );
   await connect(validToken);
@@ -382,6 +387,7 @@ test("an Archived Lesson's Lesson Text still shows its preview", async () => {
           }),
         ]).network
       }
+      clipboard={noClipboard}
     />,
   );
   await connect(validToken);
@@ -395,4 +401,63 @@ test("an Archived Lesson's Lesson Text still shows its preview", async () => {
     "ส่วนแรก",
   );
   expect(within(preview()).getByRole("paragraph").textContent).toBe("เนื้อหา");
+});
+
+function copyButton() {
+  return within(preview()).getByRole("button", { name: "Copy as plain text" });
+}
+
+test("Copy as plain text copies the narration script of the unsaved content and confirms in the page", async () => {
+  const writeText = vi.fn<TextClipboard["writeText"]>(async () => {});
+  render(
+    <App
+      network={
+        fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]).network
+      }
+      clipboard={{ writeText }}
+    />,
+  );
+  await connect(validToken);
+  await openLesson();
+
+  type("Content", "## ส่วนแรก\nบรรทัด **หนึ่ง**\n\nย่อหน้าสอง", textForm());
+  fireEvent.click(copyButton());
+
+  expect((await within(preview()).findByRole("status")).textContent).toBe(
+    "Copied the narration script.",
+  );
+  expect(writeText.mock.calls).toEqual([["ส่วนแรก\n\nบรรทัด หนึ่ง\n\nย่อหน้าสอง"]]);
+  expect(tab("th").textContent).toBe("th: Unsaved");
+
+  // The clipboard no longer holds what the content says, so the confirmation goes.
+  type("Content", "ย่อหน้าใหม่", textForm());
+  expect(within(preview()).queryByRole("status")).toBeNull();
+});
+
+test("a failed clipboard write shows an error in the page", async () => {
+  render(
+    <App
+      network={
+        fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]).network
+      }
+      clipboard={{
+        async writeText() {
+          throw new DOMException("Write permission denied.", "NotAllowedError");
+        },
+      }}
+    />,
+  );
+  await connect(validToken);
+  await openLesson();
+
+  fireEvent.click(copyButton());
+
+  expect((await within(preview()).findByRole("alert")).textContent).toBe(
+    "Could not copy the narration script; the clipboard still holds what was there before.",
+  );
+  expect(within(preview()).queryByRole("status")).toBeNull();
+
+  // The clipboard is still stale, so the error stays until the next copy.
+  type("Content", "ย่อหน้าใหม่", textForm());
+  expect(within(preview()).getByRole("alert")).toBeTruthy();
 });

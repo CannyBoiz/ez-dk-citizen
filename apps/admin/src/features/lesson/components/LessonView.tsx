@@ -20,6 +20,7 @@ import {
 } from "../../../shared/components/EditForm";
 import { ErrorMessage } from "../../../shared/components/ErrorMessage";
 import { BackendError, type Call } from "../../../shared/lib/backend";
+import type { TextClipboard } from "../../../shared/lib/clipboard";
 import {
   type LanguageCode,
   languageCodes,
@@ -54,6 +55,7 @@ const chapterField: Field = {
 export function LessonView({
   call,
   putObject,
+  clipboard,
   lessonId,
   onUnsavedChange,
   onUploadChange,
@@ -63,6 +65,7 @@ export function LessonView({
 }: {
   call: Call;
   putObject: Network["putObject"];
+  clipboard: TextClipboard;
   lessonId: number;
   // Names the unsaved forms, in page order, for the navigation guards.
   onUnsavedChange: (forms: string[]) => void;
@@ -414,6 +417,7 @@ export function LessonView({
             <LessonTextPreview
               title={formProps(code).value.title ?? ""}
               content={formProps(code).value.content ?? ""}
+              clipboard={clipboard}
             />
           </EditForm>
           {/* Only a Draft's text can change, so only a Draft warns. */}

@@ -6,6 +6,7 @@ import { App } from "../../../app/App";
 import {
   connect,
   fakeNetwork,
+  noClipboard,
   problem,
   validToken,
 } from "../../../shared/test/support";
@@ -13,7 +14,7 @@ import {
 test("connects with a valid token held only in memory", async () => {
   const { network, requests } = fakeNetwork();
   const url = window.location.href;
-  const { unmount } = render(<App network={network} />);
+  const { unmount } = render(<App network={network} clipboard={noClipboard} />);
 
   expect(screen.getByLabelText("Admin token")).toHaveProperty(
     "type",
@@ -34,12 +35,12 @@ test("connects with a valid token held only in memory", async () => {
   expect(document.body.innerHTML).not.toContain(validToken);
 
   unmount();
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   expect(screen.getByLabelText("Admin token")).toHaveProperty("value", "");
 });
 
 test("rejects an invalid token clearly", async () => {
-  render(<App network={fakeNetwork().network} />);
+  render(<App network={fakeNetwork().network} clipboard={noClipboard} />);
 
   await connect("wrong-token");
 
@@ -62,6 +63,7 @@ test("Backend errors show their message and request ID", async () => {
           ),
         ).network
       }
+      clipboard={noClipboard}
     />,
   );
 
@@ -79,6 +81,7 @@ test("an unreachable Backend is reported", async () => {
         backend: () => Promise.reject(new TypeError("Failed to fetch")),
         putObject: () => Promise.reject(new Error("Not used")),
       }}
+      clipboard={noClipboard}
     />,
   );
 

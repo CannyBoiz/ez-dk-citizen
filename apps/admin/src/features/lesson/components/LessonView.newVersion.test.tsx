@@ -24,6 +24,7 @@ import {
   lessonDetail,
   movedLawUrl,
   mp3File,
+  noClipboard,
   openLesson,
   problem,
   settle,
@@ -60,7 +61,7 @@ function backendWith(lessons = [published]) {
 }
 
 async function open(backend: ReturnType<typeof fakeBackend>, lesson: string) {
-  render(<App network={backend.network} />);
+  render(<App network={backend.network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson(lesson);
   return backend;

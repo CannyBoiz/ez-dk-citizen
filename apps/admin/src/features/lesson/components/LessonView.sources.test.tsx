@@ -26,6 +26,7 @@ import {
   lessonDetail,
   movedLawUrl as moved,
   newSourceForm,
+  noClipboard,
   openLesson,
   problem,
   saveSource,
@@ -55,7 +56,7 @@ function lessonSourceUrls() {
 }
 
 async function openDraft(backend: ReturnType<typeof fakeBackend>) {
-  render(<App network={backend.network} />);
+  render(<App network={backend.network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
 }
