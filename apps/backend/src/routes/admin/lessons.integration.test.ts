@@ -10,7 +10,8 @@ import { code, useBackend } from "../../testing/backend.ts";
 const {
   app,
   data,
-  storage,
+  bucket,
+  createUploadAuthorization,
   request,
   read,
   inStorage,
@@ -823,7 +824,7 @@ async function lessonWithAudio(chapter: number, uploads: string[]) {
 // A pending upload whose object is stored but never completed.
 async function pendingUpload(lessonId: number) {
   const asset = await requestUpload(lessonId, "th");
-  storage.putObject(asset.objectKey, {
+  bucket.put(asset.objectKey, {
     contentType: "audio/mpeg",
     sizeBytes: 1,
   });
@@ -989,7 +990,7 @@ async function copyLesson(copyFromLessonId: number) {
 
 test("a new version copies the chapter, every Lesson Text and Lesson Source, and each Language's current audio at version 1 on the same Media Asset", async () => {
   const { lesson: original, thai, danish } = await publishedLessonToCopy(86);
-  const uploads = storage.uploads.length;
+  const uploads = createUploadAuthorization.mock.callCount();
 
   const copy = await copyLesson(original.id);
 
@@ -1031,7 +1032,7 @@ test("a new version copies the chapter, every Lesson Text and Lesson Source, and
     );
   }
   assert.equal(await currentAudio(copy.id, "en"), null);
-  assert.equal(storage.uploads.length, uploads);
+  assert.equal(createUploadAuthorization.mock.callCount(), uploads);
 
   // The original is untouched.
   assert.deepEqual(await read(original.id), original);

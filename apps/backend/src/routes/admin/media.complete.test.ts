@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { fail, mediaAssetSchema, ok } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.ts";
-import { FakeStorage } from "../../storage.ts";
+import type { Storage } from "../../storage.ts";
 import { createTestDataModule } from "../../testing/data-module.ts";
+import { createFakeStorage } from "../../testing/storage.ts";
 
 test("Backend completes matching stored media through the admin route", async () => {
-  const storage = new FakeStorage();
   const asset = mediaAssetSchema.parse({
     id: 9,
     storageProvider: "s3",
@@ -21,9 +21,11 @@ test("Backend completes matching stored media through the admin route", async ()
     createdAt: "2026-01-01T00:00:00.000Z",
     uploadedAt: null,
   });
-  storage.putObject(asset.objectKey, {
-    contentType: asset.contentType,
-    sizeBytes: asset.sizeBytes,
+  const storage = createFakeStorage({
+    async inspectObject(key) {
+      assert.equal(key, asset.objectKey);
+      return { contentType: asset.contentType, sizeBytes: asset.sizeBytes };
+    },
   });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
@@ -91,7 +93,7 @@ test("Backend completes matching stored media through the admin route", async ()
 });
 
 test("Backend returns a completion retry for superseded audio as not current", async () => {
-  const storage = new FakeStorage();
+  const storage = createFakeStorage();
   const completion = {
     mediaAsset: {
       id: 9,
@@ -176,7 +178,13 @@ test("Backend keeps incomplete uploads pending and deletes the exact object of i
     });
 
   await context.test("reports a missing object as retryable", async () => {
-    const storage = new FakeStorage();
+    const storage = createFakeStorage({
+      async inspectObject() {
+        throw Object.assign(new Error("S3 object was not found."), {
+          name: "NotFound",
+        });
+      },
+    });
     const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
@@ -199,10 +207,11 @@ test("Backend keeps incomplete uploads pending and deletes the exact object of i
         ["SlowDown", 503, "storage_unavailable"],
         ["TimeoutError", 504, "storage_timeout"],
       ] as const) {
-        const storage = new FakeStorage();
-        storage.inspectObject = async () => {
-          throw Object.assign(new Error(name), { name });
-        };
+        const storage = createFakeStorage({
+          async inspectObject() {
+            throw Object.assign(new Error(name), { name });
+          },
+        });
         const app = createBackendApp(async () => undefined, {
           adminApiToken: "admin-token",
           storage,
@@ -221,16 +230,17 @@ test("Backend keeps incomplete uploads pending and deletes the exact object of i
   );
 
   await context.test("logs inspect failures without secrets", async () => {
-    const storage = new FakeStorage();
     const logs: unknown[] = [];
-    storage.inspectObject = async () => {
-      throw Object.assign(
-        new Error(
-          "Bearer admin-token https://storage.invalid/audio/private.mp3?signature=secret request body",
-        ),
-        { name: "SlowDown", $metadata: { requestId: "aws-request" } },
-      );
-    };
+    const storage = createFakeStorage({
+      async inspectObject() {
+        throw Object.assign(
+          new Error(
+            "Bearer admin-token https://storage.invalid/audio/private.mp3?signature=secret request body",
+          ),
+          { name: "SlowDown", $metadata: { requestId: "aws-request" } },
+        );
+      },
+    });
     const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
       storage,
@@ -267,16 +277,19 @@ test("Backend keeps incomplete uploads pending and deletes the exact object of i
   await context.test(
     "deletes the exact object and refuses invalid uploaded media",
     async () => {
-      const storage = new FakeStorage();
       const stored = { contentType: "audio/ogg", sizeBytes: 1 };
-      const deleted: string[] = [];
-      storage.putObject(asset.objectKey, stored);
-      storage.deleteObject = async (key) => {
-        deleted.push(key);
-      };
+      const deleteObject = mock.fn<Storage["deleteObject"]>(
+        async () => undefined,
+      );
       const app = createBackendApp(async () => undefined, {
         adminApiToken: "admin-token",
-        storage,
+        storage: createFakeStorage({
+          async inspectObject(key) {
+            assert.equal(key, asset.objectKey);
+            return stored;
+          },
+          deleteObject,
+        }),
         data: createTestDataModule({
           async getMediaAsset() {
             return ok(asset);
@@ -298,30 +311,34 @@ test("Backend keeps incomplete uploads pending and deletes the exact object of i
         body.detail,
         "Uploaded object does not match its declared media metadata.",
       );
-      assert.deepEqual(deleted, [asset.objectKey]);
+      assert.deepEqual(
+        deleteObject.mock.calls.map((call) => call.arguments),
+        [[asset.objectKey]],
+      );
     },
   );
 
   await context.test(
     "logs a failed delete without secrets and still refuses invalid uploaded media",
     async () => {
-      const storage = new FakeStorage();
       const calls: string[] = [];
       const logs: unknown[] = [];
-      storage.putObject(asset.objectKey, {
-        contentType: "audio/ogg",
-        sizeBytes: asset.sizeBytes,
+      const storage = createFakeStorage({
+        async inspectObject(key) {
+          assert.equal(key, asset.objectKey);
+          return { contentType: "audio/ogg", sizeBytes: asset.sizeBytes };
+        },
+        async deleteObject(key) {
+          assert.equal(key, asset.objectKey);
+          calls.push("delete");
+          throw Object.assign(
+            new Error(
+              "Bearer admin-token https://storage.invalid/audio/private.mp3?signature=secret request body",
+            ),
+            { name: "AccessDenied", $metadata: { requestId: "aws-request" } },
+          );
+        },
       });
-      storage.deleteObject = async (key) => {
-        assert.equal(key, asset.objectKey);
-        calls.push("delete");
-        throw Object.assign(
-          new Error(
-            "Bearer admin-token https://storage.invalid/audio/private.mp3?signature=secret request body",
-          ),
-          { name: "AccessDenied", $metadata: { requestId: "aws-request" } },
-        );
-      };
       const app = createBackendApp(async () => undefined, {
         adminApiToken: "admin-token",
         storage,
@@ -409,7 +426,7 @@ test("Backend maps completion refusals to Problem Details", async () => {
     const response = await complete(
       createBackendApp(async () => undefined, {
         adminApiToken: "admin-token",
-        storage: new FakeStorage(),
+        storage: createFakeStorage(),
         data: createTestDataModule({
           async getMediaAsset() {
             return ok(asset);
@@ -429,7 +446,7 @@ test("Backend maps completion refusals to Problem Details", async () => {
   const missing = await complete(
     createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
-      storage: new FakeStorage(),
+      storage: createFakeStorage(),
       data: createTestDataModule({
         async getMediaAsset() {
           return fail("media_asset_not_found");
@@ -455,10 +472,8 @@ test("Backend retries ready media without inspecting storage", async () => {
     createdAt: "2026-01-01T00:00:00.000Z",
     uploadedAt: "2026-01-01T00:01:00.000Z",
   });
-  const storage = new FakeStorage();
-  storage.inspectObject = async () => {
-    throw new Error("matching retry must not inspect storage");
-  };
+  // The strict fake rejects inspectObject, so inspecting storage would fail the retry.
+  const storage = createFakeStorage();
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,

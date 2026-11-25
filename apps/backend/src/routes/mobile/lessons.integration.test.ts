@@ -3,7 +3,8 @@ import { test } from "node:test";
 
 import { code, useBackend } from "../../testing/backend.ts";
 
-const { app, storage, request, createLesson, upload } = useBackend();
+const { app, createPlaybackAuthorization, request, createLesson, upload } =
+  useBackend();
 const mobile = (path: string) => app.request(`/api/mobile/lessons${path}`);
 const cite = async (lessonId: number, url: string) => {
   const source = await (
@@ -106,7 +107,7 @@ test("the Mobile API gives a Published Lesson's current audio a fresh Playback U
   const second = await upload(lesson.id, "th");
   assert.equal(second.completion.lessonAudio.audioVersion, 2);
 
-  const signed = storage.playbackAuthorizations.length;
+  const signed = createPlaybackAuthorization.mock.callCount();
   for (let read = 1; read <= 2; read += 1) {
     const thai = await mobile(`/${lesson.id}?language=th`);
     assert.equal(thai.status, 200);
@@ -122,7 +123,9 @@ test("the Mobile API gives a Published Lesson's current audio a fresh Playback U
     });
     assert.ok(Date.parse(playbackExpiresAt) > Date.now());
     assert.deepEqual(
-      storage.playbackAuthorizations.slice(signed),
+      createPlaybackAuthorization.mock.calls
+        .slice(signed)
+        .map((call) => call.arguments[0]),
       Array(read).fill(second.objectKey),
     );
   }

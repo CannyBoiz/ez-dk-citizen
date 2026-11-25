@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import {
   lessonDetailSchema,
   problemDetailsSchema,
@@ -7,8 +7,9 @@ import {
 import { type DataModule, fail, ok } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.ts";
-import { FakeStorage } from "../../storage.ts";
+import type { Storage } from "../../storage.ts";
 import { createTestDataModule } from "../../testing/data-module.ts";
+import { createFakeStorage } from "../../testing/storage.ts";
 
 test("admin Lesson routes authenticate and use the data module", async () => {
   const detail = lessonDetailSchema.parse({
@@ -428,7 +429,6 @@ const deletedMediaAssets = deletedKeys.map((objectKey, index) => ({
   id: 41 + index,
   objectKey,
 }));
-const unrelatedKey = "audio/123e4567-e89b-12d3-a456-426614174003.mp3";
 
 function deleteDraft(app: ReturnType<typeof createBackendApp>) {
   return app.request("/api/admin/lessons/7", {
@@ -442,14 +442,11 @@ function deleteDraft(app: ReturnType<typeof createBackendApp>) {
 
 test("deleting a Draft deletes exactly the objects of the Media Assets the data module marked DELETED, after it commits", async () => {
   const calls: string[] = [];
-  const storage = new FakeStorage();
-  for (const key of [...deletedKeys, unrelatedKey])
-    storage.putObject(key, { contentType: "audio/mpeg", sizeBytes: 1 });
-  const deleteObject = storage.deleteObject.bind(storage);
-  storage.deleteObject = async (key) => {
-    calls.push(`storage:${key}`);
-    await deleteObject(key);
-  };
+  const storage = createFakeStorage({
+    async deleteObject(key) {
+      calls.push(`storage:${key}`);
+    },
+  });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
     storage,
@@ -475,18 +472,11 @@ test("deleting a Draft deletes exactly the objects of the Media Assets the data 
     "data:7",
     ...deletedKeys.map((key) => `storage:${key}`),
   ]);
-  await assert.rejects(storage.inspectObject(deletedKeys[0]!));
-  assert.deepEqual(await storage.inspectObject(unrelatedKey), {
-    contentType: "audio/mpeg",
-    sizeBytes: 1,
-  });
 });
 
 test("a storage failure after the delete commits is logged safely and still answers 204", async () => {
-  const deleted: string[] = [];
   const logs: unknown[] = [];
-  const storage = new FakeStorage();
-  storage.deleteObject = async (key) => {
+  const deleteObject = mock.fn(async (key: string) => {
     if (key === deletedKeys[0])
       throw Object.assign(
         new Error(
@@ -494,11 +484,10 @@ test("a storage failure after the delete commits is logged safely and still answ
         ),
         { name: "AccessDenied", $metadata: { requestId: "aws-request" } },
       );
-    deleted.push(key);
-  };
+  });
   const app = createBackendApp(async () => undefined, {
     adminApiToken: "admin-token",
-    storage,
+    storage: createFakeStorage({ deleteObject }),
     data: createTestDataModule({
       async deleteLesson() {
         return ok({ deletedMediaAssets });
@@ -516,7 +505,10 @@ test("a storage failure after the delete commits is logged safely and still answ
 
   assert.equal(response.status, 204);
   // One failure does not stop the remaining objects from being deleted.
-  assert.deepEqual(deleted, [deletedKeys[1]]);
+  assert.deepEqual(
+    deleteObject.mock.calls.map((call) => call.arguments[0]),
+    deletedKeys,
+  );
   const failure = logs
     .map((entry) => JSON.parse(String(entry)))
     .find((entry) => entry.operation === "delete");
@@ -538,13 +530,12 @@ test("a refused or missing Lesson deletes nothing from storage", async () => {
     [409, "lesson_not_editable", "Only Draft Lessons can be deleted."],
     [404, "lesson_not_found", "Lesson was not found."],
   ] as const) {
-    const storage = new FakeStorage();
-    storage.deleteObject = async () => {
-      throw new Error("nothing may be deleted");
-    };
+    const deleteObject = mock.fn<Storage["deleteObject"]>(
+      async () => undefined,
+    );
     const app = createBackendApp(async () => undefined, {
       adminApiToken: "admin-token",
-      storage,
+      storage: createFakeStorage({ deleteObject }),
       data: createTestDataModule({
         async deleteLesson() {
           return fail(code);
@@ -558,5 +549,6 @@ test("a refused or missing Lesson deletes nothing from storage", async () => {
     const problem = await response.json();
     assert.equal(problem.code, code);
     assert.equal(problem.detail, detail);
+    assert.equal(deleteObject.mock.callCount(), 0);
   }
 });

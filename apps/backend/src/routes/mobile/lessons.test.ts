@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import {
   lessonDetailSchema,
   problemDetailsSchema,
@@ -7,8 +7,9 @@ import {
 import { fail, ok, publishedLessonDetailSchema } from "@ez-dk-citizen/data";
 
 import { createBackendApp } from "../../app.ts";
-import { FakeStorage } from "../../storage.ts";
+import type { Storage } from "../../storage.ts";
 import { createTestDataModule } from "../../testing/data-module.ts";
+import { createFakeStorage } from "../../testing/storage.ts";
 
 test("Backend composes localized mobile responses from Lesson aggregates", async () => {
   const detail = lessonDetailSchema.parse({
@@ -159,7 +160,7 @@ test("Backend maps Published Lesson refusals to Problem Details", async () => {
     ["unsupported_language", 422, "Language is not supported."],
   ] as const) {
     const app = createBackendApp(async () => undefined, {
-      storage: new FakeStorage(),
+      storage: createFakeStorage(),
       data: createTestDataModule({
         async getPublishedLesson() {
           return fail(outcome);
@@ -196,18 +197,16 @@ test("Backend returns fresh, allow-listed playback authorization for current mob
       durationMs: null,
     },
   });
-  const storage = new FakeStorage();
-  const keys: string[] = [];
-  storage.inspectObject = async () => {
-    throw new Error("Playback must not inspect object metadata");
-  };
-  storage.createPlaybackAuthorization = async (key) => {
-    keys.push(key);
-    return {
-      playbackUrl: `https://storage.invalid/playback-${keys.length}`,
-      expiresAt: "2026-01-01T01:00:00.000Z",
-    };
-  };
+  // Numbers each URL, so the test can tell a fresh signature from a reused one.
+  let signed = 0;
+  const createPlaybackAuthorization = mock.fn<
+    Storage["createPlaybackAuthorization"]
+  >(async () => ({
+    playbackUrl: `https://storage.invalid/playback-${++signed}`,
+    expiresAt: "2026-01-01T01:00:00.000Z",
+  }));
+  // Only signing is supplied, so inspecting object metadata would fail the read.
+  const storage = createFakeStorage({ createPlaybackAuthorization });
   const app = createBackendApp(async () => undefined, {
     storage,
     data: createTestDataModule({
@@ -249,28 +248,29 @@ test("Backend returns fresh, allow-listed playback authorization for current mob
     "https://storage.invalid/playback-2",
   );
   assert.ok(lesson.currentAudio);
-  assert.deepEqual(keys, [
-    lesson.currentAudio.objectKey,
-    lesson.currentAudio.objectKey,
-  ]);
+  assert.deepEqual(
+    createPlaybackAuthorization.mock.calls.map((call) => call.arguments[0]),
+    [lesson.currentAudio.objectKey, lesson.currentAudio.objectKey],
+  );
 
   const missingText = await app.request("/api/mobile/lessons/7?language=da");
   assert.equal(missingText.status, 404);
   assert.equal((await missingText.json()).code, "lesson_text_not_found");
-  assert.equal(keys.length, 2);
+  assert.equal(createPlaybackAuthorization.mock.callCount(), 2);
 });
 
 test("Backend keeps playback-signing failures correlated and storage-safe", async () => {
   const key = "audio/123e4567-e89b-12d3-a456-426614174000.mp3";
-  const storage = new FakeStorage();
-  storage.createPlaybackAuthorization = async () => {
-    throw Object.assign(
-      new Error(`failed ${key} https://storage.invalid/leak`),
-      {
-        name: "SlowDown",
-      },
-    );
-  };
+  const storage = createFakeStorage({
+    async createPlaybackAuthorization() {
+      throw Object.assign(
+        new Error(`failed ${key} https://storage.invalid/leak`),
+        {
+          name: "SlowDown",
+        },
+      );
+    },
+  });
   const app = createBackendApp(async () => undefined, {
     storage,
     data: createTestDataModule({
