@@ -84,6 +84,8 @@ services:
         - action: rebuild
           path: ./packages/api-contracts
         - action: rebuild
+          path: ./packages/lesson-text
+        - action: rebuild
           path: ./package.json
         - action: rebuild
           path: ./pnpm-lock.yaml

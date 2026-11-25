@@ -38,6 +38,7 @@ import {
 } from "../utils/references";
 import { statusLabels } from "../utils/statusLabels";
 import { lessonLabel } from "../utils/versions";
+import { LessonTextPreview } from "./LessonTextPreview";
 import { NewVersion } from "./NewVersion";
 import { Publication } from "./Publication";
 
@@ -409,7 +410,12 @@ export function LessonView({
             }}
             onSave={(submitted) => saveTab(code, submitted)}
             {...formProps(code)}
-          />
+          >
+            <LessonTextPreview
+              title={formProps(code).value.title ?? ""}
+              content={formProps(code).value.content ?? ""}
+            />
+          </EditForm>
           {/* Only a Draft's text can change, so only a Draft warns. */}
           {lesson.status === "DRAFT" && narrationWarnings[code] && (
             <p role="status">

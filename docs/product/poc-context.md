@@ -1081,7 +1081,8 @@ ez-dk-citizen/
 │
 ├── packages/
 │   ├── api-contracts/  # shared request/response schemas
-│   └── data/           # data module: Drizzle schema, migrations, operations
+│   ├── data/           # data module: Drizzle schema, migrations, operations
+│   └── lesson-text/    # Lesson Text Markdown: the supported set, parsed to a tree
 │
 ├── docs/
 │   ├── adr/

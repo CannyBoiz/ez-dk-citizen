@@ -537,6 +537,50 @@ main > .lesson {
   background: transparent;
 }
 
+/* A Lesson Text as the learner reads it: Title > section > subsection > body. */
+.preview {
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  line-height: 1.6;
+}
+
+.preview-label {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.preview :is(h4, h5, h6) {
+  margin: var(--space-4) 0 var(--space-2);
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.preview h4 {
+  margin-top: 0;
+  font-size: 1.5rem;
+}
+
+.preview h5 {
+  font-size: 1.25rem;
+}
+
+.preview h6 {
+  font-size: 1.0625rem;
+}
+
+/* Thai vowel and tone marks sit above and below the line, so they need more room. */
+[lang="th"] .preview {
+  line-height: 1.9;
+}
+
+[lang="th"] .preview :is(h4, h5, h6) {
+  line-height: 1.6;
+}
+
 /* A form's submit and Cancel share a row; an in-page confirmation takes a row of its own. */
 .form-actions {
   display: flex;

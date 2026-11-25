@@ -29,6 +29,10 @@ import {
   validToken,
 } from "../../../shared/test/support";
 
+function preview() {
+  return within(textForm()).getByRole("region", { name: "Preview" });
+}
+
 test("the editor shows da, en, and th tabs with Thai selected and each Language's state", async () => {
   render(
     <App
@@ -326,3 +330,69 @@ test.each(["PUBLISHED", "ARCHIVED"] as const)(
     expect(tab("th").textContent).toBe("th: Saved");
   },
 );
+
+test("the preview under Content renders the unsaved Title and content as headings and paragraphs", async () => {
+  render(
+    <App
+      network={
+        fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]).network
+      }
+    />,
+  );
+  await connect(validToken);
+  await openLesson();
+  expect(within(preview()).getByRole("paragraph").textContent).toBe(
+    "เนื้อหาภาษาไทย",
+  );
+
+  type("Title", "บทที่ 1 แก้ไข", textForm());
+  type(
+    "Content",
+    "# ส่วนแรก\nบรรทัดหนึ่ง\nบรรทัดสอง\n\n#### ส่วนย่อย\n\nย่อหน้า **สุดท้าย**",
+    textForm(),
+  );
+
+  // The Title outranks a section, which outranks a subsection.
+  expect(within(preview()).getByRole("heading", { level: 4 }).textContent).toBe(
+    "บทที่ 1 แก้ไข",
+  );
+  expect(within(preview()).getByRole("heading", { level: 5 }).textContent).toBe(
+    "ส่วนแรก",
+  );
+  expect(within(preview()).getByRole("heading", { level: 6 }).textContent).toBe(
+    "ส่วนย่อย",
+  );
+  const paragraphs = within(preview()).getAllByRole("paragraph");
+  expect(paragraphs.map((paragraph) => paragraph.textContent)).toEqual([
+    "บรรทัดหนึ่งบรรทัดสอง",
+    "ย่อหน้า สุดท้าย",
+  ]);
+  expect(paragraphs[0].querySelectorAll("br")).toHaveLength(1);
+  expect(tab("th").textContent).toBe("th: Unsaved");
+});
+
+test("an Archived Lesson's Lesson Text still shows its preview", async () => {
+  render(
+    <App
+      network={
+        fakeBackend([
+          lessonDetail(1, {
+            status: "ARCHIVED",
+            lessonTexts: [{ ...thaiText, content: "## ส่วนแรก\n\nเนื้อหา" }],
+          }),
+        ]).network
+      }
+    />,
+  );
+  await connect(validToken);
+  await openLesson();
+
+  expect(within(textForm()).getByLabelText("Content")).toHaveProperty(
+    "readOnly",
+    true,
+  );
+  expect(within(preview()).getByRole("heading", { level: 5 }).textContent).toBe(
+    "ส่วนแรก",
+  );
+  expect(within(preview()).getByRole("paragraph").textContent).toBe("เนื้อหา");
+});

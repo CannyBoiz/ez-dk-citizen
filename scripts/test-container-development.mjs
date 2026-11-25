@@ -96,6 +96,7 @@ assertWatch(
     "apps/admin/vite.config.ts",
     "package.json",
     "packages/api-contracts",
+    "packages/lesson-text",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
   ],
