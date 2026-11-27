@@ -96,6 +96,13 @@ test("---, like *** and ___, is a divider", () => {
   ]);
 });
 
+test("--- straight under a line makes that line a section heading, as in standard Markdown", () => {
+  assert.deepEqual(parse("Rettigheder\n---\nDu har ret til at stemme."), [
+    { type: "heading", level: 2, children: [text("Rettigheder")] },
+    paragraph("Du har ret til at stemme."),
+  ]);
+});
+
 test("headings come out at level 2 or 3: # and ## are 2, ### and deeper are 3", () => {
   assert.deepEqual(parse("# One\n## Two\n### Three\n#### Four\n###### Six"), [
     { type: "heading", level: 2, children: [text("One")] },
