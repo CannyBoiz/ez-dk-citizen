@@ -767,6 +767,6 @@ export function uploadButton() {
   return within(uploadPanel()).getByRole("button", { name: "Upload" });
 }
 
-export function chooseFile(file: File) {
-  fireEvent.change(fileInput(), { target: { files: [file] } });
+export function chooseFile(file: File, input: HTMLElement = fileInput()) {
+  fireEvent.change(input, { target: { files: [file] } });
 }
