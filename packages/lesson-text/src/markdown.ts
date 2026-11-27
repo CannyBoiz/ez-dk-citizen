@@ -166,24 +166,33 @@ function toItem(item: Node) {
   return toBlocks(item.children);
 }
 
-// A GitHub alert is a quote whose first line is only its `[!KIND]` marker, in any case, with more
-// after it. The source line is read, not the parsed text, so an escaped `\[!NOTE]` stays a quote.
-// The marker and its line break are dropped in place, as a task item's checkbox is.
+// A GitHub alert is a quote that starts with its `[!KIND]` marker, in any case, with more after it.
+// Text after the marker on its line, such as an Obsidian title, starts the note. The source is read,
+// not the parsed text, so an escaped `\[!NOTE]` stays a quote. The marker is cut in place, as a task
+// item's checkbox is.
 function toNote(quote: Node[]): Block {
   const [first] = quote;
   const inline =
     first?.token.type === "paragraph_open"
       ? first.children[0].token
       : undefined;
-  const [line, ...rest] = inline?.content.split("\n") ?? [];
-  const kind = noteKinds.find(
-    (candidate) => line?.trimEnd().toLowerCase() === `[!${candidate}]`,
+  const source = inline?.content ?? "";
+  const kind = noteKinds.find((candidate) =>
+    source.toLowerCase().startsWith(`[!${candidate}]`),
   );
+  const marker = kind ? `[!${kind}]` : "";
+  const hasBody = source.slice(marker.length).trim() !== "" || quote.length > 1;
+  const [text, after] = inline?.children ?? [];
   // A marker with nothing after it, or one that parsed as a link, is left visible as a quote.
-  const hasBody = rest.length > 0 || quote.length > 1;
-  if (!kind || !hasBody || inline?.children?.[0]?.type !== "text")
+  if (!kind || !hasBody || text?.type !== "text")
     return { type: "note", children: toBlocks(quote) };
-  inline.children.splice(0, 2);
+  text.content = text.content.slice(marker.length).trimStart();
+  // A marker alone on its line takes its line break with it.
+  if (
+    !text.content &&
+    (after?.type === "softbreak" || after?.type === "hardbreak")
+  )
+    inline?.children?.splice(1, 1);
   return { type: "note", kind, children: toBlocks(quote) };
 }
 

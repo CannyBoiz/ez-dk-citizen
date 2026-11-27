@@ -163,25 +163,61 @@ test("a plain quote is an unlabelled note, and nests", () => {
   ]);
 });
 
-// The marker stays visible, so the preview shows the mistake; escaping it is how to write it as text.
-test("a note of an unknown kind, with text beside its marker, with nothing after it, or with its marker escaped, is unlabelled and keeps its marker", () => {
+// Drafting tools such as Obsidian put a title there; it is kept as the note's first line.
+test("text after the marker on its line starts the note", () => {
   assert.deepEqual(
-    parse("> [!EXAM]\n> Husk\n\n> [!TIP] Læs\n\n> [!WARNING]\n\n> \\[!NOTE]"),
+    parse(
+      "> [!TIP] Læs højt hver dag.\n\n> [!tip] Husk dit pas\n> Tag det med.\n\n> [!NOTE] **Fed**",
+    ),
     [
       {
         type: "note",
+        kind: "tip",
+        children: [paragraph("Læs højt hver dag.")],
+      },
+      {
+        type: "note",
+        kind: "tip",
         children: [
           {
             type: "paragraph",
-            children: [text("[!EXAM]"), { type: "break" }, text("Husk")],
+            children: [
+              text("Husk dit pas"),
+              { type: "break" },
+              text("Tag det med."),
+            ],
           },
         ],
       },
-      { type: "note", children: [paragraph("[!TIP] Læs")] },
-      { type: "note", children: [paragraph("[!WARNING]")] },
-      { type: "note", children: [paragraph("[!NOTE]")] },
+      {
+        type: "note",
+        kind: "note",
+        children: [
+          {
+            type: "paragraph",
+            children: [{ type: "bold", children: [text("Fed")] }],
+          },
+        ],
+      },
     ],
   );
+});
+
+// The marker stays visible, so the preview shows the mistake; escaping it is how to write it as text.
+test("a note of an unknown kind, with nothing after its marker, or with its marker escaped, is unlabelled and keeps its marker", () => {
+  assert.deepEqual(parse("> [!EXAM]\n> Husk\n\n> [!WARNING]\n\n> \\[!NOTE]"), [
+    {
+      type: "note",
+      children: [
+        {
+          type: "paragraph",
+          children: [text("[!EXAM]"), { type: "break" }, text("Husk")],
+        },
+      ],
+    },
+    { type: "note", children: [paragraph("[!WARNING]")] },
+    { type: "note", children: [paragraph("[!NOTE]")] },
+  ]);
 });
 
 test("an element not yet supported appears as its plain text, never as markup", () => {
@@ -284,7 +320,7 @@ test("in the narration script, a labelled note reads as label: text in the Langu
     "เคล็ดลับ: อ่านออกเสียง\n\nทุกวัน\n\nคำพูด\n\n[!EXAM]\nจำไว้",
   );
   assert.equal(
-    narrationScript("> [!CAUTION]\n> Gebyr", "da"),
-    "Forsigtig: Gebyr",
+    narrationScript("> [!CAUTION]\n> Gebyr\n\n> [!TIP] Læs højt.", "da"),
+    "Forsigtig: Gebyr\n\nTip: Læs højt.",
   );
 });
