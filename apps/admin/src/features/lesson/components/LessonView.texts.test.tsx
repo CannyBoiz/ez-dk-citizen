@@ -411,6 +411,26 @@ test("the preview renders lists, emphasis and a divider from the unsaved content
   expect(within(preview()).getByRole("separator")).toBeTruthy();
 });
 
+test("the preview labels a note in the form's Language", async () => {
+  render(
+    <App
+      network={
+        fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]).network
+      }
+      clipboard={noClipboard}
+    />,
+  );
+  await connect(validToken);
+  await openLesson();
+
+  type("Content", "> [!TIP]\n> อ่านออกเสียงทุกวัน", textForm());
+
+  const note = within(preview()).getByRole("note", { name: "เคล็ดลับ" });
+  expect(within(note).getByRole("paragraph").textContent).toBe(
+    "อ่านออกเสียงทุกวัน",
+  );
+});
+
 test("an Archived Lesson's Lesson Text still shows its preview", async () => {
   render(
     <App
@@ -455,13 +475,19 @@ test("Copy as plain text copies the narration script of the unsaved content and 
   await connect(validToken);
   await openLesson();
 
-  type("Content", "## ส่วนแรก\nบรรทัด **หนึ่ง**\n\nย่อหน้าสอง", textForm());
+  type(
+    "Content",
+    "## ส่วนแรก\nบรรทัด **หนึ่ง**\n\n> [!TIP]\n> ย่อหน้าสอง",
+    textForm(),
+  );
   fireEvent.click(copyButton());
 
   expect((await within(preview()).findByRole("status")).textContent).toBe(
     "Copied the narration script.",
   );
-  expect(writeText.mock.calls).toEqual([["ส่วนแรก\n\nบรรทัด หนึ่ง\n\nย่อหน้าสอง"]]);
+  expect(writeText.mock.calls).toEqual([
+    ["ส่วนแรก\n\nบรรทัด หนึ่ง\n\nเคล็ดลับ: ย่อหน้าสอง"],
+  ]);
   expect(tab("th").textContent).toBe("th: Unsaved");
 
   // The clipboard no longer holds what the content says, so the confirmation goes.

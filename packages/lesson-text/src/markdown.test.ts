@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { narrationScript, parse } from "./markdown.ts";
+import { narrationScript, noteLabels, parse } from "./markdown.ts";
 
 const text = (value: string) => ({ type: "text", value }) as const;
 const paragraph = (value: string) =>
@@ -123,10 +123,67 @@ test("a blank line separates paragraphs, and a single newline is a line break", 
   ]);
 });
 
+test("each GitHub alert kind is a note of that kind, holding the blocks after its marker", () => {
+  assert.deepEqual(
+    parse(
+      [
+        "> [!NOTE]\n> Medbring pas.",
+        "> [!TIP]\n> Læs højt.\n>\n> - Hver dag",
+        "> [!IMPORTANT]\n> Mød op.",
+        "> [!WARNING]\n> For sent.",
+        "> [!caution]\n> Gebyr.",
+        "> [!NOTE]",
+      ].join("\n\n"),
+    ),
+    [
+      { type: "note", kind: "note", children: [paragraph("Medbring pas.")] },
+      {
+        type: "note",
+        kind: "tip",
+        children: [
+          paragraph("Læs højt."),
+          { type: "bulletList", items: [[paragraph("Hver dag")]] },
+        ],
+      },
+      { type: "note", kind: "important", children: [paragraph("Mød op.")] },
+      { type: "note", kind: "warning", children: [paragraph("For sent.")] },
+      { type: "note", kind: "caution", children: [paragraph("Gebyr.")] },
+      { type: "note", kind: "note", children: [] },
+    ],
+  );
+});
+
+test("a plain quote is an unlabelled note, and nests", () => {
+  assert.deepEqual(parse("> Citat\n>\n> > Indre"), [
+    {
+      type: "note",
+      children: [
+        paragraph("Citat"),
+        { type: "note", children: [paragraph("Indre")] },
+      ],
+    },
+  ]);
+});
+
+// The marker stays visible, so the preview shows the mistake.
+test("a note of an unknown kind, or with text beside its marker, is unlabelled and keeps its marker", () => {
+  assert.deepEqual(parse("> [!EXAM]\n> Husk\n\n> [!TIP] Læs"), [
+    {
+      type: "note",
+      children: [
+        {
+          type: "paragraph",
+          children: [text("[!EXAM]"), { type: "break" }, text("Husk")],
+        },
+      ],
+    },
+    { type: "note", children: [paragraph("[!TIP] Læs")] },
+  ]);
+});
+
 test("an element not yet supported appears as its plain text, never as markup", () => {
   const content = [
     "See [a link](https://example.test) with `code` ![alt text](x.png)",
-    "> quoted",
     "```\nline one\nline two\n```",
     "| a | b |\n| - | - |\n| 1 | 2 |",
   ].join("\n\n");
@@ -136,7 +193,6 @@ test("an element not yet supported appears as its plain text, never as markup", 
       type: "paragraph",
       children: [text("See a link with code alt text")],
     },
-    { type: "paragraph", children: [text("quoted")] },
     {
       type: "paragraph",
       children: [text("line one"), { type: "break" }, text("line two")],
@@ -170,6 +226,7 @@ test("the narration script is the text the learner sees, with a blank line betwe
   assert.equal(
     narrationScript(
       "# Rettigheder\nDu har **ret** til\nat stemme.\n\n\n#### Pligter\n\nSe [loven](https://example.test) <b>nu</b> ![et kort](kort.png)\n\n```\nlinje et\nlinje to\n```\n\n| a | b |\n| - | - |",
+      "da",
     ),
     "Rettigheder\n\nDu har ret til\nat stemme.\n\nPligter\n\nSe loven nu et kort\n\nlinje et\nlinje to\n\na\n\nb",
   );
@@ -179,6 +236,7 @@ test("in the narration script, bullets drop, numbered items keep their numbers, 
   assert.equal(
     narrationScript(
       "Medbring:\n\n- Pas\n- [x] **Foto**\n  1. Farve\n  2. *Ny* ~~sort-hvid~~\n\n---\n\n3. Ansøg\n4. Betal ~~500~~ 600 kr.\n\n~~Gammel regel~~\n\nSlut",
+      "da",
     ),
     "Medbring:\n\nPas\n\nFoto\n\n1. Farve\n\n2. Ny \n\n\n\n3. Ansøg\n\n4. Betal  600 kr.\n\nSlut",
   );
@@ -186,5 +244,44 @@ test("in the narration script, bullets drop, numbered items keep their numbers, 
 
 test("the narration script of plain text is that text", () => {
   const content = "ข้อแรก\nบรรทัดที่สอง\n\nข้อสอง";
-  assert.equal(narrationScript(content), content);
+  assert.equal(narrationScript(content, "th"), content);
+});
+
+test("each note kind has its label in da, en and th", () => {
+  assert.deepEqual(noteLabels, {
+    da: {
+      note: "Bemærk",
+      tip: "Tip",
+      important: "Vigtigt",
+      warning: "Advarsel",
+      caution: "Forsigtig",
+    },
+    en: {
+      note: "Note",
+      tip: "Tip",
+      important: "Important",
+      warning: "Warning",
+      caution: "Caution",
+    },
+    th: {
+      note: "หมายเหตุ",
+      tip: "เคล็ดลับ",
+      important: "สำคัญ",
+      warning: "คำเตือน",
+      caution: "ข้อควรระวัง",
+    },
+  });
+});
+
+test("in the narration script, a labelled note reads as label: text in the Language, and an unlabelled note as its text", () => {
+  const content =
+    "> [!TIP]\n> อ่านออกเสียง\n>\n> ทุกวัน\n\n> [!WARNING]\n\n> คำพูด\n\n> [!EXAM]\n> จำไว้";
+  assert.equal(
+    narrationScript(content, "th"),
+    "เคล็ดลับ: อ่านออกเสียง\n\nทุกวัน\n\nคำพูด\n\n[!EXAM]\nจำไว้",
+  );
+  assert.equal(
+    narrationScript("> [!CAUTION]\n> Gebyr", "da"),
+    "Forsigtig: Gebyr",
+  );
 });

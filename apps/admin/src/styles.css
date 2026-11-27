@@ -598,6 +598,48 @@ main > .lesson {
   border-top: 1px solid var(--border-strong);
 }
 
+/* A note's kind sets its colour, as on GitHub; a plain quote, or an unknown kind, is neutral. */
+.preview [role="note"] {
+  --note: var(--border-strong);
+  margin: var(--space-3) 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 4px solid var(--note);
+}
+
+.preview [data-kind="note"] {
+  --note: var(--info);
+}
+
+.preview [data-kind="tip"] {
+  --note: var(--success);
+}
+
+.preview [data-kind="important"] {
+  --note: var(--primary);
+}
+
+.preview [data-kind="warning"] {
+  --note: var(--warning);
+}
+
+.preview [data-kind="caution"] {
+  --note: var(--danger);
+}
+
+.note-label {
+  color: var(--note);
+  font-weight: 600;
+}
+
+/* The label sits tight against the note's first block. */
+.preview [role="note"] > :is(:first-child, .note-label + *) {
+  margin-top: 0;
+}
+
+.preview [role="note"] > :last-child {
+  margin-bottom: 0;
+}
+
 /* Thai vowel and tone marks sit above and below the line, so they need more room. */
 [lang="th"] .preview {
   line-height: 1.9;

@@ -4,7 +4,10 @@
 import {
   type Block,
   type Inline,
+  type Language,
+  type NoteKind,
   narrationScript,
+  noteLabels,
   parse,
 } from "@ez-dk-citizen/lesson-text";
 import { useId, useState } from "react";
@@ -14,10 +17,12 @@ import type { TextClipboard } from "../../../shared/lib/clipboard";
 export function LessonTextPreview({
   title,
   content,
+  language,
   clipboard,
 }: {
   title: string;
   content: string;
+  language: Language;
   clipboard: TextClipboard;
 }) {
   const labelId = useId();
@@ -32,7 +37,7 @@ export function LessonTextPreview({
     // Cleared first, so a repeated copy is announced again.
     setLastCopy(undefined);
     try {
-      await clipboard.writeText(narrationScript(content));
+      await clipboard.writeText(narrationScript(content, language));
       setLastCopy({ content, failed: false });
     } catch {
       setLastCopy({ content, failed: true });
@@ -61,7 +66,7 @@ export function LessonTextPreview({
       )}
       {/* Headings sit below the page's "Lesson Texts" heading: the Title, then sections and subsections. */}
       {title.trim() && <h4>{title}</h4>}
-      <Blocks blocks={parse(content)} />
+      <Blocks blocks={parse(content)} labels={noteLabels[language]} />
     </section>
   );
 }
@@ -72,14 +77,20 @@ const inlineTags = {
   strikethrough: "del",
 } as const;
 
-function Blocks({ blocks }: { blocks: Block[] }) {
+function Blocks({
+  blocks,
+  labels,
+}: {
+  blocks: Block[];
+  labels: Record<NoteKind, string>;
+}) {
   return blocks.map((block, index) => {
     // biome-ignore-start lint/suspicious/noArrayIndexKey: rebuilt from the text on each change, holding no state
     if (block.type === "divider") return <hr key={index} />;
     if (block.type === "bulletList" || block.type === "numberedList") {
       const items = block.items.map((item, itemIndex) => (
         <li key={itemIndex}>
-          <Blocks blocks={item} />
+          <Blocks blocks={item} labels={labels} />
         </li>
       ));
       return block.type === "bulletList" ? (
@@ -88,6 +99,15 @@ function Blocks({ blocks }: { blocks: Block[] }) {
         <ol key={index} start={block.start}>
           {items}
         </ol>
+      );
+    }
+    if (block.type === "note") {
+      const label = block.kind && labels[block.kind];
+      return (
+        <div key={index} role="note" aria-label={label} data-kind={block.kind}>
+          {label && <div className="note-label">{label}</div>}
+          <Blocks blocks={block.children} labels={labels} />
+        </div>
       );
     }
     const Element =
