@@ -148,7 +148,7 @@ function toBlocks(nodes: Node[]): Block[] {
         ? []
         : [{ type: "paragraph", children: inlines }];
     }
-    // Any other container, such as a quote or a table, gives up its markup and keeps its blocks.
+    // Any other container, such as a table, gives up its markup and keeps its blocks.
     return toBlocks(children);
   });
 }
@@ -166,25 +166,24 @@ function toItem(item: Node) {
   return toBlocks(item.children);
 }
 
-// A GitHub alert is a quote whose first line is only its `[!KIND]` marker, in any case. The marker
-// and its line break are dropped in place, as a task item's checkbox is.
+// A GitHub alert is a quote whose first line is only its `[!KIND]` marker, in any case, with more
+// after it. The source line is read, not the parsed text, so an escaped `\[!NOTE]` stays a quote.
+// The marker and its line break are dropped in place, as a task item's checkbox is.
 function toNote(quote: Node[]): Block {
   const [first] = quote;
-  const inlines =
+  const inline =
     first?.token.type === "paragraph_open"
-      ? first.children[0].token.children
+      ? first.children[0].token
       : undefined;
-  const [marker, after] = inlines ?? [];
+  const [line, ...rest] = inline?.content.split("\n") ?? [];
   const kind = noteKinds.find(
-    (candidate) =>
-      marker?.type === "text" &&
-      marker.content.toLowerCase() === `[!${candidate}]`,
+    (candidate) => line?.trimEnd().toLowerCase() === `[!${candidate}]`,
   );
-  // As on GitHub, a marker with text beside it, such as `> [!TIP] Read`, leaves a plain quote.
-  const alone =
-    !after || after.type === "softbreak" || after.type === "hardbreak";
-  if (!kind || !alone) return { type: "note", children: toBlocks(quote) };
-  inlines?.splice(0, 2);
+  // A marker with nothing after it, or one that parsed as a link, is left visible as a quote.
+  const hasBody = rest.length > 0 || quote.length > 1;
+  if (!kind || !hasBody || inline?.children?.[0]?.type !== "text")
+    return { type: "note", children: toBlocks(quote) };
+  inline.children.splice(0, 2);
   return { type: "note", kind, children: toBlocks(quote) };
 }
 

@@ -132,7 +132,6 @@ test("each GitHub alert kind is a note of that kind, holding the blocks after it
         "> [!IMPORTANT]\n> Mød op.",
         "> [!WARNING]\n> For sent.",
         "> [!caution]\n> Gebyr.",
-        "> [!NOTE]",
       ].join("\n\n"),
     ),
     [
@@ -148,7 +147,6 @@ test("each GitHub alert kind is a note of that kind, holding the blocks after it
       { type: "note", kind: "important", children: [paragraph("Mød op.")] },
       { type: "note", kind: "warning", children: [paragraph("For sent.")] },
       { type: "note", kind: "caution", children: [paragraph("Gebyr.")] },
-      { type: "note", kind: "note", children: [] },
     ],
   );
 });
@@ -165,20 +163,25 @@ test("a plain quote is an unlabelled note, and nests", () => {
   ]);
 });
 
-// The marker stays visible, so the preview shows the mistake.
-test("a note of an unknown kind, or with text beside its marker, is unlabelled and keeps its marker", () => {
-  assert.deepEqual(parse("> [!EXAM]\n> Husk\n\n> [!TIP] Læs"), [
-    {
-      type: "note",
-      children: [
-        {
-          type: "paragraph",
-          children: [text("[!EXAM]"), { type: "break" }, text("Husk")],
-        },
-      ],
-    },
-    { type: "note", children: [paragraph("[!TIP] Læs")] },
-  ]);
+// The marker stays visible, so the preview shows the mistake; escaping it is how to write it as text.
+test("a note of an unknown kind, with text beside its marker, with nothing after it, or with its marker escaped, is unlabelled and keeps its marker", () => {
+  assert.deepEqual(
+    parse("> [!EXAM]\n> Husk\n\n> [!TIP] Læs\n\n> [!WARNING]\n\n> \\[!NOTE]"),
+    [
+      {
+        type: "note",
+        children: [
+          {
+            type: "paragraph",
+            children: [text("[!EXAM]"), { type: "break" }, text("Husk")],
+          },
+        ],
+      },
+      { type: "note", children: [paragraph("[!TIP] Læs")] },
+      { type: "note", children: [paragraph("[!WARNING]")] },
+      { type: "note", children: [paragraph("[!NOTE]")] },
+    ],
+  );
 });
 
 test("an element not yet supported appears as its plain text, never as markup", () => {
@@ -275,7 +278,7 @@ test("each note kind has its label in da, en and th", () => {
 
 test("in the narration script, a labelled note reads as label: text in the Language, and an unlabelled note as its text", () => {
   const content =
-    "> [!TIP]\n> อ่านออกเสียง\n>\n> ทุกวัน\n\n> [!WARNING]\n\n> คำพูด\n\n> [!EXAM]\n> จำไว้";
+    "> [!TIP]\n> อ่านออกเสียง\n>\n> ทุกวัน\n\n> คำพูด\n\n> [!EXAM]\n> จำไว้";
   assert.equal(
     narrationScript(content, "th"),
     "เคล็ดลับ: อ่านออกเสียง\n\nทุกวัน\n\nคำพูด\n\n[!EXAM]\nจำไว้",

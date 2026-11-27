@@ -101,15 +101,8 @@ function Blocks({
         </ol>
       );
     }
-    if (block.type === "note") {
-      const label = block.kind && labels[block.kind];
-      return (
-        <div key={index} role="note" aria-label={label} data-kind={block.kind}>
-          {label && <div className="note-label">{label}</div>}
-          <Blocks blocks={block.children} labels={labels} />
-        </div>
-      );
-    }
+    if (block.type === "note")
+      return <Note key={index} note={block} labels={labels} />;
     const Element =
       block.type === "paragraph" ? "p" : block.level === 2 ? "h5" : "h6";
     return (
@@ -119,6 +112,32 @@ function Blocks({
     );
     // biome-ignore-end lint/suspicious/noArrayIndexKey: rebuilt from the text on each change, holding no state
   });
+}
+
+// A note is named by its visible label, in the form's Language; a plain quote has none.
+function Note({
+  note,
+  labels,
+}: {
+  note: Extract<Block, { type: "note" }>;
+  labels: Record<NoteKind, string>;
+}) {
+  const labelId = useId();
+  const label = note.kind && labels[note.kind];
+  return (
+    <div
+      role="note"
+      aria-labelledby={label ? labelId : undefined}
+      data-kind={note.kind}
+    >
+      {label && (
+        <div className="note-label" id={labelId}>
+          {label}
+        </div>
+      )}
+      <Blocks blocks={note.children} labels={labels} />
+    </div>
+  );
 }
 
 function Inlines({ inlines }: { inlines: Inline[] }) {
