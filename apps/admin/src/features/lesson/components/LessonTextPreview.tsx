@@ -4,7 +4,10 @@
 import {
   type Block,
   type Inline,
+  type Language,
+  type NoteKind,
   narrationScript,
+  noteLabels,
   parse,
 } from "@ez-dk-citizen/lesson-text";
 import { useId, useState } from "react";
@@ -14,10 +17,12 @@ import type { TextClipboard } from "../../../shared/lib/clipboard";
 export function LessonTextPreview({
   title,
   content,
+  language,
   clipboard,
 }: {
   title: string;
   content: string;
+  language: Language;
   clipboard: TextClipboard;
 }) {
   const labelId = useId();
@@ -32,7 +37,7 @@ export function LessonTextPreview({
     // Cleared first, so a repeated copy is announced again.
     setLastCopy(undefined);
     try {
-      await clipboard.writeText(narrationScript(content));
+      await clipboard.writeText(narrationScript(content, language));
       setLastCopy({ content, failed: false });
     } catch {
       setLastCopy({ content, failed: true });
@@ -61,7 +66,7 @@ export function LessonTextPreview({
       )}
       {/* Headings sit below the page's "Lesson Texts" heading: the Title, then sections and subsections. */}
       {title.trim() && <h4>{title}</h4>}
-      <Blocks blocks={parse(content)} />
+      <Blocks blocks={parse(content)} labels={noteLabels[language]} />
     </section>
   );
 }
@@ -72,14 +77,20 @@ const inlineTags = {
   strikethrough: "del",
 } as const;
 
-function Blocks({ blocks }: { blocks: Block[] }) {
+function Blocks({
+  blocks,
+  labels,
+}: {
+  blocks: Block[];
+  labels: Record<NoteKind, string>;
+}) {
   return blocks.map((block, index) => {
     // biome-ignore-start lint/suspicious/noArrayIndexKey: rebuilt from the text on each change, holding no state
     if (block.type === "divider") return <hr key={index} />;
     if (block.type === "bulletList" || block.type === "numberedList") {
       const items = block.items.map((item, itemIndex) => (
         <li key={itemIndex}>
-          <Blocks blocks={item} />
+          <Blocks blocks={item} labels={labels} />
         </li>
       ));
       return block.type === "bulletList" ? (
@@ -90,6 +101,8 @@ function Blocks({ blocks }: { blocks: Block[] }) {
         </ol>
       );
     }
+    if (block.type === "note")
+      return <Note key={index} note={block} labels={labels} />;
     const Element =
       block.type === "paragraph" ? "p" : block.level === 2 ? "h5" : "h6";
     return (
@@ -99,6 +112,32 @@ function Blocks({ blocks }: { blocks: Block[] }) {
     );
     // biome-ignore-end lint/suspicious/noArrayIndexKey: rebuilt from the text on each change, holding no state
   });
+}
+
+// A note is named by its visible label, in the form's Language; a plain quote has none.
+function Note({
+  note,
+  labels,
+}: {
+  note: Extract<Block, { type: "note" }>;
+  labels: Record<NoteKind, string>;
+}) {
+  const labelId = useId();
+  const label = note.kind && labels[note.kind];
+  return (
+    <div
+      role="note"
+      aria-labelledby={label ? labelId : undefined}
+      data-kind={note.kind}
+    >
+      {label && (
+        <div className="note-label" id={labelId}>
+          {label}
+        </div>
+      )}
+      <Blocks blocks={note.children} labels={labels} />
+    </div>
+  );
 }
 
 function Inlines({ inlines }: { inlines: Inline[] }) {

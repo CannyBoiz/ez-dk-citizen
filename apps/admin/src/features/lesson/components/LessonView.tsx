@@ -417,6 +417,7 @@ export function LessonView({
             <LessonTextPreview
               title={formProps(code).value.title ?? ""}
               content={formProps(code).value.content ?? ""}
+              language={code}
               clipboard={clipboard}
             />
           </EditForm>

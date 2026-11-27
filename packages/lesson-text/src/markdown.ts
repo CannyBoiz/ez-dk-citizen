@@ -3,6 +3,36 @@
 // from it. Any other element comes out as its plain text.
 import MarkdownIt, { type Token } from "markdown-it";
 
+// GitHub's alert kinds; a note of any other kind is unlabelled.
+const noteKinds = ["note", "tip", "important", "warning", "caution"] as const;
+export type NoteKind = (typeof noteKinds)[number];
+
+// Each note kind's label in each Language, so a Thai lesson never shows an English one.
+export const noteLabels = {
+  da: {
+    note: "Bemærk",
+    tip: "Tip",
+    important: "Vigtigt",
+    warning: "Advarsel",
+    caution: "Forsigtig",
+  },
+  en: {
+    note: "Note",
+    tip: "Tip",
+    important: "Important",
+    warning: "Warning",
+    caution: "Caution",
+  },
+  th: {
+    note: "หมายเหตุ",
+    tip: "เคล็ดลับ",
+    important: "สำคัญ",
+    warning: "คำเตือน",
+    caution: "ข้อควรระวัง",
+  },
+} as const satisfies Record<string, Record<NoteKind, string>>;
+export type Language = keyof typeof noteLabels;
+
 export type Inline =
   | { type: "text"; value: string }
   | { type: "break" }
@@ -13,7 +43,9 @@ export type Block =
   // Each item is the blocks inside it, so items can hold paragraphs and nested lists.
   | { type: "bulletList"; items: Block[][] }
   | { type: "numberedList"; start: number; items: Block[][] }
-  | { type: "divider" };
+  | { type: "divider" }
+  // A plain quote, or an alert of an unknown kind, is a note without one.
+  | { type: "note"; kind?: NoteKind; children: Block[] };
 
 // Raw HTML is parsed as its own tokens so that it can be dropped, rather than shown as text.
 // shortcut: an HTML block's text is dropped with its tags; #26 decides whether to keep it.
@@ -24,25 +56,34 @@ export function parse(content: string): Block[] {
 }
 
 // The narration script: the text the learner sees, in reading order, with a blank line between
-// blocks, so that ElevenLabs pauses between them.
-export function narrationScript(content: string): string {
+// blocks, so that ElevenLabs pauses between them. A labelled note reads as "label: text" in the
+// Lesson Text's Language, so the listener hears that a tip or warning is coming.
+export function narrationScript(content: string, language: Language): string {
+  const blockTexts = (block: Block): string[] => {
+    if (block.type === "divider") return [""];
+    if (block.type === "bulletList")
+      return block.items.flat().flatMap(blockTexts);
+    if (block.type === "numberedList")
+      return block.items.flatMap((item, index) =>
+        prefixed(`${block.start + index}. `, item.flatMap(blockTexts)),
+      );
+    if (block.type === "note") {
+      const texts = block.children.flatMap(blockTexts);
+      return block.kind
+        ? prefixed(`${noteLabels[language][block.kind]}: `, texts)
+        : texts;
+    }
+    const text = inlineText(block.children);
+    // A paragraph that is all struck through has nothing to read.
+    return text.trim() ? [text] : [];
+  };
   return parse(content).flatMap(blockTexts).join("\n\n");
 }
 
-function blockTexts(block: Block): string[] {
-  if (block.type === "divider") return [""];
-  if (block.type === "bulletList")
-    return block.items.flat().flatMap(blockTexts);
-  if (block.type === "numberedList")
-    return block.items.flatMap((item, index) => {
-      const [first, ...rest] = item.flatMap(blockTexts);
-      return first === undefined
-        ? []
-        : [`${block.start + index}. ${first}`, ...rest];
-    });
-  const text = inlineText(block.children);
-  // A paragraph that is all struck through has nothing to read.
-  return text.trim() ? [text] : [];
+// Leads the first text with a prefix, such as an item's number; with no text, there is nothing to
+// announce.
+function prefixed(prefix: string, [first, ...rest]: string[]) {
+  return first === undefined ? [] : [prefix + first, ...rest];
 }
 
 // Struck-through text is left out, so the narration never states a crossed-out claim as fact.
@@ -81,6 +122,7 @@ function toBlocks(nodes: Node[]): Block[] {
     if (token.type === "fence" || token.type === "code_block")
       return [{ type: "paragraph", children: lines(token.content.trimEnd()) }];
     if (token.type === "hr") return [{ type: "divider" }];
+    if (token.type === "blockquote_open") return [toNote(children)];
     if (token.type === "bullet_list_open")
       return [{ type: "bulletList", items: children.map(toItem) }];
     if (token.type === "ordered_list_open")
@@ -106,7 +148,7 @@ function toBlocks(nodes: Node[]): Block[] {
         ? []
         : [{ type: "paragraph", children: inlines }];
     }
-    // Any other container, such as a quote or a table, gives up its markup and keeps its blocks.
+    // Any other container, such as a table, gives up its markup and keeps its blocks.
     return toBlocks(children);
   });
 }
@@ -122,6 +164,36 @@ function toItem(item: Node) {
   if (text?.type === "text")
     text.content = text.content.replace(/^\[[ xX]\](?:\s+|$)/, "");
   return toBlocks(item.children);
+}
+
+// A GitHub alert is a quote that starts with its `[!KIND]` marker, in any case, with more after it.
+// Text after the marker on its line, such as an Obsidian title, starts the note. The source is read,
+// not the parsed text, so an escaped `\[!NOTE]` stays a quote. The marker is cut in place, as a task
+// item's checkbox is.
+function toNote(quote: Node[]): Block {
+  const [first] = quote;
+  const inline =
+    first?.token.type === "paragraph_open"
+      ? first.children[0].token
+      : undefined;
+  const source = inline?.content ?? "";
+  const kind = noteKinds.find((candidate) =>
+    source.toLowerCase().startsWith(`[!${candidate}]`),
+  );
+  const marker = kind ? `[!${kind}]` : "";
+  const hasBody = source.slice(marker.length).trim() !== "" || quote.length > 1;
+  const [text, after] = inline?.children ?? [];
+  // A marker with nothing after it, or one that parsed as a link, is left visible as a quote.
+  if (!kind || !hasBody || text?.type !== "text")
+    return { type: "note", children: toBlocks(quote) };
+  text.content = text.content.slice(marker.length).trimStart();
+  // A marker alone on its line takes its line break with it.
+  if (
+    !text.content &&
+    (after?.type === "softbreak" || after?.type === "hardbreak")
+  )
+    inline?.children?.splice(1, 1);
+  return { type: "note", kind, children: toBlocks(quote) };
 }
 
 const emphasis: Partial<Record<string, "bold" | "italic" | "strikethrough">> = {
