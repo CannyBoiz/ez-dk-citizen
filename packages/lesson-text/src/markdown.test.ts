@@ -220,11 +220,13 @@ test("a note of an unknown kind, with nothing after its marker, or with its mark
   ]);
 });
 
-test("an element not yet supported appears as its plain text, never as markup", () => {
+test("links show their text, images their alt text, and code its text, never markup or a URL", () => {
   const content = [
     "See [a link](https://example.test) with `code` ![alt text](x.png)",
-    "```\nline one\nline two\n```",
-    "| a | b |\n| - | - |\n| 1 | 2 |",
+    "And [the law][law] at <https://law.test>\n\n[law]: https://law.test/1 'Title'",
+    "```js\nline one\nline two\n```",
+    "    indented one\n    indented two",
+    "| a | b |\n| - | - |\n| 1 | 2<br>3 |",
   ].join("\n\n");
 
   assert.deepEqual(parse(content), [
@@ -232,25 +234,74 @@ test("an element not yet supported appears as its plain text, never as markup", 
       type: "paragraph",
       children: [text("See a link with code alt text")],
     },
+    paragraph("And the law at https://law.test"),
     {
       type: "paragraph",
       children: [text("line one"), { type: "break" }, text("line two")],
     },
-    ...["a", "b", "1", "2"].map((cell) => ({
+    {
       type: "paragraph",
-      children: [text(cell)],
-    })),
+      children: [text("indented one"), { type: "break" }, text("indented two")],
+    },
+    // A table reads cell after cell, row by row, and a <br> in a cell is a line break.
+    ...["a", "b", "1"].map(paragraph),
+    {
+      type: "paragraph",
+      children: [text("2"), { type: "break" }, text("3")],
+    },
   ]);
 });
 
-test("raw HTML is dropped as markup, keeping the text between inline tags", () => {
+// As on GitHub, footnotes are numbered in the order they are first referenced and gathered at the end.
+test("a footnote reference reads as its number in brackets, and its definition as that item of a numbered list after a divider", () => {
   assert.deepEqual(
     parse(
-      'Say <b onclick="steal()">hello</b>\n\n<script>alert(1)</script>\n\nEnd',
+      "Bo her i 9 år[^1] og tal dansk[^sprog].\n\n[^sprog]: Prøve i dansk 3.\n[^1]: Indfødsretsloven.\n\nSe igen[^1].",
     ),
     [
-      { type: "paragraph", children: [text("Say hello")] },
-      { type: "paragraph", children: [text("End")] },
+      paragraph("Bo her i 9 år[1] og tal dansk[2]."),
+      paragraph("Se igen[1]."),
+      { type: "divider" },
+      {
+        type: "numberedList",
+        start: 1,
+        items: [
+          [paragraph("Indfødsretsloven.")],
+          [paragraph("Prøve i dansk 3.")],
+        ],
+      },
+    ],
+  );
+});
+
+// A script's or a style's contents are code, not words for the learner.
+test("raw HTML's tags, comments, scripts and styles are dropped as markup, keeping the text between them, line by line", () => {
+  assert.deepEqual(
+    parse(
+      [
+        'Say <b onclick="steal()">hello</b><BR/>again',
+        "<details>\n<summary>Mere</summary>\n\nKrop\n\n</details>",
+        '<div align="center">\n  <b>Midt</b> og <i>ord</i>\n  <br>\n  <span>Ny linje</span>\n</div>',
+        "<!--\n\nkommentar\n\n-->",
+        "<script>\nalert(1)\n</script>",
+        "<div>\n<style>.a { color: red }</style>\nSynlig\n</div>",
+        "End",
+        "<SCRIPT>\nuafsluttet",
+      ].join("\n\n"),
+    ),
+    [
+      {
+        type: "paragraph",
+        children: [text("Say hello"), { type: "break" }, text("again")],
+      },
+      paragraph("Mere"),
+      paragraph("Krop"),
+      {
+        type: "paragraph",
+        children: [text("Midt og ord"), { type: "break" }, text("Ny linje")],
+      },
+      paragraph("Synlig"),
+      paragraph("End"),
     ],
   );
 });
@@ -264,10 +315,10 @@ test("an empty heading or table cell leaves no block behind", () => {
 test("the narration script is the text the learner sees, with a blank line between blocks", () => {
   assert.equal(
     narrationScript(
-      "# Rettigheder\nDu har **ret** til\nat stemme.\n\n\n#### Pligter\n\nSe [loven](https://example.test) <b>nu</b> ![et kort](kort.png)\n\n```\nlinje et\nlinje to\n```\n\n| a | b |\n| - | - |",
+      "# Rettigheder\nDu har **ret** til\nat stemme.\n\n\n#### Pligter\n\nSe [loven](https://example.test)[^1] <b>nu</b> ![et kort](kort.png)\n\n```\nlinje et\nlinje to\n```\n\n| a | b |\n| - | - |\n\n<details>\n<summary>Mere</summary>\n\n[^1]: Indfødsretsloven.",
       "da",
     ),
-    "Rettigheder\n\nDu har ret til\nat stemme.\n\nPligter\n\nSe loven nu et kort\n\nlinje et\nlinje to\n\na\n\nb",
+    "Rettigheder\n\nDu har ret til\nat stemme.\n\nPligter\n\nSe loven[1] nu et kort\n\nlinje et\nlinje to\n\na\n\nb\n\nMere\n\n\n\n1. Indfødsretsloven.",
   );
 });
 

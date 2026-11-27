@@ -431,6 +431,33 @@ test("the preview labels a note in the form's Language", async () => {
   );
 });
 
+test("the preview shows a link, a footnote and raw HTML from the unsaved content as plain text", async () => {
+  render(
+    <App
+      network={
+        fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]).network
+      }
+      clipboard={noClipboard}
+    />,
+  );
+  await connect(validToken);
+  await openLesson();
+
+  type(
+    "Content",
+    'อ่าน[กฎหมาย](https://example.test)[^1]<img src=x onerror="alert(1)">\n\n[^1]: พระราชบัญญัติสัญชาติ',
+    textForm(),
+  );
+
+  expect(
+    within(preview())
+      .getAllByRole("paragraph")
+      .map((paragraph) => paragraph.textContent),
+  ).toEqual(["อ่านกฎหมาย[1]", "พระราชบัญญัติสัญชาติ"]);
+  expect(within(preview()).queryByRole("link")).toBeNull();
+  expect(preview().querySelector("img")).toBeNull();
+});
+
 test("an Archived Lesson's Lesson Text still shows its preview", async () => {
   render(
     <App
