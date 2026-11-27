@@ -376,6 +376,41 @@ test("the preview under Content renders the unsaved Title and content as heading
   expect(tab("th").textContent).toBe("th: Unsaved");
 });
 
+test("the preview renders lists, emphasis and a divider from the unsaved content", async () => {
+  render(
+    <App
+      network={
+        fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]).network
+      }
+      clipboard={noClipboard}
+    />,
+  );
+  await connect(validToken);
+  await openLesson();
+
+  type(
+    "Content",
+    "- [ ] หนังสือเดินทาง\n  1. **ตัวจริง**\n  2. *สำเนา* ~~เก่า~~\n\n---\n\n3. ขั้นที่สาม",
+    textForm(),
+  );
+
+  const [bullets, nested, numbered] = within(preview()).getAllByRole("list");
+  expect(within(bullets).getAllByRole("listitem")[0].textContent).toBe(
+    "หนังสือเดินทางตัวจริงสำเนา เก่า",
+  );
+  expect(
+    within(nested)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent),
+  ).toEqual(["ตัวจริง", "สำเนา เก่า"]);
+  expect(within(numbered).getByRole("listitem").textContent).toBe("ขั้นที่สาม");
+  expect(numbered).toHaveProperty("start", 3);
+  expect(within(preview()).getByRole("strong").textContent).toBe("ตัวจริง");
+  expect(within(preview()).getByRole("emphasis").textContent).toBe("สำเนา");
+  expect(within(preview()).getByRole("deletion").textContent).toBe("เก่า");
+  expect(within(preview()).getByRole("separator")).toBeTruthy();
+});
+
 test("an Archived Lesson's Lesson Text still shows its preview", async () => {
   render(
     <App

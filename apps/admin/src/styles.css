@@ -579,6 +579,25 @@ main > .lesson {
   font-size: 1.0625rem;
 }
 
+.preview ol {
+  padding-left: var(--space-6);
+}
+
+/* A list item's paragraphs sit tight, so a list reads as one block, but stay apart from each other. */
+.preview li > p {
+  margin: 0;
+}
+
+.preview li > p + p {
+  margin-top: var(--space-3);
+}
+
+.preview hr {
+  margin: var(--space-4) 0;
+  border: none;
+  border-top: 1px solid var(--border-strong);
+}
+
 /* Thai vowel and tone marks sit above and below the line, so they need more room. */
 [lang="th"] .preview {
   line-height: 1.9;

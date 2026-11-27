@@ -2,6 +2,7 @@
 // React elements, so pasted text can never become markup in the page. Beside it, Copy as plain
 // text puts the content's narration script on the clipboard, for pasting into ElevenLabs.
 import {
+  type Block,
   type Inline,
   narrationScript,
   parse,
@@ -60,23 +61,57 @@ export function LessonTextPreview({
       )}
       {/* Headings sit below the page's "Lesson Texts" heading: the Title, then sections and subsections. */}
       {title.trim() && <h4>{title}</h4>}
-      {parse(content).map((block, index) => {
-        const Element =
-          block.type === "paragraph" ? "p" : block.level === 2 ? "h5" : "h6";
-        return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: rebuilt from the text on each change, holding no state
-          <Element key={index}>
-            <Inlines inlines={block.children} />
-          </Element>
-        );
-      })}
+      <Blocks blocks={parse(content)} />
     </section>
   );
 }
 
+const inlineTags = {
+  bold: "strong",
+  italic: "em",
+  strikethrough: "del",
+} as const;
+
+function Blocks({ blocks }: { blocks: Block[] }) {
+  return blocks.map((block, index) => {
+    // biome-ignore-start lint/suspicious/noArrayIndexKey: rebuilt from the text on each change, holding no state
+    if (block.type === "divider") return <hr key={index} />;
+    if (block.type === "bulletList" || block.type === "numberedList") {
+      const items = block.items.map((item, itemIndex) => (
+        <li key={itemIndex}>
+          <Blocks blocks={item} />
+        </li>
+      ));
+      return block.type === "bulletList" ? (
+        <ul key={index}>{items}</ul>
+      ) : (
+        <ol key={index} start={block.start}>
+          {items}
+        </ol>
+      );
+    }
+    const Element =
+      block.type === "paragraph" ? "p" : block.level === 2 ? "h5" : "h6";
+    return (
+      <Element key={index}>
+        <Inlines inlines={block.children} />
+      </Element>
+    );
+    // biome-ignore-end lint/suspicious/noArrayIndexKey: rebuilt from the text on each change, holding no state
+  });
+}
+
 function Inlines({ inlines }: { inlines: Inline[] }) {
-  return inlines.map((inline, index) =>
-    // biome-ignore lint/suspicious/noArrayIndexKey: rebuilt from the text on each change, holding no state
-    inline.type === "break" ? <br key={index} /> : inline.value,
-  );
+  return inlines.map((inline, index) => {
+    // biome-ignore-start lint/suspicious/noArrayIndexKey: rebuilt from the text on each change, holding no state
+    if (inline.type === "break") return <br key={index} />;
+    if (inline.type === "text") return inline.value;
+    const Element = inlineTags[inline.type];
+    return (
+      <Element key={index}>
+        <Inlines inlines={inline.children} />
+      </Element>
+    );
+    // biome-ignore-end lint/suspicious/noArrayIndexKey: rebuilt from the text on each change, holding no state
+  });
 }
