@@ -40,6 +40,7 @@ import {
 import { statusLabels } from "../utils/statusLabels";
 import { lessonLabel } from "../utils/versions";
 import { LessonTextPreview } from "./LessonTextPreview";
+import { LoadMarkdownFile } from "./LoadMarkdownFile";
 import { NewVersion } from "./NewVersion";
 import { Publication } from "./Publication";
 
@@ -414,6 +415,7 @@ export function LessonView({
             onSave={(submitted) => saveTab(code, submitted)}
             {...formProps(code)}
           >
+            <LoadMarkdownFile {...formProps(code)} />
             <LessonTextPreview
               title={formProps(code).value.title ?? ""}
               content={formProps(code).value.content ?? ""}

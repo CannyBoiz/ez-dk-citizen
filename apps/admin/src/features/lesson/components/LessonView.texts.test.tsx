@@ -15,6 +15,7 @@ import type { TextClipboard } from "../../../shared/lib/clipboard";
 import {
   answer,
   chapterForm,
+  chooseFile,
   connect,
   fakeBackend,
   fieldError,
@@ -33,6 +34,14 @@ import {
 
 function preview() {
   return within(textForm()).getByRole("region", { name: "Preview" });
+}
+
+function markdownFile(text: string) {
+  return new File([text], "lesson.md", { type: "text/markdown" });
+}
+
+function loadControl() {
+  return within(textForm()).getByLabelText("Load .md file");
 }
 
 test("the editor shows da, en, and th tabs with Thai selected and each Language's state", async () => {
@@ -458,7 +467,7 @@ test("the preview shows a link, a footnote and raw HTML from the unsaved content
   expect(preview().querySelector("img")).toBeNull();
 });
 
-test("an Archived Lesson's Lesson Text still shows its preview", async () => {
+test("an Archived Lesson's Lesson Text still shows its preview, and cannot be loaded from a file", async () => {
   render(
     <App
       network={
@@ -483,6 +492,7 @@ test("an Archived Lesson's Lesson Text still shows its preview", async () => {
     "ส่วนแรก",
   );
   expect(within(preview()).getByRole("paragraph").textContent).toBe("เนื้อหา");
+  expect(loadControl()).toHaveProperty("disabled", true);
 });
 
 function copyButton() {
@@ -548,4 +558,108 @@ test("a failed clipboard write shows an error in the page", async () => {
   // The clipboard is still stale, so the error stays until the next copy.
   type("Content", "ย่อหน้าใหม่", textForm());
   expect(within(preview()).getByRole("alert")).toBeTruthy();
+});
+
+test("Load .md file puts a leading # heading's plain text in the Title and the rest in the Content, saved by the tab's Save", async () => {
+  const { network, requests } = fakeBackend([
+    lessonDetail(1, { lessonTexts: [thaiText] }),
+  ]);
+  render(<App network={network} clipboard={noClipboard} />);
+  await connect(validToken);
+  await openLesson();
+  const requestCount = requests.length;
+  const content = "## ส่วนแรก\nเนื้อหาที่มีวรรณยุกต์ ่ ้ ๊ ๋\n";
+
+  chooseFile(markdownFile(`\n# บทที่ **2**: สัญชาติ\n\n${content}`), loadControl());
+
+  await waitFor(() =>
+    expect(within(textForm()).getByLabelText("Title")).toHaveProperty(
+      "value",
+      "บทที่ 2: สัญชาติ",
+    ),
+  );
+  expect(within(textForm()).getByLabelText("Content")).toHaveProperty(
+    "value",
+    content,
+  );
+  expect(tab("th").textContent).toBe("th: Unsaved");
+  await waitFor(() => expect(unloadBlocked()).toBe(true));
+  // Read in the browser: nothing is sent until the tab is saved.
+  expect(requests.length).toBe(requestCount);
+
+  fireEvent.click(within(textForm()).getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(tab("th").textContent).toBe("th: Saved"));
+  expect(requests.at(-1)).toEqual({
+    method: "PATCH",
+    path: "/api/admin/lessons/1",
+    token: validToken,
+    body: {
+      text: {
+        languageCode: "th",
+        title: "บทที่ 2: สัญชาติ",
+        content,
+      },
+    },
+  });
+});
+
+test("Load .md file without a leading # heading replaces only the Content and keeps the Title", async () => {
+  render(
+    <App
+      network={
+        fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]).network
+      }
+      clipboard={noClipboard}
+    />,
+  );
+  await connect(validToken);
+  await openLesson();
+
+  fireEvent.click(tab("da"));
+  type("Title", "Kapitel 1", textForm());
+  // A section heading is content, not the Title.
+  const markdown =
+    "\n## Afsnit\nSøg om dansk indfødsret på æ-, ø- og å-sprog.\n";
+  chooseFile(markdownFile(markdown), loadControl());
+
+  await waitFor(() =>
+    expect(within(textForm()).getByLabelText("Content")).toHaveProperty(
+      "value",
+      markdown,
+    ),
+  );
+  expect(within(textForm()).getByLabelText("Title")).toHaveProperty(
+    "value",
+    "Kapitel 1",
+  );
+  expect(tab("da").textContent).toBe("da: Unsaved");
+});
+
+test("a .md file that cannot be read is reported, and the form is left as it was", async () => {
+  render(
+    <App
+      network={
+        fakeBackend([lessonDetail(1, { lessonTexts: [thaiText] })]).network
+      }
+      clipboard={noClipboard}
+    />,
+  );
+  await connect(validToken);
+  await openLesson();
+  const file = markdownFile("# บทที่ 2");
+  Object.defineProperty(file, "text", {
+    value: () =>
+      Promise.reject(new DOMException("File changed.", "NotReadableError")),
+  });
+
+  chooseFile(file, loadControl());
+
+  expect((await within(textForm()).findByRole("alert")).textContent).toBe(
+    "The file could not be read. Choose it again.",
+  );
+  expect(within(textForm()).getByLabelText("Title")).toHaveProperty(
+    "value",
+    thaiText.title,
+  );
+  expect(tab("th").textContent).toBe("th: Saved");
 });
