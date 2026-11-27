@@ -13,6 +13,7 @@ import {
   fieldError,
   hold,
   lessonDetail,
+  noClipboard,
   problem,
   rows,
   settle,
@@ -29,7 +30,7 @@ function newDraftForm() {
 }
 
 async function showCatalogue(backend = fakeBackend(catalogueLessons)) {
-  render(<App network={backend.network} />);
+  render(<App network={backend.network} clipboard={noClipboard} />);
   await connect(validToken);
   await screen.findByRole("table");
   return backend;
@@ -252,14 +253,14 @@ test("the form cannot be cancelled while its Draft is being created", async () =
 
 test("a filled New Draft form is kept locally across a closed tab, and cleared once the Draft is created", async () => {
   const { network } = fakeBackend(catalogueLessons);
-  const { unmount } = render(<App network={network} />);
+  const { unmount } = render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await screen.findByRole("table");
   fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
   type("Chapter", "4", newDraftForm());
   unmount();
 
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await screen.findByRole("table");
   const form = newDraftForm();

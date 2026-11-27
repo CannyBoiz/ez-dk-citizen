@@ -20,6 +20,7 @@ import {
   lessonSummary,
   lessons,
   newSourceForm,
+  noClipboard,
   openLesson,
   problem,
   settle,
@@ -33,7 +34,7 @@ import { App } from "./App";
 
 test("Disconnect clears the token and returns to the token prompt", async () => {
   const { network, requests } = fakeNetwork();
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await screen.findByText(/Connected/);
 
@@ -58,7 +59,7 @@ test("a later 401 prompts for the token over the current screen and the operatio
           "req-401",
         ),
   );
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await screen.findByText(/2 Lessons/);
 
@@ -95,7 +96,7 @@ test("the token re-entry prompt offers Disconnect", async () => {
           "req-401",
         ),
   );
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await screen.findByText(/0 Lessons/);
 
@@ -112,7 +113,7 @@ test("the token re-entry prompt offers Disconnect", async () => {
 
 test("dirty edits trigger the before-unload warning and an in-page confirmation before returning to the catalogue", async () => {
   const { network, requests } = fakeBackend([lessonDetail(1)]);
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
   expect(unloadBlocked()).toBe(false);
@@ -137,7 +138,12 @@ test("dirty edits trigger the before-unload warning and an in-page confirmation 
 });
 
 test("the in-page confirmation is operated by keyboard: it opens on Cancel, and Escape puts the button back", async () => {
-  render(<App network={fakeBackend([lessonDetail(1)]).network} />);
+  render(
+    <App
+      network={fakeBackend([lessonDetail(1)]).network}
+      clipboard={noClipboard}
+    />,
+  );
   await connect(validToken);
   await openLesson();
   type("Chapter", "5", chapterForm());
@@ -159,7 +165,7 @@ test("the in-page confirmation is operated by keyboard: it opens on Cancel, and 
 
 test("Disconnect with unsaved edits asks in the page, and confirming disconnects", async () => {
   const { network, requests } = fakeBackend([lessonDetail(1)]);
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
   type("Chapter", "5", chapterForm());
@@ -190,6 +196,7 @@ test("the leave confirmation names each unsaved form, and a saved form drops out
         fakeBackend([lessonDetail(1, { lessonSources: [cited(guideSource)] })])
           .network
       }
+      clipboard={noClipboard}
     />,
   );
   await connect(validToken);
@@ -224,7 +231,12 @@ test("the leave confirmation names each unsaved form, and a saved form drops out
 });
 
 test("returning to the catalogue without edits asks nothing", async () => {
-  render(<App network={fakeBackend([lessonDetail(1)]).network} />);
+  render(
+    <App
+      network={fakeBackend([lessonDetail(1)]).network}
+      clipboard={noClipboard}
+    />,
+  );
   await connect(validToken);
   await openLesson();
 
@@ -246,7 +258,7 @@ test("a 401 during save prompts for the token, keeps the edits, and the save can
             "req-401",
           ),
   });
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
 

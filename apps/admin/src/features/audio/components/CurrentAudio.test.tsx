@@ -21,6 +21,7 @@ import {
   hold,
   lessonDetail,
   mp3File,
+  noClipboard,
   openLesson,
   settle,
   storageOutage,
@@ -60,7 +61,7 @@ function findNarrationWarning() {
 }
 
 async function open(backend: ReturnType<typeof fakeBackend>) {
-  render(<App network={backend.network} />);
+  render(<App network={backend.network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
 }

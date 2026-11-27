@@ -11,6 +11,9 @@ const backendBaseUrl =
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App network={createNetwork(backendBaseUrl)} />
+    <App
+      network={createNetwork(backendBaseUrl)}
+      clipboard={navigator.clipboard}
+    />
   </StrictMode>,
 );

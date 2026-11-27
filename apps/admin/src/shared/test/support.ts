@@ -1,4 +1,4 @@
-// Shared fixtures, a fake Network, and an in-memory Backend for the whole-app tests.
+// Shared fixtures, a fake Network and clipboard, and an in-memory Backend for the whole-app tests.
 
 import type {
   AdminLessonAudio,
@@ -22,12 +22,20 @@ import {
 } from "@testing-library/react";
 import { expect } from "vitest";
 
+import type { TextClipboard } from "../lib/clipboard";
 import type {
   BackendRequest,
   BackendResponse,
   Network,
   ObjectUpload,
 } from "../lib/network";
+
+// The clipboard of a test that never copies: any write is refused.
+export const noClipboard: TextClipboard = {
+  async writeText() {
+    throw new Error("This test does not copy to the clipboard.");
+  },
+};
 
 export const validToken = "correct-token";
 export const lessons = { items: [] };

@@ -19,6 +19,7 @@ import {
   lawSource,
   lessonDetail,
   mp3File,
+  noClipboard,
   openLesson,
   problem,
   storageOutage,
@@ -34,7 +35,7 @@ import {
 const intentPath = "/api/admin/media/upload-intents";
 
 async function open(backend: ReturnType<typeof fakeBackend>) {
-  render(<App network={backend.network} />);
+  render(<App network={backend.network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
 }

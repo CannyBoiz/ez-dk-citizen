@@ -545,9 +545,16 @@ main > .lesson {
   line-height: 1.6;
 }
 
-.preview-label {
-  display: block;
+/* The label, with Copy as plain text on the right. */
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
   margin-bottom: var(--space-2);
+}
+
+.preview-label {
   color: var(--muted);
   font-size: 0.875rem;
   font-weight: 500;

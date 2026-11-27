@@ -27,6 +27,7 @@ import {
   lawSource,
   lessonDetail,
   mp3File,
+  noClipboard,
   openLesson,
   problem,
   settle,
@@ -67,7 +68,7 @@ async function open(
       },
     },
   );
-  render(<App network={backend.network} />);
+  render(<App network={backend.network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson();
   return {

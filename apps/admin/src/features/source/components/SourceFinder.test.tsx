@@ -23,6 +23,7 @@ import {
   lawSource,
   movedLawUrl,
   newSourceForm,
+  noClipboard,
   saveSource,
   sourceDeleteControls,
   sourceRows,
@@ -32,7 +33,7 @@ import {
 } from "../../../shared/test/support";
 
 async function openSources(backend: ReturnType<typeof fakeBackend>) {
-  render(<App network={backend.network} />);
+  render(<App network={backend.network} clipboard={noClipboard} />);
   await connect(validToken);
   fireEvent.click(await screen.findByRole("button", { name: "Sources" }));
   await within(finder()).findByRole("list", { name: "Sources" });

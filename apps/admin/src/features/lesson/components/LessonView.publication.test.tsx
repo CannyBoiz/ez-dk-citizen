@@ -31,6 +31,7 @@ import {
   lessonDetail,
   lessonSummary,
   newSourceForm,
+  noClipboard,
   openLesson,
   problem,
   rows,
@@ -75,7 +76,7 @@ async function openFirst(
   backend: ReturnType<typeof fakeBackend>,
   lesson: string | number = 1,
 ) {
-  render(<App network={backend.network} />);
+  render(<App network={backend.network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson(lesson);
 }

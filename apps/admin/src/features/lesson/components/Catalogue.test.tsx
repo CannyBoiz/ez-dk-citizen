@@ -9,6 +9,7 @@ import {
   chapterStatuses,
   connect,
   fakeNetwork,
+  noClipboard,
   problem,
   rows,
   tab,
@@ -22,6 +23,7 @@ test("the catalogue lists every Lesson with chapter, version or Draft date, stat
       network={
         fakeNetwork(() => ({ status: 200, body: { items: catalogue } })).network
       }
+      clipboard={noClipboard}
     />,
   );
   await connect(validToken);
@@ -50,7 +52,7 @@ test("chapter and status filters combine in the browser", async () => {
     status: 200,
     body: { items: catalogue },
   }));
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await screen.findByRole("table");
   const sent = requests.length;
@@ -85,6 +87,7 @@ test("a chapter filter whose chapter disappears on Refresh falls back to all cha
   render(
     <App
       network={fakeNetwork(() => ({ status: 200, body: { items } })).network}
+      clipboard={noClipboard}
     />,
   );
   await connect(validToken);
@@ -112,6 +115,7 @@ test("filters are kept when returning from a Lesson", async () => {
             : { status: 200, body: { items: catalogue } },
         ).network
       }
+      clipboard={noClipboard}
     />,
   );
   await connect(validToken);
@@ -140,7 +144,7 @@ test("filters are kept when returning from a Lesson", async () => {
 });
 
 test("an empty catalogue says so", async () => {
-  render(<App network={fakeNetwork().network} />);
+  render(<App network={fakeNetwork().network} clipboard={noClipboard} />);
   await connect(validToken);
 
   await screen.findByText("No Lessons yet.");
@@ -171,7 +175,7 @@ test("opening a Lesson shows its structure, Lesson Texts, and Lesson Sources, an
       ? { status: 200, body: detail }
       : { status: 200, body: { items } },
   );
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await screen.findByRole("table");
 
@@ -244,6 +248,7 @@ test("a database outage shows the error with its request ID and can be retried",
             : { status: 200, body: { items: catalogue } },
         ).network
       }
+      clipboard={noClipboard}
     />,
   );
   await connect(validToken);

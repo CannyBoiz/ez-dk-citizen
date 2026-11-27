@@ -12,11 +12,18 @@ import {
 import { SourceFinder } from "../features/source";
 import { ConfirmButton } from "../shared/components/ConfirmButton";
 import { BackendError, type Call, request } from "../shared/lib/backend";
+import type { TextClipboard } from "../shared/lib/clipboard";
 import type { Network } from "../shared/lib/network";
 
 const listFormat = new Intl.ListFormat("en", { type: "conjunction" });
 
-export function App({ network }: { network: Network }) {
+export function App({
+  network,
+  clipboard,
+}: {
+  network: Network;
+  clipboard: TextClipboard;
+}) {
   // The token lives only in React state: never in storage, cookies, the URL, or the build.
   const [token, setToken] = useState<string | null>(null);
   const [reentry, setReentry] = useState(false);
@@ -148,6 +155,7 @@ export function App({ network }: { network: Network }) {
                 key={screen.lessonId}
                 call={call}
                 putObject={network.putObject}
+                clipboard={clipboard}
                 lessonId={screen.lessonId}
                 onUnsavedChange={setUnsaved}
                 onUploadChange={setUpload}

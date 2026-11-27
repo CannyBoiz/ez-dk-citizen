@@ -8,6 +8,7 @@ import {
   connect,
   fakeBackend,
   lessonDetail,
+  noClipboard,
   openLesson,
   settle,
   textForm,
@@ -35,6 +36,7 @@ test.each([
         network={
           fakeBackend([lessonDetail(1, { chapter: 3, ...lesson })]).network
         }
+        clipboard={noClipboard}
       />,
     );
     await connect(validToken);
@@ -46,7 +48,7 @@ test.each([
 
 test("the chapter sits above the Language tabs with no Save of its own, and is marked Unsaved until a tab saves it", async () => {
   const { network, requests } = fakeBackend([lessonDetail(1)]);
-  render(<App network={network} />);
+  render(<App network={network} clipboard={noClipboard} />);
   await connect(validToken);
   await openLesson(draftHeading);
   expect(within(chapterForm()).getByText("Saved")).toBeTruthy();
@@ -79,7 +81,10 @@ test.each(["PUBLISHED", "ARCHIVED"] as const)(
   "the chapter is read-only for %s Lessons",
   async (status) => {
     render(
-      <App network={fakeBackend([lessonDetail(1, { status })]).network} />,
+      <App
+        network={fakeBackend([lessonDetail(1, { status })]).network}
+        clipboard={noClipboard}
+      />,
     );
     await connect(validToken);
     await openLesson("Chapter 1, version 1.0");

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parse } from "./markdown.ts";
+import { narrationScript, parse } from "./markdown.ts";
 
 const text = (value: string) => ({ type: "text", value }) as const;
 
@@ -68,4 +68,18 @@ test("an empty heading or table cell leaves no block behind", () => {
   assert.deepEqual(parse("#\n\n| a |  |\n| - | - |"), [
     { type: "paragraph", children: [text("a")] },
   ]);
+});
+
+test("the narration script is the text the learner sees, with a blank line between blocks", () => {
+  assert.equal(
+    narrationScript(
+      "# Rettigheder\nDu har **ret** til\nat stemme.\n\n\n#### Pligter\n\nSe [loven](https://example.test) <b>nu</b> ![et kort](kort.png)\n\n```\nlinje et\nlinje to\n```\n\n| a | b |\n| - | - |",
+    ),
+    "Rettigheder\n\nDu har ret til\nat stemme.\n\nPligter\n\nSe loven nu et kort\n\nlinje et\nlinje to\n\na\n\nb",
+  );
+});
+
+test("the narration script of plain text is that text", () => {
+  const content = "ข้อแรก\nบรรทัดที่สอง\n\nข้อสอง";
+  assert.equal(narrationScript(content), content);
 });
