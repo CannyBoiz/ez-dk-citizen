@@ -226,7 +226,7 @@ test("links show their text, images their alt text, and code its text, never mar
     "And [the law][law] at <https://law.test>\n\n[law]: https://law.test/1 'Title'",
     "```js\nline one\nline two\n```",
     "    indented one\n    indented two",
-    "| a | b |\n| - | - |\n| 1 | 2 |",
+    "| a | b |\n| - | - |\n| 1 | 2<br>3 |",
   ].join("\n\n");
 
   assert.deepEqual(parse(content), [
@@ -243,11 +243,12 @@ test("links show their text, images their alt text, and code its text, never mar
       type: "paragraph",
       children: [text("indented one"), { type: "break" }, text("indented two")],
     },
-    // A table reads cell after cell, row by row.
-    ...["a", "b", "1", "2"].map((cell) => ({
+    // A table reads cell after cell, row by row, and a <br> in a cell is a line break.
+    ...["a", "b", "1"].map(paragraph),
+    {
       type: "paragraph",
-      children: [text(cell)],
-    })),
+      children: [text("2"), { type: "break" }, text("3")],
+    },
   ]);
 });
 
@@ -273,25 +274,33 @@ test("a footnote reference reads as its number in brackets, and its definition a
   );
 });
 
-test("raw HTML's tags and comments are dropped as markup, keeping the text between them, line by line", () => {
+// A script's or a style's contents are code, not words for the learner.
+test("raw HTML's tags, comments, scripts and styles are dropped as markup, keeping the text between them, line by line", () => {
   assert.deepEqual(
     parse(
       [
-        'Say <b onclick="steal()">hello</b>',
+        'Say <b onclick="steal()">hello</b><BR/>again',
         "<details>\n<summary>Mere</summary>\n\nKrop\n\n</details>",
         '<div align="center">\n  <b>Midt</b> og <i>ord</i>\n  <br>\n  <span>Ny linje</span>\n</div>',
         "<!--\n\nkommentar\n\n-->",
+        "<script>\nalert(1)\n</script>",
+        "<div>\n<style>.a { color: red }</style>\nSynlig\n</div>",
         "End",
+        "<SCRIPT>\nuafsluttet",
       ].join("\n\n"),
     ),
     [
-      paragraph("Say hello"),
+      {
+        type: "paragraph",
+        children: [text("Say hello"), { type: "break" }, text("again")],
+      },
       paragraph("Mere"),
       paragraph("Krop"),
       {
         type: "paragraph",
         children: [text("Midt og ord"), { type: "break" }, text("Ny linje")],
       },
+      paragraph("Synlig"),
       paragraph("End"),
     ],
   );

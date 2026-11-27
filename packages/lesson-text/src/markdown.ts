@@ -156,7 +156,7 @@ function toBlocks(nodes: Node[]): Block[] {
     // so is the text of an HTML block.
     if (token.type === "inline" || token.type === "html_block") {
       const inlines =
-        token.type === "inline" ? inlinesOf(token) : htmlText(token.content);
+        token.type === "inline" ? inlinesOf(token) : htmlInlines(token.content);
       // An empty table cell would be a paragraph with nothing to read.
       return inlines.length === 0
         ? []
@@ -225,55 +225,65 @@ function toInlines(nodes: Node[], inlines: Inline[] = []): Inline[] {
   for (const { token, children } of nodes) {
     const kind = emphasis[token.type];
     if (kind) inlines.push({ type: kind, children: toInlines(children) });
-    // A single newline is a line break, as the admin typed it.
-    else if (token.type === "softbreak" || token.type === "hardbreak")
+    // A single newline is a line break, as the admin typed it, and so is a <br>, which pasted tables
+    // use inside a cell.
+    else if (
+      token.type === "softbreak" ||
+      token.type === "hardbreak" ||
+      (token.type === "html_inline" && /^<br\b[^>]*>$/i.test(token.content))
+    )
       inlines.push({ type: "break" });
     // An image's children are its alt text.
     else if (token.type === "image")
       toInlines(nest(token.children ?? []), inlines);
+    else if (token.type === "text" || token.type === "code_inline")
+      appendText(inlines, token.content);
+    // A footnote reference reads as its definition's number, as the plugin captions it.
     else if (
-      token.type === "text" ||
-      token.type === "code_inline" ||
-      token.type === "footnote_ref"
-    ) {
-      // A footnote reference reads as its definition's number, as the plugin captions it.
-      const value =
-        token.type === "footnote_ref"
-          ? `[${Number(token.meta?.id) + 1}]`
-          : token.content;
-      const last = inlines.at(-1);
-      if (last?.type === "text") last.value += value;
-      // An item that was only a task marker is left with no text at all.
-      else if (value) inlines.push({ type: "text", value });
-    }
+      token.type === "footnote_ref" &&
+      typeof token.meta?.id === "number"
+    )
+      appendText(inlines, `[${token.meta.id + 1}]`);
     // Any other inline container, such as a link, gives up its markup and keeps its text.
     else toInlines(children, inlines);
   }
   return inlines;
 }
 
+function appendText(inlines: Inline[], value: string) {
+  const last = inlines.at(-1);
+  if (last?.type === "text") last.value += value;
+  // An item that was only a task marker is left with no text at all.
+  else if (value) inlines.push({ type: "text", value });
+}
+
+// A script's or a style's contents are code, not words for the learner; an unclosed one runs to the
+// end of its HTML block.
+const scriptOrStyle = /<(script|style)\b[\s\S]*?(?:<\/\1\s*>|$)/gi;
+
 // An HTML block's tags and comments are dropped and its text kept, as inline HTML's are. A line
 // that held only tags leaves nothing behind.
-function htmlText(html: string): Inline[] {
+function htmlInlines(html: string): Inline[] {
   const htmlLines: Inline[][] = [[]];
-  for (const inline of inlinesOf(markdown.parseInline(html, {})[0]))
+  const parsed = markdown.parseInline(html.replace(scriptOrStyle, ""), {});
+  for (const inline of inlinesOf(parsed[0]))
     if (inline.type === "break") htmlLines.push([]);
     else htmlLines[htmlLines.length - 1].push(inline);
-  return htmlLines
-    .filter((line) =>
+  return joinLines(
+    htmlLines.filter((line) =>
       line.some((inline) => inline.type !== "text" || inline.value.trim()),
-    )
-    .flatMap((line, index): Inline[] =>
-      index === 0 ? line : [{ type: "break" }, ...line],
-    );
+    ),
+  );
 }
 
 function lines(text: string): Inline[] {
-  return text
-    .split("\n")
-    .flatMap((line, index): Inline[] =>
-      index === 0
-        ? [{ type: "text", value: line }]
-        : [{ type: "break" }, { type: "text", value: line }],
-    );
+  return joinLines(
+    text.split("\n").map((line): Inline[] => [{ type: "text", value: line }]),
+  );
+}
+
+function joinLines(textLines: Inline[][]): Inline[] {
+  return textLines.flatMap((line, index): Inline[] =>
+    index === 0 ? line : [{ type: "break" }, ...line],
+  );
 }
