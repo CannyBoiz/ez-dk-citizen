@@ -8,7 +8,7 @@
 > **Database:** PostgreSQL
 > **Deployment:** Docker Compose on Hetzner CX23
 > **Media:** AWS S3
-> **PoC TTS:** MP3 generated manually in the ElevenLabs web app
+> **PoC TTS:** MP3 generated in the ElevenLabs web app or by a local script, uploaded through the Admin
 
 ---
 
@@ -69,7 +69,8 @@ The PoC is complete when this vertical slice works reliably in the deployed envi
 
 Do not add these unless they become necessary for the PoC vertical slice:
 
-- automated ElevenLabs API generation,
+- ElevenLabs API generation in the Backend (a local script that writes an MP3
+  file for the admin to upload as usual is allowed),
 - a separate ElevenLabs microservice,
 - payments/subscriptions,
 - full learner account management,
@@ -129,6 +130,15 @@ Contains:
 title
 content
 ```
+
+A Lesson's **original** is its English Lesson Text. Its other Lesson Texts are
+**translations** of it; where they disagree, the English Lesson Text is right. A
+translation adds nothing: an explanation the learner needs is a note in the
+English Lesson Text, translated with the rest.
+
+A Lesson Text explains its Sources in its own words and cites them through its
+Lesson Sources; it does not reproduce their text. A short quote, where the exact
+wording matters, is set as a quote and cited.
 
 The **title** is plain text. The **content** is the lesson body the learner
 reads, written in Markdown. Content the learner cannot be shown as formatting
@@ -1474,6 +1484,20 @@ admin web direct upload
 Media Asset + Lesson Audio
 ```
 
+PoC, scripted alternative (section 3 allows it):
+
+```text
+Lesson Text .md file
+    ↓
+local script: narration script → ElevenLabs API
+    ↓
+MP3 on disk
+    ↓
+admin web direct upload
+    ↓
+Media Asset + Lesson Audio
+```
+
 Future:
 
 ```text
@@ -1854,7 +1878,8 @@ phone. Expo keeps iOS possible later; no iOS build, Apple developer account, or
 iOS device testing is part of the PoC.
 
 1. Lesson list.
-2. Lesson detail.
+2. Lesson detail, listing the Lesson's Sources with their page and section
+   references.
 3. Thai text, rendered with the Stage 4c package. It follows Android's system
    font size, with no in-app text-size control, and uses line spacing generous
    enough for Thai vowel and tone marks.
@@ -2044,6 +2069,7 @@ Accepted:
 0009 - Merge the BFF and Data Service into one Backend
 0010 - Version the audio bucket
 0011 - Store Lesson Text content as Markdown, defined by one shared package
+0012 - Draft Lesson Texts in English, then translate them
 ```
 
 Consider additional ADRs when these decisions become final and retain useful
