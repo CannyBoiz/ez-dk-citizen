@@ -1855,7 +1855,9 @@ iOS device testing is part of the PoC.
 
 1. Lesson list.
 2. Lesson detail.
-3. Thai text, rendered with the Stage 4c package.
+3. Thai text, rendered with the Stage 4c package. It follows Android's system
+   font size, with no in-app text-size control, and uses line spacing generous
+   enough for Thai vowel and tone marks.
 4. audio player.
 5. background playback.
 6. local resume position.
